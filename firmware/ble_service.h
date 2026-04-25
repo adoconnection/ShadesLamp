@@ -1,0 +1,75 @@
+#ifndef BLE_SERVICE_H
+#define BLE_SERVICE_H
+
+#include <Arduino.h>
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+
+// Forward declaration
+class ProgramManager;
+
+// BLE UUIDs
+#define SERVICE_UUID        "0000ff00-0000-1000-8000-00805f9b34fb"
+#define CHAR_COMMAND_UUID   "0000ff01-0000-1000-8000-00805f9b34fb"
+#define CHAR_RESPONSE_UUID  "0000ff02-0000-1000-8000-00805f9b34fb"
+#define CHAR_ACTIVE_UUID    "0000ff03-0000-1000-8000-00805f9b34fb"
+#define CHAR_UPLOAD_UUID    "0000ff04-0000-1000-8000-00805f9b34fb"
+
+// Command codes
+#define CMD_GET_PROGRAMS    0x01
+#define CMD_GET_PARAMS      0x02
+#define CMD_SET_PARAM       0x03
+#define CMD_GET_PARAM_VALUES 0x04
+#define CMD_UPLOAD_START    0x10
+#define CMD_UPLOAD_FINISH   0x11
+#define CMD_DELETE_PROGRAM  0x12
+
+// Response chunk flags
+#define CHUNK_FLAG_FINAL    0x01
+#define CHUNK_FLAG_ERROR    0x02
+
+class BleService {
+public:
+    BleService(ProgramManager* pm);
+
+    // Initialize BLE stack, create service and characteristics, start advertising
+    void begin();
+
+    // Send a chunked response on the Response characteristic
+    void sendResponse(const String& data, bool isError = false);
+
+    // Update the Active Program characteristic value and notify
+    void notifyActiveProgram(uint8_t id);
+
+    // Check if a client is connected
+    bool isConnected() const;
+
+    ProgramManager* getProgramManager() const { return _pm; }
+
+    // Upload state
+    uint8_t*  uploadBuffer;
+    uint32_t  uploadSize;
+    uint32_t  uploadOffset;
+    bool      uploadInProgress;
+
+private:
+    ProgramManager* _pm;
+
+    BLEServer*          _server;
+    BLEService*         _service;
+    BLECharacteristic*  _charCommand;
+    BLECharacteristic*  _charResponse;
+    BLECharacteristic*  _charActive;
+    BLECharacteristic*  _charUpload;
+
+    uint16_t _connectedClients;
+
+    SemaphoreHandle_t _mutex;
+};
+
+// Global pointer for BLE callbacks
+extern BleService* g_bleService;
+
+#endif // BLE_SERVICE_H
