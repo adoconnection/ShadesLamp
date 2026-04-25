@@ -67,17 +67,30 @@ void update(int tick_ms) {
     int r, g, b;
 
     if (preset > 0 && preset < NUM_PRESETS) {
-        /* When preset changes, push RGB values so clients see updated sliders */
         if (preset != last_preset) {
+            /* Preset just changed — push preset RGB values to sliders */
             set_param_i32(1, PRESETS[preset][0]);
             set_param_i32(2, PRESETS[preset][1]);
             set_param_i32(3, PRESETS[preset][2]);
+        } else {
+            /* Preset active — if user changed any RGB, jump to Custom */
+            r = get_param_i32(1);
+            g = get_param_i32(2);
+            b = get_param_i32(3);
+            if (r != PRESETS[preset][0] ||
+                g != PRESETS[preset][1] ||
+                b != PRESETS[preset][2]) {
+                set_param_i32(0, 0);
+                preset = 0;
+            }
         }
+    }
+
+    if (preset > 0 && preset < NUM_PRESETS) {
         r = PRESETS[preset][0];
         g = PRESETS[preset][1];
         b = PRESETS[preset][2];
     } else {
-        /* Custom mode — read RGB params */
         r = get_param_i32(1);
         g = get_param_i32(2);
         b = get_param_i32(3);
