@@ -58,6 +58,10 @@ public:
     // Persist active program + param values to config.json
     void saveState();
 
+    // Device name (persisted in config.json, used for BLE advertising)
+    String getDeviceName() const;
+    void setDeviceName(const String& name);
+
 private:
     int findProgramIndex(uint8_t id) const;
     void loadConfig();
@@ -72,6 +76,8 @@ private:
 
     // Saved parameter values per program: _savedParams[programId] = JSON string
     String _savedParams[MAX_PROGRAMS];
+
+    String _deviceName;
 
     SemaphoreHandle_t _mutex;
 };

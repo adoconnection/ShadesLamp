@@ -6,6 +6,10 @@ using Windows.Devices.Bluetooth.Advertisement;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
 using Windows.Storage.Streams;
 
+// ─── Enable Unicode output ──────────────────────────────────────────────────
+Console.OutputEncoding = Encoding.UTF8;
+Console.InputEncoding = Encoding.UTF8;
+
 // ─── BLE UUIDs ───────────────────────────────────────────────────────────────
 
 const string ServiceUuid = "0000ff00-0000-1000-8000-00805f9b34fb";
@@ -13,12 +17,14 @@ const string CharCommandUuid = "0000ff01-0000-1000-8000-00805f9b34fb";
 const string CharResponseUuid = "0000ff02-0000-1000-8000-00805f9b34fb";
 const string CharActiveProgramUuid = "0000ff03-0000-1000-8000-00805f9b34fb";
 const string CharUploadUuid = "0000ff04-0000-1000-8000-00805f9b34fb";
+const string CharParamValuesUuid = "0000ff05-0000-1000-8000-00805f9b34fb";
 
 var serviceGuid = new Guid(ServiceUuid);
 var commandGuid = new Guid(CharCommandUuid);
 var responseGuid = new Guid(CharResponseUuid);
 var activeProgramGuid = new Guid(CharActiveProgramUuid);
 var uploadGuid = new Guid(CharUploadUuid);
+var paramValuesGuid = new Guid(CharParamValuesUuid);
 
 // ─── Command codes ───────────────────────────────────────────────────────────
 
@@ -29,6 +35,8 @@ const byte CMD_GET_PARAM_VALUES = 0x04;
 const byte CMD_UPLOAD_START = 0x10;
 const byte CMD_UPLOAD_FINISH = 0x11;
 const byte CMD_DELETE_PROGRAM = 0x12;
+const byte CMD_SET_NAME = 0x20;
+const byte CMD_GET_NAME = 0x21;
 
 // ─── Chunked response flags ─────────────────────────────────────────────────
 
@@ -56,6 +64,7 @@ GattCharacteristic? commandChar = null;
 GattCharacteristic? responseChar = null;
 GattCharacteristic? activeProgramChar = null;
 GattCharacteristic? uploadChar = null;
+GattCharacteristic? paramValuesChar = null;
 
 var cts = new CancellationTokenSource();
 var connectionReady = new TaskCompletionSource<bool>();
@@ -64,6 +73,13 @@ var connectionReady = new TaskCompletionSource<bool>();
 var responseChunks = new SortedDictionary<byte, byte[]>();
 TaskCompletionSource<string>? pendingResponse = null;
 object responseLock = new();
+
+// Chunked param values notify collection
+var paramValuesChunks = new SortedDictionary<byte, byte[]>();
+object paramValuesLock = new();
+// Shared param values cache for the parameters menu (updated by ff05 notify)
+Dictionary<int, JsonElement>? liveParamValues = null;
+bool paramValuesUpdated = false;
 
 // Program state
 var programs = new List<ProgramInfo>();
@@ -101,20 +117,42 @@ watcher.AdvertisementFilter.Advertisement.ServiceUuids.Add(serviceGuid);
 
 var discoveredDevices = new HashSet<ulong>();
 
+// Scan results for device selection screen
+var scanResults = new List<(ulong Address, string Name)>();
+object scanLock = new();
+bool scanMode = false; // true = collecting devices for selection screen
+
 watcher.Received += async (sender, args) =>
 {
+    if (scanMode)
+    {
+        // Collecting devices for selection screen
+        lock (scanLock)
+        {
+            if (!scanResults.Any(d => d.Address == args.BluetoothAddress))
+            {
+                var name = string.IsNullOrEmpty(args.Advertisement.LocalName)
+                    ? "Shades LED Lamp"
+                    : args.Advertisement.LocalName;
+                scanResults.Add((args.BluetoothAddress, name));
+            }
+        }
+        return;
+    }
+
+    // Reconnection mode — connect to first found
     if (!discoveredDevices.Add(args.BluetoothAddress))
         return;
 
-    var name = string.IsNullOrEmpty(args.Advertisement.LocalName)
-        ? "WasmLED"
+    var devName = string.IsNullOrEmpty(args.Advertisement.LocalName)
+        ? "Shades LED Lamp"
         : args.Advertisement.LocalName;
 
     watcher.Stop();
 
     try
     {
-        await ConnectToDevice(args.BluetoothAddress, name);
+        await ConnectToDevice(args.BluetoothAddress, devName);
     }
     catch (Exception)
     {
@@ -124,6 +162,183 @@ watcher.Received += async (sender, args) =>
 };
 
 watcher.Stopped += (sender, args) => { };
+
+// ─── Scan for devices (returns list) ────────────────────────────────────────
+
+async Task<List<(ulong Address, string Name)>> ScanForDevices(int durationMs = 3000)
+{
+    lock (scanLock)
+    {
+        scanResults.Clear();
+        scanMode = true;
+    }
+
+    watcher.Start();
+    await Task.Delay(durationMs);
+    watcher.Stop();
+
+    lock (scanLock)
+    {
+        scanMode = false;
+        return new List<(ulong Address, string Name)>(scanResults);
+    }
+}
+
+// ─── Device Selection Screen ────────────────────────────────────────────────
+
+void DrawDeviceSelectionScreen(List<(ulong Address, string Name)> devices, int cursor, bool scanning)
+{
+    Console.Clear();
+    Console.CursorVisible = false;
+    Console.ForegroundColor = ConsoleColor.Gray;
+
+    DrawBorderTop();
+    DrawLineCustom(() =>
+    {
+        WriteColored("WasmLED Controller", ConsoleColor.White);
+    }, 18);
+    DrawBorderMid();
+
+    if (scanning)
+    {
+        DrawEmptyLine();
+        DrawLineCustom(() =>
+        {
+            WriteColored("Scanning for devices...", ConsoleColor.Yellow);
+        }, 22);
+        DrawEmptyLine();
+        DrawBorderBot();
+        return;
+    }
+
+    DrawLineCustom(() =>
+    {
+        WriteColored("Found devices:", ConsoleColor.White);
+    }, 14);
+    DrawEmptyLine();
+
+    if (devices.Count == 0)
+    {
+        DrawLineCustom(() =>
+        {
+            WriteColored("(no devices found)", ConsoleColor.DarkGray);
+        }, 18);
+    }
+    else
+    {
+        for (int i = 0; i < devices.Count; i++)
+        {
+            var dev = devices[i];
+            bool isSel = i == cursor;
+            var arrow = isSel ? "\u25ba " : "  ";
+            var addr = FormatBluetoothAddress(dev.Address);
+            var name = dev.Name;
+
+            int maxName = BOX_WIDTH - 2 - 4 - arrow.Length - addr.Length - 2;
+            if (name.Length > maxName) name = name[..maxName];
+            int lineLen = arrow.Length + name.Length + 2 + addr.Length;
+
+            DrawLineCustom(() =>
+            {
+                if (isSel)
+                {
+                    WriteColored(arrow, ConsoleColor.Cyan);
+                    WriteColoredBg(name, ConsoleColor.White, ConsoleColor.DarkBlue);
+                    Console.BackgroundColor = ConsoleColor.Black;
+                }
+                else
+                {
+                    Console.Write(arrow);
+                    WriteColored(name, ConsoleColor.Gray);
+                }
+                Console.Write("  ");
+                WriteColored(addr, ConsoleColor.DarkGray);
+            }, lineLen);
+        }
+    }
+
+    DrawEmptyLine();
+    DrawBorderMid();
+
+    DrawLineCustom(() =>
+    {
+        WriteColored("\u2191\u2193", ConsoleColor.White);
+        WriteColored(" Select   ", ConsoleColor.Gray);
+        WriteColored("Enter", ConsoleColor.White);
+        WriteColored(" Connect   ", ConsoleColor.Gray);
+        WriteColored("R", ConsoleColor.White);
+        WriteColored(" Rescan", ConsoleColor.Gray);
+    }, 33);
+
+    DrawLineCustom(() =>
+    {
+        WriteColored("Q", ConsoleColor.White);
+        WriteColored("  Quit", ConsoleColor.Gray);
+    }, 7);
+
+    DrawBorderBot();
+}
+
+async Task<(ulong Address, string Name)?> ShowDeviceSelectionScreen()
+{
+    DrawDeviceSelectionScreen(new(), 0, scanning: true);
+    var devices = await ScanForDevices();
+
+    // Auto-connect if exactly one device found
+    if (devices.Count == 1)
+        return devices[0];
+
+    int cursor = 0;
+    DrawDeviceSelectionScreen(devices, cursor, scanning: false);
+
+    while (!cts.IsCancellationRequested)
+    {
+        if (!Console.KeyAvailable)
+        {
+            await Task.Delay(50);
+            continue;
+        }
+
+        var key = Console.ReadKey(true);
+        switch (key.Key)
+        {
+            case ConsoleKey.Q:
+                return null;
+
+            case ConsoleKey.UpArrow:
+                if (devices.Count > 0 && cursor > 0)
+                {
+                    cursor--;
+                    DrawDeviceSelectionScreen(devices, cursor, scanning: false);
+                }
+                break;
+
+            case ConsoleKey.DownArrow:
+                if (devices.Count > 0 && cursor < devices.Count - 1)
+                {
+                    cursor++;
+                    DrawDeviceSelectionScreen(devices, cursor, scanning: false);
+                }
+                break;
+
+            case ConsoleKey.Enter:
+                if (devices.Count > 0 && cursor >= 0 && cursor < devices.Count)
+                    return devices[cursor];
+                break;
+
+            case ConsoleKey.R:
+                cursor = 0;
+                DrawDeviceSelectionScreen(new(), 0, scanning: true);
+                devices = await ScanForDevices();
+                if (devices.Count == 1)
+                    return devices[0];
+                DrawDeviceSelectionScreen(devices, cursor, scanning: false);
+                break;
+        }
+    }
+
+    return null;
+}
 
 // ─── Connect to device ──────────────────────────────────────────────────────
 
@@ -149,6 +364,7 @@ async Task ConnectToDevice(ulong bluetoothAddress, string name)
             responseChar = null;
             activeProgramChar = null;
             uploadChar = null;
+            paramValuesChar = null;
             connectedService?.Dispose();
             connectedService = null;
             connectedDevice?.Dispose();
@@ -226,6 +442,7 @@ async Task ConnectToDevice(ulong bluetoothAddress, string name)
         else if (c.Uuid == responseGuid) responseChar = c;
         else if (c.Uuid == activeProgramGuid) activeProgramChar = c;
         else if (c.Uuid == uploadGuid) uploadChar = c;
+        else if (c.Uuid == paramValuesGuid) paramValuesChar = c;
     }
 
     // Verify we have the required characteristics
@@ -258,6 +475,14 @@ async Task ConnectToDevice(ulong bluetoothAddress, string name)
     activeProgramChar.ValueChanged += OnActiveProgramNotification;
     var activeProgramNotifyStatus = await activeProgramChar.WriteClientCharacteristicConfigurationDescriptorAsync(
         GattClientCharacteristicConfigurationDescriptorValue.Notify);
+
+    // Subscribe to Param Values (ff05) notifications (optional — older firmware may lack it)
+    if (paramValuesChar != null)
+    {
+        paramValuesChar.ValueChanged += OnParamValuesNotification;
+        await paramValuesChar.WriteClientCharacteristicConfigurationDescriptorAsync(
+            GattClientCharacteristicConfigurationDescriptorValue.Notify);
+    }
 
     // Read current active program
     try
@@ -326,6 +551,47 @@ void OnActiveProgramNotification(GattCharacteristic sender, GattValueChangedEven
     if (data.Length >= 1)
     {
         activeProgram = data[0];
+    }
+}
+
+// ─── Param Values notification handler (chunked, same format as response) ────
+
+void OnParamValuesNotification(GattCharacteristic sender, GattValueChangedEventArgs args)
+{
+    var data = args.CharacteristicValue.ToArray();
+    if (data.Length < 2) return;
+
+    byte seq = data[0];
+    byte flags = data[1];
+    byte[] payload = data.Length > 2 ? data[2..] : Array.Empty<byte>();
+
+    lock (paramValuesLock)
+    {
+        paramValuesChunks[seq] = payload;
+
+        bool isFinal = (flags & FLAG_FINAL) != 0;
+        if (isFinal)
+        {
+            using var ms = new MemoryStream();
+            foreach (var kvp in paramValuesChunks)
+                ms.Write(kvp.Value, 0, kvp.Value.Length);
+            paramValuesChunks.Clear();
+
+            var json = Encoding.UTF8.GetString(ms.ToArray());
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                var newValues = new Dictionary<int, JsonElement>();
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                {
+                    if (int.TryParse(prop.Name, out var paramId))
+                        newValues[paramId] = prop.Value.Clone();
+                }
+                liveParamValues = newValues;
+                paramValuesUpdated = true;
+            }
+            catch { }
+        }
     }
 }
 
@@ -695,9 +961,11 @@ void DrawMainMenuScreen()
 
     DrawLineCustom(() =>
     {
+        WriteColored("N", ConsoleColor.White);
+        WriteColored("  Rename device   ", ConsoleColor.Gray);
         WriteColored("Q", ConsoleColor.White);
-        WriteColored("  Quit", ConsoleColor.Gray);
-    }, 7);
+        WriteColored(" Quit", ConsoleColor.Gray);
+    }, 24);
 
     DrawBorderBot();
 
@@ -962,6 +1230,19 @@ async Task ShowParametersMenuTUI()
             }
 
             paramNeedsRedraw = false;
+        }
+
+        // Check for param values updated via BLE notify (ff05)
+        if (paramValuesUpdated && liveParamValues != null)
+        {
+            lock (paramValuesLock)
+            {
+                foreach (var kvp in liveParamValues)
+                    currentValues[kvp.Key] = kvp.Value;
+                paramValuesUpdated = false;
+            }
+            paramNeedsRedraw = true;
+            continue;
         }
 
         if (!Console.KeyAvailable)
@@ -1427,14 +1708,25 @@ string FormatBluetoothAddress(ulong address)
     return $"{bytes[5]:X2}:{bytes[4]:X2}:{bytes[3]:X2}:{bytes[2]:X2}:{bytes[1]:X2}:{bytes[0]:X2}";
 }
 
-// ─── Start scanning ─────────────────────────────────────────────────────────
+// ─── Device selection ───────────────────────────────────────────────────────
 
+var selectedDevice = await ShowDeviceSelectionScreen();
+if (selectedDevice == null)
+{
+    Console.CursorVisible = true;
+    Console.ResetColor();
+    Console.Clear();
+    Console.WriteLine("No device selected.");
+    return;
+}
+
+// Show connecting screen
 DrawScanningScreen();
-watcher.Start();
 
-// Wait for connection
+// Connect to selected device
 try
 {
+    await ConnectToDevice(selectedDevice.Value.Address, selectedDevice.Value.Name);
     await connectionReady.Task.WaitAsync(cts.Token);
 }
 catch (OperationCanceledException)
@@ -1442,6 +1734,14 @@ catch (OperationCanceledException)
     watcher.Stop();
     Console.CursorVisible = true;
     Console.ResetColor();
+    return;
+}
+catch (Exception)
+{
+    Console.CursorVisible = true;
+    Console.ResetColor();
+    Console.Clear();
+    Console.WriteLine("Failed to connect.");
     return;
 }
 
@@ -1580,6 +1880,48 @@ while (!cts.IsCancellationRequested)
             }
             needsRedraw = true;
             break;
+
+        case ConsoleKey.N:
+            // Rename device
+            try
+            {
+                Console.CursorVisible = true;
+                Console.SetCursorPosition(0, Console.CursorTop);
+                WriteColored($"  New device name (max 20 chars): ", ConsoleColor.Yellow);
+                Console.ForegroundColor = ConsoleColor.White;
+                var newName = Console.ReadLine()?.Trim();
+                Console.CursorVisible = false;
+
+                if (!string.IsNullOrEmpty(newName))
+                {
+                    if (newName.Length > 20) newName = newName[..20];
+                    var nameBytes = Encoding.UTF8.GetBytes(newName);
+                    var resp = await SendCommand(CMD_SET_NAME, nameBytes);
+                    using var doc = JsonDocument.Parse(resp);
+                    if (doc.RootElement.TryGetProperty("ok", out var okElem) && okElem.GetBoolean())
+                    {
+                        deviceName = newName;
+                        SetStatus($"Device renamed to '{newName}'", ConsoleColor.Green);
+                    }
+                    else
+                    {
+                        var err = doc.RootElement.TryGetProperty("err", out var errElem)
+                            ? errElem.GetString() ?? "Unknown error"
+                            : "Unknown error";
+                        SetStatus($"Rename error: {err}", ConsoleColor.Red);
+                    }
+                }
+                else
+                {
+                    SetStatus("Rename cancelled", ConsoleColor.Yellow);
+                }
+            }
+            catch (Exception ex)
+            {
+                SetStatus($"Rename error: {ex.Message}", ConsoleColor.Red);
+            }
+            needsRedraw = true;
+            break;
     }
 }
 
@@ -1615,10 +1957,21 @@ if (activeProgramChar != null)
     catch { }
 }
 
+if (paramValuesChar != null)
+{
+    try
+    {
+        await paramValuesChar.WriteClientCharacteristicConfigurationDescriptorAsync(
+            GattClientCharacteristicConfigurationDescriptorValue.None);
+    }
+    catch { }
+}
+
 commandChar = null;
 responseChar = null;
 activeProgramChar = null;
 uploadChar = null;
+paramValuesChar = null;
 
 // Close GATT service (required for Windows to release connection)
 if (connectedService != null)

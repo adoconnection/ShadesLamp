@@ -26,6 +26,9 @@ int get_param_i32(int param_id);
 __attribute__((import_module("env"), import_name("get_param_f32")))
 float get_param_f32(int param_id);
 
+__attribute__((import_module("env"), import_name("set_param_i32")))
+void set_param_i32(int param_id, int value);
+
 // Export helpers
 #define EXPORT(name) __attribute__((export_name(#name)))
 

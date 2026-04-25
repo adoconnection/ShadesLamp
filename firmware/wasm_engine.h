@@ -31,9 +31,15 @@ public:
     // Check if a WASM program is currently loaded
     bool isLoaded() const;
 
+    // Check if WASM set any params since last check (read + clear)
+    bool consumeParamsChanged();
+
     // Accessors used by host functions
     LedDriver*  getLedDriver()  const { return _ledDriver; }
     ParamStore* getParamStore() const { return _paramStore; }
+
+    // Called by host_set_param_i32 to flag params as changed
+    void flagParamsChanged() { _paramsChanged = true; }
 
 private:
     bool linkHostFunctions();
@@ -49,6 +55,7 @@ private:
 
     String _metaJson;
     bool   _loaded;
+    bool   _paramsChanged;
 
     SemaphoreHandle_t _mutex;
 };

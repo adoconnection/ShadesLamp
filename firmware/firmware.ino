@@ -41,6 +41,12 @@ void renderTask(void* param) {
         if (wasmEngine.isLoaded()) {
             int32_t tick = (int32_t)(millis() - startTick);
             wasmEngine.tick(tick);
+
+            // If WASM program changed params (e.g. preset → RGB), notify BLE clients
+            if (wasmEngine.consumeParamsChanged()) {
+                programManager.saveState();
+                bleService.notifyParamValues();
+            }
         }
         vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(33)); // ~30 FPS
     }
@@ -76,8 +82,8 @@ void setup() {
     // Initialize program manager (loads programs from flash, activates saved program)
     programManager.begin();
 
-    // Initialize BLE service
-    bleService.begin();
+    // Initialize BLE service (use device name from config, default: "Shades LED Lamp")
+    bleService.begin(programManager.getDeviceName().c_str());
 
     // Create render task on Core 1 (BLE runs on Core 0)
     BaseType_t taskResult = xTaskCreatePinnedToCore(

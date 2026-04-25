@@ -12,6 +12,7 @@ ProgramManager::ProgramManager(WasmEngine* engine, ParamStore* paramStore, LedDr
     , _paramStore(paramStore)
     , _ledDriver(ledDriver)
     , _activeId(0xFF)
+    , _deviceName("Shades LED Lamp")
 {
     _mutex = xSemaphoreCreateMutex();
 }
@@ -77,11 +78,8 @@ bool ProgramManager::switchProgram(uint8_t id) {
         return false;
     }
 
-    // Reset param store and apply saved params
+    // Reset param store (params applied after metadata is loaded below)
     _paramStore->reset();
-    if (_savedParams[id].length() > 0) {
-        _paramStore->fromJson(_savedParams[id].c_str());
-    }
 
     // Load into WASM engine
     bool ok = _engine->load(wasmData, wasmSize);
@@ -109,8 +107,12 @@ bool ProgramManager::switchProgram(uint8_t id) {
         }
     }
 
-    // Apply default param values from meta if no saved params exist
-    if (_savedParams[id].length() == 0) {
+    // Apply saved param values (or defaults) using metadata for correct types
+    {
+        JsonDocument savedDoc;
+        bool hasSaved = (_savedParams[id].length() > 0) &&
+                        !deserializeJson(savedDoc, _savedParams[id]);
+
         JsonDocument metaDoc;
         if (!deserializeJson(metaDoc, _programs[idx].metaJson)) {
             JsonArray params = metaDoc["params"].as<JsonArray>();
@@ -118,10 +120,19 @@ bool ProgramManager::switchProgram(uint8_t id) {
                 for (JsonObject p : params) {
                     uint8_t paramId = p["id"].as<uint8_t>();
                     String type = p["type"].as<String>();
-                    if (type == "float") {
-                        _paramStore->setFloat(paramId, p["default"].as<float>());
+                    bool isFloat = (type == "float");
+                    String key = String(paramId);
+
+                    if (hasSaved && savedDoc.containsKey(key)) {
+                        if (isFloat)
+                            _paramStore->setFloat(paramId, savedDoc[key].as<float>());
+                        else
+                            _paramStore->setInt(paramId, savedDoc[key].as<int32_t>());
                     } else {
-                        _paramStore->setInt(paramId, p["default"].as<int32_t>());
+                        if (isFloat)
+                            _paramStore->setFloat(paramId, p["default"].as<float>());
+                        else
+                            _paramStore->setInt(paramId, p["default"].as<int32_t>());
                     }
                 }
             }
@@ -330,9 +341,19 @@ bool ProgramManager::setParam(uint8_t programId, uint8_t paramId, const uint8_t*
     return true;
 }
 
+String ProgramManager::getDeviceName() const {
+    return _deviceName;
+}
+
+void ProgramManager::setDeviceName(const String& name) {
+    _deviceName = name;
+    saveState();
+}
+
 void ProgramManager::saveState() {
     JsonDocument doc;
     doc["active"] = _activeId;
+    doc["name"] = _deviceName;
 
     JsonObject paramsObj = doc["params"].to<JsonObject>();
     for (const ProgramInfo& p : _programs) {
@@ -368,6 +389,11 @@ void ProgramManager::loadConfig() {
     if (err) {
         Serial.printf("%s Config parse error: %s\r\n", TAG, err.c_str());
         return;
+    }
+
+    if (doc.containsKey("name")) {
+        _deviceName = doc["name"].as<String>();
+        Serial.printf("%s Config: device name = '%s'\r\n", TAG, _deviceName.c_str());
     }
 
     if (doc.containsKey("active")) {

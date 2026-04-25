@@ -11,6 +11,7 @@ void ParamStore::setInt(uint8_t id, int32_t val) {
     if (id >= MAX_PARAMS) return;
     _values[id].i = val;
     _set[id] = true;
+    _isFloat[id] = false;
 }
 
 int32_t ParamStore::getInt(uint8_t id) const {
@@ -22,6 +23,7 @@ void ParamStore::setFloat(uint8_t id, float val) {
     if (id >= MAX_PARAMS) return;
     _values[id].f = val;
     _set[id] = true;
+    _isFloat[id] = true;
 }
 
 float ParamStore::getFloat(uint8_t id) const {
@@ -32,14 +34,20 @@ float ParamStore::getFloat(uint8_t id) const {
 void ParamStore::reset() {
     memset(_values, 0, sizeof(_values));
     memset(_set, 0, sizeof(_set));
+    memset(_isFloat, 0, sizeof(_isFloat));
 }
 
 String ParamStore::toJson() const {
     JsonDocument doc;
+    JsonObject obj = doc.to<JsonObject>(); // ensures "{}" not "null" when empty
 
     for (uint8_t i = 0; i < MAX_PARAMS; i++) {
         if (_set[i]) {
-            doc[String(i)] = _values[i].i;
+            if (_isFloat[i]) {
+                obj[String(i)] = _values[i].f;
+            } else {
+                obj[String(i)] = _values[i].i;
+            }
         }
     }
 

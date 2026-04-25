@@ -33,7 +33,7 @@ set FAIL=0
 set INDEX=0
 
 :: List of programs to build (order determines LittleFS index)
-set "PROGRAM_LIST=rgb_cycle rainbow random_blink"
+set "PROGRAM_LIST=rgb_cycle rainbow random_blink solid_color"
 
 for %%P in (%PROGRAM_LIST%) do (
     set "PROG_NAME=%%P"

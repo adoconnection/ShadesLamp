@@ -3,10 +3,12 @@
 
 #define TAG "[BLE]"
 
-// Safe MTU payload size (MTU 20 - 2 bytes header = 18 bytes payload per chunk)
+// Chunk header: [seq(1)][flags(1)]
 #define CHUNK_HEADER_SIZE 2
-#define SAFE_MTU          20
-#define CHUNK_PAYLOAD     (SAFE_MTU - CHUNK_HEADER_SIZE)
+// Fallback chunk payload when MTU is unknown (default BLE MTU 23 - 3 ATT - 2 header)
+#define MIN_CHUNK_PAYLOAD 18
+// Maximum chunk payload — keep conservative to avoid notification truncation
+#define MAX_CHUNK_PAYLOAD 200
 
 // Maximum WASM upload size (64 KB)
 #define MAX_UPLOAD_SIZE   (64 * 1024)
@@ -18,14 +20,33 @@ BleService* g_bleService = nullptr;
 
 class ServerCallbacks : public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) override {
-        Serial.printf("%s Client connected\r\n", TAG);
+        Serial.printf("%s Client connected (total: %d)\r\n", TAG, pServer->getConnectedCount());
+        // Keep advertising so additional clients can connect
+        BLEDevice::startAdvertising();
     }
 
     void onDisconnect(BLEServer* pServer) override {
-        Serial.printf("%s Client disconnected\r\n", TAG);
+        Serial.printf("%s Client disconnected (remaining: %d)\r\n", TAG, pServer->getConnectedCount());
+        // Reset MTU to default when client disconnects
+        if (g_bleService && pServer->getConnectedCount() <= 1) {
+            g_bleService->setNegotiatedMtu(23);
+        }
         // Restart advertising so new clients can connect
         BLEDevice::startAdvertising();
     }
+
+#if defined(CONFIG_BLUEDROID_ENABLED)
+    void onMtuChanged(BLEServer* pServer, esp_ble_gatts_cb_param_t* param) override {
+        uint16_t mtu = param->mtu.mtu;
+        Serial.printf("%s MTU negotiated: %u\r\n", TAG, mtu);
+        if (g_bleService) g_bleService->setNegotiatedMtu(mtu);
+    }
+#elif defined(CONFIG_NIMBLE_ENABLED)
+    void onMtuChanged(BLEServer* pServer, ble_gap_conn_desc* desc, uint16_t mtu) override {
+        Serial.printf("%s MTU negotiated: %u\r\n", TAG, mtu);
+        if (g_bleService) g_bleService->setNegotiatedMtu(mtu);
+    }
+#endif
 };
 
 // ── Command Characteristic Callbacks ───────────────────────────────────────
@@ -191,6 +212,29 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 break;
             }
 
+            case CMD_SET_NAME: {
+                if (payloadLen < 1 || payloadLen > 20) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"name 1-20 chars\"}", true);
+                    break;
+                }
+                String newName((const char*)payload, payloadLen);
+                Serial.printf("%s CMD SET_NAME: '%s'\r\n", TAG, newName.c_str());
+
+                pm->setDeviceName(newName);
+
+                Serial.printf("%s Name saved. Will apply after reboot.\r\n", TAG);
+                g_bleService->sendResponse("{\"ok\":true,\"reboot\":true}");
+                break;
+            }
+
+            case CMD_GET_NAME: {
+                String name = pm->getDeviceName();
+                String resp = "{\"ok\":true,\"name\":\"" + name + "\"}";
+                Serial.printf("%s CMD GET_NAME: '%s'\r\n", TAG, name.c_str());
+                g_bleService->sendResponse(resp);
+                break;
+            }
+
             default:
                 Serial.printf("%s Unknown command: 0x%02X\r\n", TAG, cmd);
                 g_bleService->sendResponse("{\"ok\":false,\"err\":\"unknown command\"}", true);
@@ -262,7 +306,9 @@ BleService::BleService(ProgramManager* pm)
     , _charResponse(nullptr)
     , _charActive(nullptr)
     , _charUpload(nullptr)
+    , _charParamValues(nullptr)
     , _connectedClients(0)
+    , _negotiatedMtu(23)
     , uploadBuffer(nullptr)
     , uploadSize(0)
     , uploadOffset(0)
@@ -272,10 +318,11 @@ BleService::BleService(ProgramManager* pm)
     g_bleService = this;
 }
 
-void BleService::begin() {
-    Serial.printf("%s Initializing BLE...\r\n", TAG);
+void BleService::begin(const char* deviceName) {
+    Serial.printf("%s Initializing BLE as '%s'...\r\n", TAG, deviceName);
 
-    BLEDevice::init("WasmLED");
+    BLEDevice::init(deviceName);
+    BLEDevice::setMTU(517);
 
     _server = BLEDevice::createServer();
     _server->setCallbacks(new ServerCallbacks());
@@ -315,6 +362,13 @@ void BleService::begin() {
     );
     _charUpload->setCallbacks(new UploadCallbacks());
 
+    // Param Values characteristic (NOTIFY — device pushes param changes to clients)
+    _charParamValues = _service->createCharacteristic(
+        CHAR_PARAM_VALUES_UUID,
+        BLECharacteristic::PROPERTY_NOTIFY
+    );
+    _charParamValues->addDescriptor(new BLE2902());
+
     _service->start();
 
     // Start advertising
@@ -325,7 +379,14 @@ void BleService::begin() {
     advertising->setMinPreferred(0x12);
     BLEDevice::startAdvertising();
 
-    Serial.printf("%s BLE advertising started as 'WasmLED'\r\n", TAG);
+    Serial.printf("%s BLE advertising started as '%s'\r\n", TAG, deviceName);
+}
+
+uint16_t BleService::getChunkPayload() const {
+    if (_negotiatedMtu <= 3 + CHUNK_HEADER_SIZE) return MIN_CHUNK_PAYLOAD;
+    uint16_t payload = _negotiatedMtu - 3 - CHUNK_HEADER_SIZE; // 3 = ATT overhead
+    if (payload > MAX_CHUNK_PAYLOAD) payload = MAX_CHUNK_PAYLOAD;
+    return payload;
 }
 
 void BleService::sendResponse(const String& data, bool isError) {
@@ -334,16 +395,20 @@ void BleService::sendResponse(const String& data, bool isError) {
     const uint8_t* src = (const uint8_t*)data.c_str();
     size_t totalLen = data.length();
     uint8_t seq = 0;
+    uint16_t chunkPayload = getChunkPayload();
+
+    Serial.printf("%s sendResponse: %u bytes, chunk=%u (MTU=%u)\r\n",
+                  TAG, totalLen, chunkPayload, _negotiatedMtu);
 
     // Send data in chunks
+    uint8_t chunk[MAX_CHUNK_PAYLOAD + CHUNK_HEADER_SIZE];
     size_t offset = 0;
     while (offset < totalLen) {
         size_t remaining = totalLen - offset;
-        size_t chunkSize = (remaining > CHUNK_PAYLOAD) ? CHUNK_PAYLOAD : remaining;
+        size_t chunkSize = (remaining > chunkPayload) ? chunkPayload : remaining;
         bool isFinal = (offset + chunkSize >= totalLen);
 
         // Build chunk: [seq][flags][payload...]
-        uint8_t chunk[SAFE_MTU];
         chunk[0] = seq;
         chunk[1] = 0;
         if (isFinal) chunk[1] |= CHUNK_FLAG_FINAL;
@@ -359,13 +424,12 @@ void BleService::sendResponse(const String& data, bool isError) {
 
         // Small delay between chunks to avoid BLE stack congestion
         if (!isFinal) {
-            delay(20);
+            delay(30);
         }
     }
 
     // Handle empty response
     if (totalLen == 0) {
-        uint8_t chunk[CHUNK_HEADER_SIZE];
         chunk[0] = 0; // seq
         chunk[1] = CHUNK_FLAG_FINAL;
         if (isError) chunk[1] |= CHUNK_FLAG_ERROR;
@@ -378,6 +442,48 @@ void BleService::notifyActiveProgram(uint8_t id) {
     if (_charActive) {
         _charActive->setValue(&id, 1);
         _charActive->notify();
+    }
+}
+
+void BleService::notifyParamValues() {
+    if (!_charParamValues || !_server || _server->getConnectedCount() == 0) return;
+
+    uint8_t activeId = _pm->getActiveId();
+    String json = _pm->getParamValuesJson(activeId);
+
+    const uint8_t* src = (const uint8_t*)json.c_str();
+    size_t totalLen = json.length();
+    uint8_t seq = 0;
+    uint16_t chunkPayload = getChunkPayload();
+
+    uint8_t chunk[MAX_CHUNK_PAYLOAD + CHUNK_HEADER_SIZE];
+    size_t offset = 0;
+    while (offset < totalLen) {
+        size_t remaining = totalLen - offset;
+        size_t chunkSize = (remaining > chunkPayload) ? chunkPayload : remaining;
+        bool isFinal = (offset + chunkSize >= totalLen);
+
+        chunk[0] = seq;
+        chunk[1] = isFinal ? CHUNK_FLAG_FINAL : 0;
+
+        memcpy(chunk + CHUNK_HEADER_SIZE, src + offset, chunkSize);
+
+        _charParamValues->setValue(chunk, CHUNK_HEADER_SIZE + chunkSize);
+        _charParamValues->notify();
+
+        offset += chunkSize;
+        seq++;
+
+        if (!isFinal) {
+            delay(30);
+        }
+    }
+
+    if (totalLen == 0) {
+        chunk[0] = 0;
+        chunk[1] = CHUNK_FLAG_FINAL;
+        _charParamValues->setValue(chunk, CHUNK_HEADER_SIZE);
+        _charParamValues->notify();
     }
 }
 

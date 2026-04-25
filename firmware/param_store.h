@@ -28,7 +28,8 @@ private:
     };
 
     ParamValue _values[MAX_PARAMS];
-    bool       _set[MAX_PARAMS];   // track which params have been explicitly set
+    bool       _set[MAX_PARAMS];     // track which params have been explicitly set
+    bool       _isFloat[MAX_PARAMS]; // track type for correct JSON serialization
 };
 
 #endif // PARAM_STORE_H

@@ -16,6 +16,7 @@ class ProgramManager;
 #define CHAR_RESPONSE_UUID  "0000ff02-0000-1000-8000-00805f9b34fb"
 #define CHAR_ACTIVE_UUID    "0000ff03-0000-1000-8000-00805f9b34fb"
 #define CHAR_UPLOAD_UUID    "0000ff04-0000-1000-8000-00805f9b34fb"
+#define CHAR_PARAM_VALUES_UUID "0000ff05-0000-1000-8000-00805f9b34fb"
 
 // Command codes
 #define CMD_GET_PROGRAMS    0x01
@@ -25,6 +26,8 @@ class ProgramManager;
 #define CMD_UPLOAD_START    0x10
 #define CMD_UPLOAD_FINISH   0x11
 #define CMD_DELETE_PROGRAM  0x12
+#define CMD_SET_NAME        0x20
+#define CMD_GET_NAME        0x21
 
 // Response chunk flags
 #define CHUNK_FLAG_FINAL    0x01
@@ -35,7 +38,7 @@ public:
     BleService(ProgramManager* pm);
 
     // Initialize BLE stack, create service and characteristics, start advertising
-    void begin();
+    void begin(const char* deviceName);
 
     // Send a chunked response on the Response characteristic
     void sendResponse(const String& data, bool isError = false);
@@ -43,10 +46,16 @@ public:
     // Update the Active Program characteristic value and notify
     void notifyActiveProgram(uint8_t id);
 
+    // Notify all clients with current parameter values JSON (chunked)
+    void notifyParamValues();
+
     // Check if a client is connected
     bool isConnected() const;
 
     ProgramManager* getProgramManager() const { return _pm; }
+
+    // Called when BLE MTU is negotiated with a client
+    void setNegotiatedMtu(uint16_t mtu) { _negotiatedMtu = mtu; }
 
     // Upload state
     uint8_t*  uploadBuffer;
@@ -55,6 +64,8 @@ public:
     bool      uploadInProgress;
 
 private:
+    uint16_t getChunkPayload() const;
+
     ProgramManager* _pm;
 
     BLEServer*          _server;
@@ -63,8 +74,10 @@ private:
     BLECharacteristic*  _charResponse;
     BLECharacteristic*  _charActive;
     BLECharacteristic*  _charUpload;
+    BLECharacteristic*  _charParamValues;
 
     uint16_t _connectedClients;
+    uint16_t _negotiatedMtu;
 
     SemaphoreHandle_t _mutex;
 };

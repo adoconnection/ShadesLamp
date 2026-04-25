@@ -68,6 +68,17 @@ m3ApiRawFunction(host_get_param_f32) {
     m3ApiReturn(0.0f);
 }
 
+m3ApiRawFunction(host_set_param_i32) {
+    m3ApiGetArg(int32_t, paramId);
+    m3ApiGetArg(int32_t, value);
+
+    if (g_wasmEngine && g_wasmEngine->getParamStore()) {
+        g_wasmEngine->getParamStore()->setInt((uint8_t)paramId, value);
+        g_wasmEngine->flagParamsChanged();
+    }
+    m3ApiSuccess();
+}
+
 // ── WasmEngine class implementation ────────────────────────────────────────
 
 WasmEngine::WasmEngine(LedDriver* ledDriver, ParamStore* paramStore)
@@ -78,6 +89,7 @@ WasmEngine::WasmEngine(LedDriver* ledDriver, ParamStore* paramStore)
     , _module(nullptr)
     , _funcUpdate(nullptr)
     , _loaded(false)
+    , _paramsChanged(false)
 {
     _mutex = xSemaphoreCreateMutex();
     g_wasmEngine = this;
@@ -235,6 +247,14 @@ bool WasmEngine::isLoaded() const {
     return _loaded;
 }
 
+bool WasmEngine::consumeParamsChanged() {
+    if (_paramsChanged) {
+        _paramsChanged = false;
+        return true;
+    }
+    return false;
+}
+
 bool WasmEngine::linkHostFunctions() {
     M3Result result;
 
@@ -266,6 +286,11 @@ bool WasmEngine::linkHostFunctions() {
     result = m3_LinkRawFunction(_module, "env", "get_param_f32", "f(i)", &host_get_param_f32);
     if (result && result != m3Err_functionLookupFailed) {
         Serial.printf("%s Link get_param_f32: %s\r\n", TAG, result);
+    }
+
+    result = m3_LinkRawFunction(_module, "env", "set_param_i32", "v(ii)", &host_set_param_i32);
+    if (result && result != m3Err_functionLookupFailed) {
+        Serial.printf("%s Link set_param_i32: %s\r\n", TAG, result);
     }
 
     // Not a hard failure if individual links fail (function may not be imported)
@@ -351,6 +376,7 @@ static void linkAllHostFunctions(IM3Module mod) {
     m3_LinkRawFunction(mod, "env", "draw",          "v()",     &host_draw);
     m3_LinkRawFunction(mod, "env", "get_param_i32", "i(i)",    &host_get_param_i32);
     m3_LinkRawFunction(mod, "env", "get_param_f32", "f(i)",    &host_get_param_f32);
+    m3_LinkRawFunction(mod, "env", "set_param_i32", "v(ii)",   &host_set_param_i32);
 }
 
 bool wasmValidate(const uint8_t* wasmData, size_t wasmSize) {
