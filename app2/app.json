@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "Shades Lamp",
+    "slug": "shades-lamp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0E0D0B"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.shades.lamp",
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "Shades Lamp uses Bluetooth to connect to your LED lamp",
+        "NSBluetoothPeripheralUsageDescription": "Shades Lamp uses Bluetooth to connect to your LED lamp"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0E0D0B"
+      },
+      "package": "com.shades.lamp",
+      "permissions": [
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
+    "plugins": [
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": ["central"],
+          "bluetoothAlwaysPermission": "Shades Lamp uses Bluetooth to connect to your LED lamp"
+        }
+      ]
+    ]
+  }
+}
