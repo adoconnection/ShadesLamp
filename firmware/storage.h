@@ -32,6 +32,19 @@ namespace Storage {
     // Load config JSON from /config.json (returns "" if not found)
     String loadConfig();
 
+    // Read hardware config (pin, width, height) from /config.json
+    // Leaves parameters unchanged if fields are missing
+    void loadHardwareConfig(uint8_t& pin, uint16_t& width, uint16_t& height, bool& zigzag);
+
+    // Save param values for a single program to /params/{id}.json
+    bool saveParamValues(uint8_t id, const char* json);
+
+    // Load param values for a single program from /params/{id}.json
+    String loadParamValues(uint8_t id);
+
+    // Delete param values file for a program
+    bool deleteParamValues(uint8_t id);
+
 } // namespace Storage
 
 #endif // STORAGE_H

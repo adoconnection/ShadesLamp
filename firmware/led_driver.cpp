@@ -2,11 +2,12 @@
 
 #define TAG "[LED]"
 
-LedDriver::LedDriver(uint8_t pin, uint16_t width, uint16_t height)
+LedDriver::LedDriver(uint8_t pin, uint16_t width, uint16_t height, bool zigzag)
     : _pin(pin)
     , _width(width)
     , _height(height)
     , _numPixels(width * height)
+    , _zigzag(zigzag)
     , _framebuffer(nullptr)
     , _strip(nullptr)
 {
@@ -60,10 +61,20 @@ void LedDriver::setPixel(uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b
 void LedDriver::show() {
     xSemaphoreTake(_mutex, portMAX_DELAY);
 
-    // Copy framebuffer to NeoPixel strip
-    for (uint16_t i = 0; i < _numPixels; i++) {
-        uint32_t idx = (uint32_t)i * 3;
-        _strip->setPixelColor(i, _framebuffer[idx], _framebuffer[idx + 1], _framebuffer[idx + 2]);
+    // Copy framebuffer to NeoPixel strip with optional zigzag remapping
+    for (uint16_t y = 0; y < _height; y++) {
+        for (uint16_t x = 0; x < _width; x++) {
+            uint32_t fbIdx = (uint32_t)(y * _width + x) * 3;
+            uint16_t stripIdx;
+            if (_zigzag && (y & 1)) {
+                // Odd rows: reversed direction
+                stripIdx = y * _width + (_width - 1 - x);
+            } else {
+                stripIdx = y * _width + x;
+            }
+            _strip->setPixelColor(stripIdx,
+                _framebuffer[fbIdx], _framebuffer[fbIdx + 1], _framebuffer[fbIdx + 2]);
+        }
     }
     _strip->show();
 

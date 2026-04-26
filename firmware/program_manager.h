@@ -9,7 +9,7 @@ class WasmEngine;
 class ParamStore;
 class LedDriver;
 
-#define MAX_PROGRAMS 16
+#define MAX_PROGRAMS 128
 
 struct ProgramInfo {
     uint8_t id;
@@ -55,12 +55,34 @@ public:
     // Set a parameter value for a program
     bool setParam(uint8_t programId, uint8_t paramId, const uint8_t* value, size_t len);
 
-    // Persist active program + param values to config.json
-    void saveState();
+    // Persist global config (active program, name, hw) to /config.json
+    void saveConfig();
+
+    // Persist param values for a specific program to /params/{id}.json
+    void saveActiveParams();
+
+    // Deferred save: marks params as dirty, actual write happens after SAVE_DEBOUNCE_MS
+    void requestParamSave();
+
+    // Check if a deferred save is pending and enough time has passed; call from loop()
+    void flushIfDirty();
+
+    // Request async program switch (returns immediately, processed in processPending())
+    void requestSwitch(uint8_t programId);
+
+    // Process pending switch + deferred saves; call from loop()
+    void processPending();
 
     // Device name (persisted in config.json, used for BLE advertising)
     String getDeviceName() const;
     void setDeviceName(const String& name);
+
+    // Hardware config (persisted in config.json, requires reboot to apply)
+    uint8_t  getLedPin() const;
+    uint16_t getLedWidth() const;
+    uint16_t getLedHeight() const;
+    bool     getLedZigzag() const;
+    void setHardwareConfig(uint8_t pin, uint16_t width, uint16_t height, bool zigzag);
 
 private:
     int findProgramIndex(uint8_t id) const;
@@ -74,12 +96,22 @@ private:
     std::vector<ProgramInfo> _programs;
     uint8_t _activeId;
 
-    // Saved parameter values per program: _savedParams[programId] = JSON string
-    String _savedParams[MAX_PROGRAMS];
-
     String _deviceName;
 
+    uint8_t  _ledPin;
+    uint16_t _ledWidth;
+    uint16_t _ledHeight;
+    bool     _ledZigzag;
+
     SemaphoreHandle_t _mutex;
+
+    // Deferred param save support
+    static const unsigned long SAVE_DEBOUNCE_MS = 3000;
+    volatile bool     _paramsDirty;
+    unsigned long     _lastParamDirtyTime;
+
+    // Async program switch (set from BLE callback, processed in loop)
+    volatile uint8_t  _pendingSwitchId;  // 0xFF = none
 };
 
 #endif // PROGRAM_MANAGER_H

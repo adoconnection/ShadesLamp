@@ -1,5 +1,5 @@
 /**
- * WasmLED — WASM-programmable LED controller for ESP32-S3 (N16R8)
+ * Shades Lamp — WASM-programmable LED controller for ESP32-S3 (N16R8)
  *
  * Runs WASM programs to control WS2812 LEDs. Programs are uploaded
  * and managed over BLE, stored persistently in LittleFS.
@@ -14,19 +14,13 @@
 #include "ble_service.h"
 #include "storage.h"
 
-// ── Hardware Configuration ─────────────────────────────────────────────────
-
-#define LED_PIN    48
-#define LED_WIDTH   1
-#define LED_HEIGHT  1
-
 // ── Global Objects ─────────────────────────────────────────────────────────
 
-LedDriver      ledDriver(LED_PIN, LED_WIDTH, LED_HEIGHT);
+LedDriver*     ledDriver = nullptr;
 ParamStore     paramStore;
-WasmEngine     wasmEngine(&ledDriver, &paramStore);
-ProgramManager programManager(&wasmEngine, &paramStore, &ledDriver);
-BleService     bleService(&programManager);
+WasmEngine*    wasmEngine = nullptr;
+ProgramManager* programManager = nullptr;
+BleService*    bleService = nullptr;
 
 // ── FreeRTOS Render Task ───────────────────────────────────────────────────
 
@@ -38,14 +32,14 @@ void renderTask(void* param) {
     Serial.printf("[MAIN] Render task started on core %d\r\n", xPortGetCoreID());
 
     while (true) {
-        if (wasmEngine.isLoaded()) {
+        if (wasmEngine->isLoaded()) {
             int32_t tick = (int32_t)(millis() - startTick);
-            wasmEngine.tick(tick);
+            wasmEngine->tick(tick);
 
             // If WASM program changed params (e.g. preset → RGB), notify BLE clients
-            if (wasmEngine.consumeParamsChanged()) {
-                programManager.saveState();
-                bleService.notifyParamValues();
+            if (wasmEngine->consumeParamsChanged()) {
+                programManager->requestParamSave();
+                bleService->notifyParamValues();
             }
         }
         vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(33)); // ~30 FPS
@@ -58,11 +52,23 @@ void setup() {
     Serial.begin(115200);
     delay(500); // Wait for serial monitor to connect
 
+    // Initialize flash storage (needed before reading config)
+    if (!Storage::init()) {
+        Serial.println("[MAIN] Storage init FAILED — halting");
+        while (true) { delay(1000); }
+    }
+
+    // Read hardware config from flash (before creating LedDriver)
+    uint8_t ledPin = 48;
+    uint16_t ledWidth = 1, ledHeight = 1;
+    bool ledZigzag = false;
+    Storage::loadHardwareConfig(ledPin, ledWidth, ledHeight, ledZigzag);
+
     Serial.println();
     Serial.println("=================================");
-    Serial.println("  WasmLED v1.0");
+    Serial.println("  Shades Lamp v1.0");
     Serial.println("  ESP32-S3 N16R8");
-    Serial.printf("  LED: %ux%u on GPIO %u\r\n", LED_WIDTH, LED_HEIGHT, LED_PIN);
+    Serial.printf("  LED: %ux%u on GPIO %u%s\r\n", ledWidth, ledHeight, ledPin, ledZigzag ? " (zigzag)" : "");
     Serial.println("=================================");
     Serial.println();
 
@@ -70,20 +76,20 @@ void setup() {
     Serial.printf("[MAIN] Free heap: %u bytes\r\n", ESP.getFreeHeap());
     Serial.printf("[MAIN] Free PSRAM: %u bytes\r\n", ESP.getFreePsram());
 
-    // Initialize LED driver
-    ledDriver.begin();
+    // Create and initialize LED driver with config values
+    ledDriver = new LedDriver(ledPin, ledWidth, ledHeight, ledZigzag);
+    ledDriver->begin();
 
-    // Initialize flash storage
-    if (!Storage::init()) {
-        Serial.println("[MAIN] Storage init FAILED — halting");
-        while (true) { delay(1000); }
-    }
+    // Create engine and manager with dynamic pointers
+    wasmEngine = new WasmEngine(ledDriver, &paramStore);
+    programManager = new ProgramManager(wasmEngine, &paramStore, ledDriver);
+    bleService = new BleService(programManager);
 
     // Initialize program manager (loads programs from flash, activates saved program)
-    programManager.begin();
+    programManager->begin();
 
     // Initialize BLE service (use device name from config, default: "Shades LED Lamp")
-    bleService.begin(programManager.getDeviceName().c_str());
+    bleService->begin(programManager->getDeviceName().c_str());
 
     // Create render task on Core 1 (BLE runs on Core 0)
     BaseType_t taskResult = xTaskCreatePinnedToCore(
@@ -101,17 +107,17 @@ void setup() {
     }
 
     // Startup success: blink white LED
-    ledDriver.setPixel(0, 0, 255, 255, 255);
-    ledDriver.show();
+    ledDriver->setPixel(0, 0, 255, 255, 255);
+    ledDriver->show();
     delay(300);
-    ledDriver.clear();
-    ledDriver.show();
+    ledDriver->clear();
+    ledDriver->show();
     delay(200);
-    ledDriver.setPixel(0, 0, 255, 255, 255);
-    ledDriver.show();
+    ledDriver->setPixel(0, 0, 255, 255, 255);
+    ledDriver->show();
     delay(300);
-    ledDriver.clear();
-    ledDriver.show();
+    ledDriver->clear();
+    ledDriver->show();
 
     Serial.printf("[MAIN] Setup complete. Free heap: %u bytes\r\n", ESP.getFreeHeap());
 }
@@ -119,6 +125,7 @@ void setup() {
 // ── Arduino Loop ───────────────────────────────────────────────────────────
 
 void loop() {
-    // Main loop is idle; all work happens in FreeRTOS tasks and BLE callbacks
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    // Process pending program switches + deferred saves
+    programManager->processPending();
+    vTaskDelay(pdMS_TO_TICKS(100));
 }

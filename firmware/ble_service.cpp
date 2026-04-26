@@ -235,6 +235,47 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 break;
             }
 
+            case CMD_GET_HW_CONFIG: {
+                char resp[128];
+                snprintf(resp, sizeof(resp),
+                    "{\"ok\":true,\"pin\":%u,\"width\":%u,\"height\":%u,\"zigzag\":%s}",
+                    pm->getLedPin(), pm->getLedWidth(), pm->getLedHeight(),
+                    pm->getLedZigzag() ? "true" : "false");
+                Serial.printf("%s CMD GET_HW_CONFIG: %s\r\n", TAG, resp);
+                g_bleService->sendResponse(String(resp));
+                break;
+            }
+
+            case CMD_SET_HW_CONFIG: {
+                if (payloadLen < 6) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"need 6 bytes: pin(1)+width(2)+height(2)+zigzag(1)\"}", true);
+                    break;
+                }
+                uint8_t pin = payload[0];
+                uint16_t w, h;
+                memcpy(&w, payload + 1, 2);
+                memcpy(&h, payload + 3, 2);
+                bool zigzag = payload[5] != 0;
+
+                if (pin > 48 || w == 0 || w > 1024 || h == 0 || h > 1024) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"invalid values\"}", true);
+                    break;
+                }
+
+                Serial.printf("%s CMD SET_HW_CONFIG: pin=%u, %ux%u, zigzag=%d\r\n", TAG, pin, w, h, zigzag);
+                pm->setHardwareConfig(pin, w, h, zigzag);
+                g_bleService->sendResponse("{\"ok\":true,\"reboot\":true}");
+                break;
+            }
+
+            case CMD_REBOOT: {
+                Serial.printf("%s CMD REBOOT\r\n", TAG);
+                g_bleService->sendResponse("{\"ok\":true}");
+                delay(500);
+                ESP.restart();
+                break;
+            }
+
             default:
                 Serial.printf("%s Unknown command: 0x%02X\r\n", TAG, cmd);
                 g_bleService->sendResponse("{\"ok\":false,\"err\":\"unknown command\"}", true);
@@ -257,10 +298,8 @@ class ActiveProgramCallbacks : public BLECharacteristicCallbacks {
 
         Serial.printf("%s Active program write: %u\r\n", TAG, progId);
 
-        if (pm->switchProgram(progId)) {
-            pm->saveState();
-            g_bleService->notifyActiveProgram(progId);
-        }
+        // Queue async switch (processed in loop, BLE callback returns fast)
+        pm->requestSwitch(progId);
     }
 
     void onRead(BLECharacteristic* pChar) override {

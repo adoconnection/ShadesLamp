@@ -31,6 +31,9 @@ const byte CMD_UPLOAD_FINISH = 0x11;
 const byte CMD_DELETE_PROGRAM = 0x12;
 const byte CMD_SET_NAME = 0x20;
 const byte CMD_GET_NAME = 0x21;
+const byte CMD_GET_HW_CONFIG = 0x22;
+const byte CMD_SET_HW_CONFIG = 0x23;
+const byte CMD_REBOOT = 0x24;
 
 // ─── Chunked response flags ─────────────────────────────────────────────────
 
@@ -149,7 +152,7 @@ if (command == "scan")
 
 // ─── Connect ────────────────────────────────────────────────────────────────
 
-Console.Error.Write("Scanning for WasmLED device... ");
+Console.Error.Write("Scanning for Shades Lamp device... ");
 
 BluetoothLEDevice connectedDevice;
 
@@ -221,7 +224,7 @@ else
     {
         scanWatcher.Stop();
         Console.Error.WriteLine("TIMEOUT");
-        Console.Error.WriteLine("No WasmLED device found within timeout.");
+        Console.Error.WriteLine("No Shades Lamp device found within timeout.");
         return 1;
     }
     catch (Exception ex)
@@ -259,7 +262,7 @@ for (int attempt = 1; attempt <= 5; attempt++)
 
 if (service == null)
 {
-    Console.Error.WriteLine("ERROR: Failed to discover WasmLED service.");
+    Console.Error.WriteLine("ERROR: Failed to discover Shades Lamp service.");
     connectedDevice.Dispose();
     return 1;
 }
@@ -332,7 +335,7 @@ if (notifyStatus != GattCommunicationStatus.Success)
     return 1;
 }
 
-Console.Error.WriteLine("Connected to WasmLED.");
+Console.Error.WriteLine("Connected to Shades Lamp.");
 
 // ─── Execute command ────────────────────────────────────────────────────────
 
@@ -380,6 +383,18 @@ try
         case "rename":
             if (filteredArgs.Count < 2) { Console.Error.WriteLine("Usage: rename <new-name>"); exitCode = 1; break; }
             exitCode = await CmdRename(filteredArgs[1]);
+            break;
+
+        case "hw-config":
+            exitCode = await CmdHwConfig();
+            break;
+
+        case "set-hw-config":
+            exitCode = await CmdSetHwConfig(filteredArgs);
+            break;
+
+        case "reboot":
+            exitCode = await CmdReboot();
             break;
 
         default:
@@ -641,6 +656,121 @@ async Task<int> CmdRename(string newName)
     return 1;
 }
 
+async Task<int> CmdHwConfig()
+{
+    var resp = await SendCommand(CMD_GET_HW_CONFIG);
+    using var doc = JsonDocument.Parse(resp);
+    var root = doc.RootElement;
+
+    if (!root.TryGetProperty("ok", out var ok) || !ok.GetBoolean())
+    {
+        var err = root.TryGetProperty("err", out var e) ? e.GetString() : "Unknown";
+        Console.Error.WriteLine($"Failed: {err}");
+        return 1;
+    }
+
+    var pin = root.GetProperty("pin").GetInt32();
+    var width = root.GetProperty("width").GetInt32();
+    var height = root.GetProperty("height").GetInt32();
+    var zigzag = root.TryGetProperty("zigzag", out var zz) && zz.GetBoolean();
+
+    Console.WriteLine($"Pin: {pin}, Size: {width}x{height}, Zigzag: {(zigzag ? "on" : "off")}");
+    return 0;
+}
+
+async Task<int> CmdSetHwConfig(List<string> cliArgs)
+{
+    // Get current config first
+    var currentResp = await SendCommand(CMD_GET_HW_CONFIG);
+    using var currentDoc = JsonDocument.Parse(currentResp);
+    var cur = currentDoc.RootElement;
+
+    if (!cur.TryGetProperty("ok", out var curOk) || !curOk.GetBoolean())
+    {
+        Console.Error.WriteLine("Failed to read current config");
+        return 1;
+    }
+
+    int pin = cur.GetProperty("pin").GetInt32();
+    int width = cur.GetProperty("width").GetInt32();
+    int height = cur.GetProperty("height").GetInt32();
+    bool zigzag = cur.TryGetProperty("zigzag", out var zzVal) && zzVal.GetBoolean();
+
+    // Parse optional args: --pin N --width N --height N --zigzag --no-zigzag
+    bool anySet = false;
+    for (int i = 1; i < cliArgs.Count; i++)
+    {
+        if (cliArgs[i] == "--pin" && i + 1 < cliArgs.Count)
+        {
+            if (!int.TryParse(cliArgs[++i], out pin)) { Console.Error.WriteLine("Invalid pin value"); return 1; }
+            anySet = true;
+        }
+        else if (cliArgs[i] == "--width" && i + 1 < cliArgs.Count)
+        {
+            if (!int.TryParse(cliArgs[++i], out width)) { Console.Error.WriteLine("Invalid width value"); return 1; }
+            anySet = true;
+        }
+        else if (cliArgs[i] == "--height" && i + 1 < cliArgs.Count)
+        {
+            if (!int.TryParse(cliArgs[++i], out height)) { Console.Error.WriteLine("Invalid height value"); return 1; }
+            anySet = true;
+        }
+        else if (cliArgs[i] == "--zigzag")
+        {
+            zigzag = true;
+            anySet = true;
+        }
+        else if (cliArgs[i] == "--no-zigzag")
+        {
+            zigzag = false;
+            anySet = true;
+        }
+    }
+
+    if (!anySet)
+    {
+        Console.Error.WriteLine("Usage: set-hw-config --pin <N> --width <N> --height <N> [--zigzag|--no-zigzag]");
+        Console.Error.WriteLine("At least one parameter is required.");
+        return 1;
+    }
+
+    // Build payload: pin(1) + width(2 LE) + height(2 LE) + zigzag(1)
+    var payload = new byte[6];
+    payload[0] = (byte)pin;
+    BitConverter.GetBytes((ushort)width).CopyTo(payload, 1);
+    BitConverter.GetBytes((ushort)height).CopyTo(payload, 3);
+    payload[5] = (byte)(zigzag ? 1 : 0);
+
+    var resp = await SendCommand(CMD_SET_HW_CONFIG, payload);
+    using var doc = JsonDocument.Parse(resp);
+    var root = doc.RootElement;
+
+    if (root.TryGetProperty("ok", out var ok) && ok.GetBoolean())
+    {
+        string zigzagStr = zigzag ? ", zigzag" : "";
+        Console.WriteLine($"Hardware config updated (pin={pin}, {width}x{height}{zigzagStr}). Reboot device to apply.");
+        return 0;
+    }
+
+    var err = root.TryGetProperty("err", out var e) ? e.GetString() : "Unknown";
+    Console.Error.WriteLine($"Failed: {err}");
+    return 1;
+}
+
+async Task<int> CmdReboot()
+{
+    try
+    {
+        await SendCommand(CMD_REBOOT);
+    }
+    catch
+    {
+        // Device reboots and drops BLE connection — expected
+    }
+    Console.WriteLine("Device is rebooting...");
+    return 0;
+}
+
 // ─── BLE helpers ────────────────────────────────────────────────────────────
 
 async Task<string> SendCommand(byte commandCode, byte[]? payload = null)
@@ -691,9 +821,9 @@ async Task<string> SendCommand(byte commandCode, byte[]? payload = null)
 
 void PrintUsage()
 {
-    Console.Error.WriteLine("WasmLED CLI - Command-line tool for WasmLED device management");
+    Console.Error.WriteLine("Shades Lamp CLI - Command-line tool for Shades Lamp device management");
     Console.Error.WriteLine();
-    Console.Error.WriteLine("Usage: wasmled-cli [--device <name>] <command> [args]");
+    Console.Error.WriteLine("Usage: shades-cli [--device <name>] <command> [args]");
     Console.Error.WriteLine();
     Console.Error.WriteLine("Options:");
     Console.Error.WriteLine("  --device <name>                   Connect to device matching name (substring)");
@@ -707,4 +837,12 @@ void PrintUsage()
     Console.Error.WriteLine("  params <program-id>               Show program parameters and values");
     Console.Error.WriteLine("  set-param <prog-id> <par-id> <val>  Set a parameter value");
     Console.Error.WriteLine("  rename <new-name>                 Rename the device (max 20 chars)");
+    Console.Error.WriteLine("  hw-config                         Show hardware config (pin, size)");
+    Console.Error.WriteLine("  set-hw-config [options]            Set hardware config (reboot required)");
+    Console.Error.WriteLine("    --pin <N>                         LED data pin (0-48)");
+    Console.Error.WriteLine("    --width <N>                       Matrix width (1-1024)");
+    Console.Error.WriteLine("    --height <N>                      Matrix height (1-1024)");
+    Console.Error.WriteLine("    --zigzag                          Serpentine/zigzag wiring");
+    Console.Error.WriteLine("    --no-zigzag                       Linear wiring (default)");
+    Console.Error.WriteLine("  reboot                            Reboot the device");
 }

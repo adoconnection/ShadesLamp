@@ -28,6 +28,9 @@ class ProgramManager;
 #define CMD_DELETE_PROGRAM  0x12
 #define CMD_SET_NAME        0x20
 #define CMD_GET_NAME        0x21
+#define CMD_GET_HW_CONFIG   0x22
+#define CMD_SET_HW_CONFIG   0x23
+#define CMD_REBOOT          0x24
 
 // Response chunk flags
 #define CHUNK_FLAG_FINAL    0x01

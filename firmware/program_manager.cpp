@@ -13,6 +13,13 @@ ProgramManager::ProgramManager(WasmEngine* engine, ParamStore* paramStore, LedDr
     , _ledDriver(ledDriver)
     , _activeId(0xFF)
     , _deviceName("Shades LED Lamp")
+    , _ledPin(48)
+    , _ledWidth(1)
+    , _ledHeight(1)
+    , _ledZigzag(false)
+    , _paramsDirty(false)
+    , _lastParamDirtyTime(0)
+    , _pendingSwitchId(0xFF)
 {
     _mutex = xSemaphoreCreateMutex();
 }
@@ -28,7 +35,7 @@ void ProgramManager::begin() {
         loadProgramMeta(id);
     }
 
-    // Load config (active program + saved params)
+    // Load config (active program, device name, hw settings)
     loadConfig();
 
     // If we have a saved active program, switch to it
@@ -55,6 +62,12 @@ void ProgramManager::begin() {
 }
 
 bool ProgramManager::switchProgram(uint8_t id) {
+    // Flush any pending param save before switching
+    if (_paramsDirty) {
+        _paramsDirty = false;
+        saveActiveParams();
+    }
+
     xSemaphoreTake(_mutex, portMAX_DELAY);
 
     int idx = findProgramIndex(id);
@@ -107,11 +120,14 @@ bool ProgramManager::switchProgram(uint8_t id) {
         }
     }
 
+    // Load saved param values from /params/{id}.json
+    String savedParamsStr = Storage::loadParamValues(id);
+
     // Apply saved param values (or defaults) using metadata for correct types
     {
         JsonDocument savedDoc;
-        bool hasSaved = (_savedParams[id].length() > 0) &&
-                        !deserializeJson(savedDoc, _savedParams[id]);
+        bool hasSaved = (savedParamsStr.length() > 0) &&
+                        !deserializeJson(savedDoc, savedParamsStr);
 
         JsonDocument metaDoc;
         if (!deserializeJson(metaDoc, _programs[idx].metaJson)) {
@@ -202,27 +218,24 @@ bool ProgramManager::deleteProgram(uint8_t id) {
         _activeId = 0xFF;
     }
 
-    // Delete from storage
-    if (!Storage::deleteProgram(id)) {
-        xSemaphoreGive(_mutex);
-        return false;
-    }
+    // Delete from storage (wasm + params)
+    Storage::deleteProgram(id);
+    Storage::deleteParamValues(id);
 
     // Remove from program list
     _programs.erase(_programs.begin() + idx);
-    _savedParams[id] = "";
 
     // If the deleted program was active, switch to another
     if (wasActive && !_programs.empty()) {
         uint8_t nextId = _programs[0].id;
         xSemaphoreGive(_mutex);
         switchProgram(nextId);
-        saveState();
+        saveConfig();
         return true;
     }
 
     xSemaphoreGive(_mutex);
-    saveState();
+    saveConfig();
     return true;
 }
 
@@ -275,10 +288,9 @@ String ProgramManager::getParamValuesJson(uint8_t id) const {
     if (id == _activeId) {
         return _paramStore->toJson();
     }
-    // For non-active programs, return saved params
-    if (id < MAX_PROGRAMS && _savedParams[id].length() > 0) {
-        return _savedParams[id];
-    }
+    // For non-active programs, load from file
+    String params = Storage::loadParamValues(id);
+    if (params.length() > 0) return params;
     return "{}";
 }
 
@@ -320,24 +332,25 @@ bool ProgramManager::setParam(uint8_t programId, uint8_t paramId, const uint8_t*
             _paramStore->setInt(paramId, intVal);
             Serial.printf("%s Set param %u = %d (int)\r\n", TAG, paramId, intVal);
         }
-
-        // Update saved params
-        _savedParams[programId] = _paramStore->toJson();
     } else {
-        // Update saved params for non-active program
+        // Update saved params for non-active program (direct file write)
+        String savedStr = Storage::loadParamValues(programId);
         JsonDocument doc;
-        if (_savedParams[programId].length() > 0) {
-            deserializeJson(doc, _savedParams[programId]);
+        if (savedStr.length() > 0) {
+            deserializeJson(doc, savedStr);
         }
         doc[String(paramId)] = intVal;
-        _savedParams[programId] = "";
-        serializeJson(doc, _savedParams[programId]);
+        String output;
+        serializeJson(doc, output);
+        Storage::saveParamValues(programId, output.c_str());
     }
 
     xSemaphoreGive(_mutex);
 
-    // Persist to config
-    saveState();
+    // Deferred save for active program params (throttled to avoid flash wear)
+    if (programId == _activeId) {
+        requestParamSave();
+    }
     return true;
 }
 
@@ -347,25 +360,73 @@ String ProgramManager::getDeviceName() const {
 
 void ProgramManager::setDeviceName(const String& name) {
     _deviceName = name;
-    saveState();
+    saveConfig();
 }
 
-void ProgramManager::saveState() {
+uint8_t ProgramManager::getLedPin() const { return _ledPin; }
+uint16_t ProgramManager::getLedWidth() const { return _ledWidth; }
+uint16_t ProgramManager::getLedHeight() const { return _ledHeight; }
+bool ProgramManager::getLedZigzag() const { return _ledZigzag; }
+
+void ProgramManager::setHardwareConfig(uint8_t pin, uint16_t width, uint16_t height, bool zigzag) {
+    _ledPin = pin;
+    _ledWidth = width;
+    _ledHeight = height;
+    _ledZigzag = zigzag;
+    saveConfig();
+}
+
+void ProgramManager::saveConfig() {
     JsonDocument doc;
     doc["active"] = _activeId;
     doc["name"] = _deviceName;
-
-    JsonObject paramsObj = doc["params"].to<JsonObject>();
-    for (const ProgramInfo& p : _programs) {
-        String paramJson = (_savedParams[p.id].length() > 0) ? _savedParams[p.id] : "{}";
-        JsonDocument paramDoc;
-        deserializeJson(paramDoc, paramJson);
-        paramsObj[String(p.id)] = paramDoc;
-    }
+    doc["ledPin"] = _ledPin;
+    doc["ledWidth"] = _ledWidth;
+    doc["ledHeight"] = _ledHeight;
+    doc["ledZigzag"] = _ledZigzag;
 
     String output;
     serializeJson(doc, output);
     Storage::saveConfig(output.c_str());
+    Serial.printf("%s Config saved (%u bytes)\r\n", TAG, output.length());
+}
+
+void ProgramManager::saveActiveParams() {
+    if (_activeId == 0xFF) return;
+    String json = _paramStore->toJson();
+    Storage::saveParamValues(_activeId, json.c_str());
+    Serial.printf("%s Params saved for program %u\r\n", TAG, _activeId);
+}
+
+void ProgramManager::requestParamSave() {
+    _lastParamDirtyTime = millis();
+    _paramsDirty = true;
+}
+
+void ProgramManager::flushIfDirty() {
+    if (!_paramsDirty) return;
+    if (millis() - _lastParamDirtyTime < SAVE_DEBOUNCE_MS) return;
+
+    _paramsDirty = false;
+    saveActiveParams();
+}
+
+void ProgramManager::requestSwitch(uint8_t programId) {
+    _pendingSwitchId = programId;
+}
+
+void ProgramManager::processPending() {
+    // Handle async program switch
+    uint8_t pendingId = _pendingSwitchId;
+    if (pendingId != 0xFF) {
+        _pendingSwitchId = 0xFF;
+        if (switchProgram(pendingId)) {
+            saveConfig();
+        }
+    }
+
+    // Handle deferred param save
+    flushIfDirty();
 }
 
 // ── Private helpers ────────────────────────────────────────────────────────
@@ -396,22 +457,31 @@ void ProgramManager::loadConfig() {
         Serial.printf("%s Config: device name = '%s'\r\n", TAG, _deviceName.c_str());
     }
 
+    if (doc.containsKey("ledPin"))    _ledPin    = doc["ledPin"].as<uint8_t>();
+    if (doc.containsKey("ledWidth"))  _ledWidth  = doc["ledWidth"].as<uint16_t>();
+    if (doc.containsKey("ledHeight")) _ledHeight = doc["ledHeight"].as<uint16_t>();
+    if (doc.containsKey("ledZigzag")) _ledZigzag = doc["ledZigzag"].as<bool>();
+
     if (doc.containsKey("active")) {
         _activeId = doc["active"].as<uint8_t>();
         Serial.printf("%s Config: active program = %u\r\n", TAG, _activeId);
     }
 
+    // Migrate old-style params from config.json to individual files
     if (doc.containsKey("params")) {
+        Serial.printf("%s Migrating params from config.json to /params/\r\n", TAG);
         JsonObject paramsObj = doc["params"].as<JsonObject>();
         for (JsonPair kv : paramsObj) {
             uint8_t progId = (uint8_t)atoi(kv.key().c_str());
             if (progId < MAX_PROGRAMS) {
                 String paramStr;
                 serializeJson(kv.value(), paramStr);
-                _savedParams[progId] = paramStr;
-                Serial.printf("%s Config: params[%u] = %s\r\n", TAG, progId, paramStr.c_str());
+                Storage::saveParamValues(progId, paramStr.c_str());
+                Serial.printf("%s  Migrated params[%u]\r\n", TAG, progId);
             }
         }
+        // Re-save config without params
+        saveConfig();
     }
 }
 

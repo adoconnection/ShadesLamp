@@ -1,9 +1,10 @@
 #include "storage.h"
 #include <LittleFS.h>
+#include <ArduinoJson.h>
 #include <algorithm>
 
 #define TAG "[STOR]"
-#define MAX_PROGRAMS 16
+#define MAX_PROGRAMS 128
 
 namespace Storage {
 
@@ -18,6 +19,12 @@ bool init() {
     if (!LittleFS.exists("/programs")) {
         LittleFS.mkdir("/programs");
         Serial.printf("%s Created /programs directory\r\n", TAG);
+    }
+
+    // Ensure /params directory exists
+    if (!LittleFS.exists("/params")) {
+        LittleFS.mkdir("/params");
+        Serial.printf("%s Created /params directory\r\n", TAG);
     }
 
     return true;
@@ -177,6 +184,49 @@ String loadConfig() {
     f.close();
     Serial.printf("%s Config loaded (%u bytes)\r\n", TAG, content.length());
     return content;
+}
+
+void loadHardwareConfig(uint8_t& pin, uint16_t& width, uint16_t& height, bool& zigzag) {
+    String configStr = loadConfig();
+    if (configStr.length() == 0) return;
+
+    JsonDocument doc;
+    if (deserializeJson(doc, configStr)) return;
+
+    if (doc.containsKey("ledPin"))    pin    = doc["ledPin"].as<uint8_t>();
+    if (doc.containsKey("ledWidth"))  width  = doc["ledWidth"].as<uint16_t>();
+    if (doc.containsKey("ledHeight")) height = doc["ledHeight"].as<uint16_t>();
+    if (doc.containsKey("ledZigzag")) zigzag = doc["ledZigzag"].as<bool>();
+
+    Serial.printf("%s HW config: pin=%u, %ux%u, zigzag=%d\r\n", TAG, pin, width, height, zigzag);
+}
+
+bool saveParamValues(uint8_t id, const char* json) {
+    char path[32];
+    snprintf(path, sizeof(path), "/params/%u.json", id);
+    File f = LittleFS.open(path, "w");
+    if (!f) return false;
+    f.print(json);
+    f.close();
+    return true;
+}
+
+String loadParamValues(uint8_t id) {
+    char path[32];
+    snprintf(path, sizeof(path), "/params/%u.json", id);
+    if (!LittleFS.exists(path)) return String();
+    File f = LittleFS.open(path, "r");
+    if (!f) return String();
+    String content = f.readString();
+    f.close();
+    return content;
+}
+
+bool deleteParamValues(uint8_t id) {
+    char path[32];
+    snprintf(path, sizeof(path), "/params/%u.json", id);
+    if (!LittleFS.exists(path)) return true;
+    return LittleFS.remove(path);
 }
 
 } // namespace Storage

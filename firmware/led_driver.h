@@ -6,7 +6,7 @@
 
 class LedDriver {
 public:
-    LedDriver(uint8_t pin, uint16_t width, uint16_t height);
+    LedDriver(uint8_t pin, uint16_t width, uint16_t height, bool zigzag = false);
     ~LedDriver();
 
     void begin();
@@ -23,6 +23,7 @@ private:
     uint16_t _height;
     uint16_t _numPixels;
 
+    bool     _zigzag;
     uint8_t* _framebuffer;          // RGB framebuffer in PSRAM
     Adafruit_NeoPixel* _strip;
     SemaphoreHandle_t  _mutex;
