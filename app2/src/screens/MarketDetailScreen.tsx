@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SvgXml } from 'react-native-svg';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { useMarketStore } from '../store/useMarketStore';
@@ -92,25 +91,16 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
     <ScrollView style={styles.container} bounces={false}>
       {/* Hero */}
       <View style={styles.heroSection}>
-        {item.coverSvg ? (
-          <SvgXml
-            xml={item.coverSvg}
-            width={Dimensions.get('window').width}
-            height={280}
-            style={styles.heroBg}
-          />
-        ) : (
-          <LinearGradient
-            colors={gradientColors(item.cover)}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.heroBg}
-          />
-        )}
+        <LinearGradient
+          colors={gradientColors(item.cover)}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
         <LinearGradient
           colors={['transparent', colors.bg]}
           locations={[0.5, 1]}
-          style={styles.heroBg}
+          style={StyleSheet.absoluteFill}
         />
         <View style={[styles.nav, { paddingTop: insets.top + 8 }]}>
           <NavButton icon={<BackIcon />} onPress={() => navigation.goBack()} />
@@ -229,8 +219,7 @@ const techStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  heroSection: { paddingBottom: 28, paddingHorizontal: 20, minHeight: 280 },
-  heroBg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  heroSection: { paddingBottom: 28, paddingHorizontal: 20 },
   nav: { flexDirection: 'row', justifyContent: 'space-between' },
   heroInfo: { marginTop: 50 },
   heroLabel: { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase' },
