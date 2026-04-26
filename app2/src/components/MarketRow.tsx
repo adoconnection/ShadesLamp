@@ -15,7 +15,7 @@ interface MarketRowProps {
 export default function MarketRow({ item, installed, onPress }: MarketRowProps) {
   return (
     <Pressable onPress={onPress} style={styles.row}>
-      <Cover cover={item.cover} pulse={item.pulse} size={56} radius={12} />
+      <Cover cover={item.cover} coverSvg={item.coverSvg} pulse={item.pulse} size={56} radius={12} />
       <View style={styles.info}>
         <View style={styles.nameRow}>
           <Text style={styles.name} numberOfLines={1}>{item.name}</Text>

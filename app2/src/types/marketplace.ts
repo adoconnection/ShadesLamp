@@ -7,6 +7,7 @@ export interface MarketItem {
   desc: string;
   category: string;
   cover: Gradient;
+  coverSvg?: string;
   pulse: string;
   tags: string[];
   wasmUrl: string;

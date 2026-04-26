@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SvgXml } from 'react-native-svg';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { useMarketStore } from '../store/useMarketStore';
@@ -91,12 +92,16 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
     <ScrollView style={styles.container} bounces={false}>
       {/* Hero */}
       <View style={styles.heroSection}>
-        <LinearGradient
-          colors={gradientColors(item.cover)}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
+        {item.coverSvg ? (
+          <SvgXml xml={item.coverSvg} width="100%" height="100%" style={StyleSheet.absoluteFill} preserveAspectRatio="xMidYMid slice" />
+        ) : (
+          <LinearGradient
+            colors={gradientColors(item.cover)}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
+        )}
         <LinearGradient
           colors={['transparent', colors.bg]}
           locations={[0.5, 1]}

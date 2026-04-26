@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SvgXml } from 'react-native-svg';
 import { MarketItem } from '../types/marketplace';
 import { gradientColors } from '../utils/color';
 import { CheckIcon } from './Icon';
@@ -17,7 +18,11 @@ export default function FeaturedCard({ item, installed, onPress }: FeaturedCardP
 
   return (
     <Pressable onPress={onPress} style={styles.card}>
-      <LinearGradient colors={gColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      {item.coverSvg ? (
+        <SvgXml xml={item.coverSvg} width="100%" height="100%" style={StyleSheet.absoluteFill} />
+      ) : (
+        <LinearGradient colors={gColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      )}
       <LinearGradient colors={['transparent', 'rgba(0,0,0,0.6)']} locations={[0.5, 1]} style={StyleSheet.absoluteFill} />
 
       <View style={styles.top}>
