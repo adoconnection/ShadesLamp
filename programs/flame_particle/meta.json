@@ -1,0 +1,15 @@
+{
+  "name": "Flame Particle",
+  "desc": "Particle-based fire simulation",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#451A03", "to": "#FBBF24", "via": "#B45309", "angle": 170},
+  "pulse": "#FBBF24",
+  "tags": ["fire", "particles", "warm"],
+  "i18n": {
+    "ru": {
+      "name": "Огненные частицы",
+      "desc": "Симуляция огня на основе частиц"
+    }
+  }
+}

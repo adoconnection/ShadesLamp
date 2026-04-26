@@ -1,0 +1,15 @@
+{
+  "name": "DNA",
+  "desc": "DNA double helix rotation",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#064E3B", "to": "#34D399", "via": "#10B981", "angle": 155},
+  "pulse": "#34D399",
+  "tags": ["helix", "rotation", "science"],
+  "i18n": {
+    "ru": {
+      "name": "ДНК",
+      "desc": "Вращающаяся двойная спираль ДНК"
+    }
+  }
+}

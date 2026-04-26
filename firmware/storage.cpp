@@ -27,6 +27,12 @@ bool init() {
         Serial.printf("%s Created /params directory\r\n", TAG);
     }
 
+    // Ensure /meta directory exists
+    if (!LittleFS.exists("/meta")) {
+        LittleFS.mkdir("/meta");
+        Serial.printf("%s Created /meta directory\r\n", TAG);
+    }
+
     return true;
 }
 
@@ -225,6 +231,35 @@ String loadParamValues(uint8_t id) {
 bool deleteParamValues(uint8_t id) {
     char path[32];
     snprintf(path, sizeof(path), "/params/%u.json", id);
+    if (!LittleFS.exists(path)) return true;
+    return LittleFS.remove(path);
+}
+
+bool saveProgramMeta(uint8_t id, const char* json) {
+    char path[32];
+    snprintf(path, sizeof(path), "/meta/%u.json", id);
+    File f = LittleFS.open(path, "w");
+    if (!f) return false;
+    f.print(json);
+    f.close();
+    Serial.printf("%s Meta saved for program %u\r\n", TAG, id);
+    return true;
+}
+
+String loadProgramMeta(uint8_t id) {
+    char path[32];
+    snprintf(path, sizeof(path), "/meta/%u.json", id);
+    if (!LittleFS.exists(path)) return String();
+    File f = LittleFS.open(path, "r");
+    if (!f) return String();
+    String content = f.readString();
+    f.close();
+    return content;
+}
+
+bool deleteProgramMeta(uint8_t id) {
+    char path[32];
+    snprintf(path, sizeof(path), "/meta/%u.json", id);
     if (!LittleFS.exists(path)) return true;
     return LittleFS.remove(path);
 }

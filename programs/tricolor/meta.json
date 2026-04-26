@@ -1,0 +1,15 @@
+{
+  "name": "Tricolor",
+  "desc": "Three-color flag wave",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#FFFFFF", "to": "#1E40AF", "via": "#EF4444", "angle": 90},
+  "pulse": "#1E40AF",
+  "tags": ["flag", "tricolor", "wave"],
+  "i18n": {
+    "ru": {
+      "name": "Триколор",
+      "desc": "Волна трёхцветного флага"
+    }
+  }
+}

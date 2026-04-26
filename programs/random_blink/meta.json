@@ -1,0 +1,15 @@
+{
+  "name": "Random Blink",
+  "desc": "Random pixel flashes",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#0F2027", "to": "#7DF9FF", "via": "#2C5364", "angle": 160},
+  "pulse": "#7DF9FF",
+  "tags": ["random", "blink", "sparkle"],
+  "i18n": {
+    "ru": {
+      "name": "Случайное мерцание",
+      "desc": "Случайные вспышки пикселей"
+    }
+  }
+}

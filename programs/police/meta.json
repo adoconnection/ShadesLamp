@@ -1,0 +1,15 @@
+{
+  "name": "Police",
+  "desc": "Red-blue police lights flashing",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#1E3A8A", "to": "#EF4444", "via": "#1E40AF", "angle": 90},
+  "pulse": "#EF4444",
+  "tags": ["police", "flashing", "emergency"],
+  "i18n": {
+    "ru": {
+      "name": "Полиция",
+      "desc": "Мигающие красно-синие полицейские огни"
+    }
+  }
+}

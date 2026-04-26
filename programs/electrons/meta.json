@@ -1,0 +1,15 @@
+{
+  "name": "Electrons",
+  "desc": "Orbiting electrons around a nucleus",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#0C4A6E", "to": "#60A5FA", "via": "#1D4ED8", "angle": 145},
+  "pulse": "#60A5FA",
+  "tags": ["orbit", "atoms", "science"],
+  "i18n": {
+    "ru": {
+      "name": "Электроны",
+      "desc": "Орбитальные электроны вокруг ядра"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Matrix Rain",
+  "desc": "Falling green matrix characters",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#022C22", "to": "#10B981", "via": "#064E3B", "angle": 180},
+  "pulse": "#10B981",
+  "tags": ["matrix", "rain", "green", "falling"],
+  "i18n": {
+    "ru": {
+      "name": "Матричный дождь",
+      "desc": "Падающие зелёные символы в стиле Матрицы"
+    }
+  }
+}

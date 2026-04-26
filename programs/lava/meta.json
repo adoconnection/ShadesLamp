@@ -1,0 +1,15 @@
+{
+  "name": "Lava",
+  "desc": "Molten lava flow",
+  "author": "built-in",
+  "category": "Ambient",
+  "cover": {"from": "#7F1D1D", "to": "#FF6B35", "via": "#B91C1C", "angle": 190},
+  "pulse": "#FF6B35",
+  "tags": ["fire", "warm", "flowing"],
+  "i18n": {
+    "ru": {
+      "name": "Лава",
+      "desc": "Поток расплавленной лавы"
+    }
+  }
+}

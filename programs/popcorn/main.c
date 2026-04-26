@@ -99,8 +99,8 @@ static void restart_particle(int i, int W, int H) {
         pop_vx[i] = -pop_vx[i];
     }
 
-    /* Upward launch velocity: proportional to height */
-    pop_vy[i] = (float)(random8() * 8 + H * 10) / 256.0f;
+    /* Upward launch velocity: enough to reach top */
+    pop_vy[i] = (float)(random8() * 4 + H * 20) / 256.0f;
 
     pop_hue[i] = random8();
     pop_active[i] = 1;
@@ -202,9 +202,9 @@ void update(int tick_ms) {
         /* Apply gravity (pulls down) */
         pop_vy[i] -= gravity;
 
-        /* Apply viscosity/air resistance */
-        pop_vx[i] *= 0.875f;
-        pop_vy[i] *= 0.875f;
+        /* Apply viscosity/air resistance (gentle) */
+        pop_vx[i] *= 0.985f;
+        pop_vy[i] *= 0.995f;
 
         /* Determine pixel position */
         int px = (int)pop_x[i];

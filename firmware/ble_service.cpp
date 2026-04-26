@@ -1,5 +1,6 @@
 #include "ble_service.h"
 #include "program_manager.h"
+#include "led_driver.h"
 
 #define TAG "[BLE]"
 
@@ -151,6 +152,14 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 g_bleService->uploadOffset = 0;
                 g_bleService->uploadInProgress = true;
 
+                // Pause rendering and clear LEDs for progress indicator
+                g_bleService->pausedByUpload = true;
+                LedDriver* led = g_bleService->getLedDriver();
+                if (led) {
+                    led->clear();
+                    led->show();
+                }
+
                 Serial.printf("%s UPLOAD_START: %u bytes\r\n", TAG, totalSize);
                 g_bleService->sendResponse("{\"ok\":true}");
                 break;
@@ -170,8 +179,22 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                     free(g_bleService->uploadBuffer);
                     g_bleService->uploadBuffer = nullptr;
                     g_bleService->uploadInProgress = false;
+                    g_bleService->pausedByUpload = false;  // Resume rendering
                     g_bleService->sendResponse("{\"ok\":false,\"err\":\"incomplete upload\"}", true);
                     break;
+                }
+
+                // Flash all green briefly to indicate success before processing
+                {
+                    LedDriver* led = g_bleService->getLedDriver();
+                    if (led) {
+                        uint16_t w = led->getWidth();
+                        uint16_t h = led->getHeight();
+                        for (uint16_t y = 0; y < h; y++)
+                            for (uint16_t x = 0; x < w; x++)
+                                led->setPixel(x, y, 0, 255, 0);
+                        led->show();
+                    }
                 }
 
                 // Try to upload the program
@@ -180,6 +203,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 free(g_bleService->uploadBuffer);
                 g_bleService->uploadBuffer = nullptr;
                 g_bleService->uploadInProgress = false;
+                g_bleService->pausedByUpload = false;  // Resume rendering
 
                 if (newId < 0) {
                     g_bleService->sendResponse("{\"ok\":false,\"err\":\"invalid WASM\"}", true);
@@ -268,6 +292,41 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 break;
             }
 
+            case CMD_GET_META: {
+                if (payloadLen < 1) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"missing program_id\"}", true);
+                    break;
+                }
+                uint8_t progId = payload[0];
+                String json = pm->getProgramMeta(progId);
+                Serial.printf("%s CMD GET_META[%u] -> %u bytes\r\n", TAG, progId, json.length());
+                g_bleService->sendResponse(json);
+                break;
+            }
+
+            case CMD_SET_META: {
+                if (payloadLen < 2) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"missing data\"}", true);
+                    break;
+                }
+                uint8_t progId = payload[0];
+                String json((const char*)(payload + 1), payloadLen - 1);
+
+                if (json.length() > 2048) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"meta too large\"}", true);
+                    break;
+                }
+
+                bool ok = pm->setProgramMeta(progId, json);
+                if (ok) {
+                    Serial.printf("%s CMD SET_META[%u] OK (%u bytes)\r\n", TAG, progId, json.length());
+                    g_bleService->sendResponse("{\"ok\":true}");
+                } else {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"set_meta failed\"}", true);
+                }
+                break;
+            }
+
             case CMD_REBOOT: {
                 Serial.printf("%s CMD REBOOT\r\n", TAG);
                 g_bleService->sendResponse("{\"ok\":true}");
@@ -332,13 +391,32 @@ class UploadCallbacks : public BLECharacteristicCallbacks {
             Serial.printf("%s Upload: %u/%u bytes\r\n", TAG,
                           g_bleService->uploadOffset, g_bleService->uploadSize);
         }
+
+        // Update LED progress bar (green fill from bottom to top)
+        LedDriver* led = g_bleService->getLedDriver();
+        if (led && g_bleService->uploadSize > 0) {
+            uint16_t w = led->getWidth();
+            uint16_t h = led->getHeight();
+            uint32_t totalPixels = (uint32_t)w * h;
+            uint32_t filledPixels = (uint32_t)((uint64_t)g_bleService->uploadOffset * totalPixels / g_bleService->uploadSize);
+
+            led->clear();
+            // Fill from bottom (y=0) upwards
+            for (uint32_t i = 0; i < filledPixels && i < totalPixels; i++) {
+                uint16_t x = i % w;
+                uint16_t y = i / w;
+                led->setPixel(x, y, 0, 255, 0);
+            }
+            led->show();
+        }
     }
 };
 
 // ── BleService Implementation ──────────────────────────────────────────────
 
-BleService::BleService(ProgramManager* pm)
+BleService::BleService(ProgramManager* pm, LedDriver* led)
     : _pm(pm)
+    , _led(led)
     , _server(nullptr)
     , _service(nullptr)
     , _charCommand(nullptr)
@@ -348,6 +426,7 @@ BleService::BleService(ProgramManager* pm)
     , _charParamValues(nullptr)
     , _connectedClients(0)
     , _negotiatedMtu(23)
+    , pausedByUpload(false)
     , uploadBuffer(nullptr)
     , uploadSize(0)
     , uploadOffset(0)

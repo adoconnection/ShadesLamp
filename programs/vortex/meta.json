@@ -1,0 +1,15 @@
+{
+  "name": "Vortex",
+  "desc": "Swirling vortex effect",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#0C0A09", "to": "#7C3AED", "via": "#312E81", "angle": 190},
+  "pulse": "#7C3AED",
+  "tags": ["vortex", "swirl", "rotation", "hypnotic"],
+  "i18n": {
+    "ru": {
+      "name": "Вихрь",
+      "desc": "Эффект закручивающегося вихря"
+    }
+  }
+}

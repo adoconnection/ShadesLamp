@@ -1,0 +1,15 @@
+{
+  "name": "Fireflies",
+  "desc": "Flickering fireflies in the dark",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#1A2E05", "to": "#A3E635", "via": "#365314", "angle": 175},
+  "pulse": "#A3E635",
+  "tags": ["fireflies", "flicker", "nature"],
+  "i18n": {
+    "ru": {
+      "name": "Светлячки",
+      "desc": "Мерцающие светлячки в темноте"
+    }
+  }
+}

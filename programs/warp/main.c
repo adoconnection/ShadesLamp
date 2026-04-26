@@ -83,6 +83,7 @@ static uint8_t star_active[MAX_STARS];
 
 static int cur_w, cur_h;
 static float cx, cy;                   /* center of warp */
+static int32_t prev_tick;
 
 /* Saturating subtract for uint8 fade */
 static uint8_t qsub(uint8_t a, uint8_t b) {
@@ -136,6 +137,8 @@ void init(void) {
         fb_b[i] = 0;
     }
 
+    prev_tick = 0;
+
     /* Initialize all stars at varying distances for immediate visual */
     for (int i = 0; i < MAX_STARS; i++) {
         spawn_star(i);
@@ -166,7 +169,11 @@ void update(int tick_ms) {
     cx = (float)cur_w / 2.0f;
     cy = (float)cur_h / 2.0f;
 
-    float dt = (float)tick_ms / 1000.0f;
+    /* Compute per-frame delta (tick_ms is total elapsed time, not delta) */
+    int32_t delta_ms = tick_ms - prev_tick;
+    if (delta_ms <= 0 || delta_ms > 200) delta_ms = 33;  /* first frame or overflow */
+    prev_tick = tick_ms;
+    float dt = (float)delta_ms / 1000.0f;
     float spd = (float)speed / 30.0f;  /* normalize: 60 -> 2.0 */
 
     /* Maximum distance a star can be from center before respawning */

@@ -1,0 +1,15 @@
+{
+  "name": "Warp",
+  "desc": "Space warp speed effect",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#0A0A0A", "to": "#E0F2FE", "via": "#0C4A6E", "angle": 180},
+  "pulse": "#E0F2FE",
+  "tags": ["space", "speed", "stars"],
+  "i18n": {
+    "ru": {
+      "name": "Варп",
+      "desc": "Эффект космического прыжка на варп-скорости"
+    }
+  }
+}

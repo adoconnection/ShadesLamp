@@ -53,8 +53,8 @@ void update(int tick_ms) {
     if (preset < 0) preset = 0;
     if (preset > 3) preset = 3;
 
-    /* Accumulate time */
-    elapsed += (uint32_t)tick_ms;
+    /* Use total elapsed time directly (tick_ms is absolute, not delta) */
+    elapsed = (uint32_t)tick_ms;
 
     /* Get colors for this preset */
     int lr = PRESETS[preset][0];

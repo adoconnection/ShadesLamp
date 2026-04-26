@@ -1,0 +1,15 @@
+{
+  "name": "Bouncing Balls",
+  "desc": "Bouncing colored balls with physics",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#1A1A2E", "to": "#E040FB", "via": "#4A00E0", "angle": 140},
+  "pulse": "#E040FB",
+  "tags": ["physics", "bouncing", "colorful"],
+  "i18n": {
+    "ru": {
+      "name": "Прыгающие мячи",
+      "desc": "Цветные мячи с физикой отскока"
+    }
+  }
+}

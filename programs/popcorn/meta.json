@@ -1,0 +1,15 @@
+{
+  "name": "Popcorn",
+  "desc": "Popping kernels with gravity",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#292524", "to": "#FDE68A", "via": "#78350F", "angle": 175},
+  "pulse": "#FDE68A",
+  "tags": ["popcorn", "gravity", "bounce"],
+  "i18n": {
+    "ru": {
+      "name": "Попкорн",
+      "desc": "Лопающиеся зёрна с гравитацией"
+    }
+  }
+}

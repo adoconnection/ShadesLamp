@@ -124,11 +124,13 @@ static void fb_set(int x, int y, int w, int r, int g, int b) {
 
 static float impact_v0;
 static int hue_offset;
+static int32_t prev_tick;
 
 EXPORT(init)
 void init(void) {
     impact_v0 = f_sqrt(2.0f * GRAVITY * START_HEIGHT);
     hue_offset = 0;
+    prev_tick = 0;
 
     int W = get_width();
     int H = get_height();
@@ -168,10 +170,11 @@ void update(int tick_ms) {
     /* Advance hue offset slowly for rainbow mode */
     hue_offset++;
 
-    /* Time step: ~33ms at 30fps, convert to seconds for physics */
-    float dt = (float)tick_ms / 1000.0f;
-    if (dt > 0.1f) dt = 0.1f;  /* clamp for safety */
-    if (dt < 0.001f) dt = 0.016f;
+    /* Time step: compute per-frame delta (tick_ms is total elapsed, not delta) */
+    int32_t delta_ms = tick_ms - prev_tick;
+    if (delta_ms <= 0 || delta_ms > 200) delta_ms = 33;
+    prev_tick = tick_ms;
+    float dt = (float)delta_ms / 1000.0f;
 
     /* Fade existing pixels (trail effect) */
     fb_dim(W, H, 190);

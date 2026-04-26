@@ -1,0 +1,15 @@
+{
+  "name": "Clouds",
+  "desc": "Soft drifting clouds",
+  "author": "built-in",
+  "category": "Ambient",
+  "cover": {"from": "#1B2838", "to": "#6B7280", "via": "#374151", "angle": 160},
+  "pulse": "#6B7280",
+  "tags": ["nature", "calm", "soft"],
+  "i18n": {
+    "ru": {
+      "name": "Облака",
+      "desc": "Мягкие плывущие облака"
+    }
+  }
+}

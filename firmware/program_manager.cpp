@@ -195,6 +195,14 @@ int8_t ProgramManager::uploadProgram(const uint8_t* data, size_t size) {
     xSemaphoreGive(_mutex);
     loadProgramMeta(newId);
 
+    // Generate fallback meta.json if none exists
+    String existingMeta = Storage::loadProgramMeta(newId);
+    if (existingMeta.length() < 3) {
+        String fallback = getProgramMeta(newId); // generates fallback
+        Storage::saveProgramMeta(newId, fallback.c_str());
+        Serial.printf("%s Generated fallback meta for program %u\r\n", TAG, newId);
+    }
+
     Serial.printf("%s Uploaded program with ID %u\r\n", TAG, newId);
     return (int8_t)newId;
 }
@@ -218,9 +226,10 @@ bool ProgramManager::deleteProgram(uint8_t id) {
         _activeId = 0xFF;
     }
 
-    // Delete from storage (wasm + params)
+    // Delete from storage (wasm + params + meta)
     Storage::deleteProgram(id);
     Storage::deleteParamValues(id);
+    Storage::deleteProgramMeta(id);
 
     // Remove from program list
     _programs.erase(_programs.begin() + idx);
@@ -266,6 +275,63 @@ String ProgramManager::getProgramListJson() const {
     String output;
     serializeJson(doc, output);
     return output;
+}
+
+String ProgramManager::getProgramMeta(uint8_t id) const {
+    // Try loading from /meta/{id}.json
+    String metaStr = Storage::loadProgramMeta(id);
+    if (metaStr.length() > 2) return metaStr;
+
+    // Generate fallback from WASM-embedded metadata
+    int idx = findProgramIndex(id);
+    if (idx < 0) return "{}";
+
+    JsonDocument out;
+    JsonDocument wasmDoc;
+    if (!deserializeJson(wasmDoc, _programs[idx].metaJson)) {
+        out["name"] = wasmDoc["name"] | "Untitled";
+        out["desc"] = wasmDoc["desc"] | "";
+    } else {
+        out["name"] = _programs[idx].name;
+        out["desc"] = "";
+    }
+    out["author"] = "unknown";
+    out["category"] = "Effects";
+
+    JsonObject cover = out["cover"].to<JsonObject>();
+    cover["from"] = "#555555";
+    cover["to"] = "#999999";
+    cover["angle"] = 135;
+
+    out["pulse"] = "#888888";
+
+    String result;
+    serializeJson(out, result);
+    return result;
+}
+
+bool ProgramManager::setProgramMeta(uint8_t id, const String& json) {
+    int idx = findProgramIndex(id);
+    if (idx < 0) return false;
+
+    if (!Storage::saveProgramMeta(id, json.c_str())) return false;
+
+    // Update cached fields
+    JsonDocument richDoc;
+    if (!deserializeJson(richDoc, json)) {
+        xSemaphoreTake(_mutex, portMAX_DELAY);
+        if (richDoc.containsKey("author"))   _programs[idx].author = richDoc["author"].as<String>();
+        if (richDoc.containsKey("category")) _programs[idx].category = richDoc["category"].as<String>();
+        if (richDoc.containsKey("pulse"))    _programs[idx].pulse = richDoc["pulse"].as<String>();
+        if (richDoc.containsKey("cover")) {
+            String coverStr;
+            serializeJson(richDoc["cover"], coverStr);
+            _programs[idx].coverJson = coverStr;
+        }
+        xSemaphoreGive(_mutex);
+    }
+
+    return true;
 }
 
 String ProgramManager::getProgramParamsJson(uint8_t id) const {
@@ -513,6 +579,22 @@ void ProgramManager::loadProgramMeta(uint8_t id) {
         if (!deserializeJson(metaDoc, meta)) {
             if (metaDoc.containsKey("name")) {
                 info.name = metaDoc["name"].as<String>();
+            }
+        }
+    }
+
+    // Cache fields from /meta/{id}.json for fast getProgramListJson()
+    String richMeta = Storage::loadProgramMeta(id);
+    if (richMeta.length() > 2) {
+        JsonDocument richDoc;
+        if (!deserializeJson(richDoc, richMeta)) {
+            if (richDoc.containsKey("author"))   info.author = richDoc["author"].as<String>();
+            if (richDoc.containsKey("category")) info.category = richDoc["category"].as<String>();
+            if (richDoc.containsKey("pulse"))    info.pulse = richDoc["pulse"].as<String>();
+            if (richDoc.containsKey("cover")) {
+                String coverStr;
+                serializeJson(richDoc["cover"], coverStr);
+                info.coverJson = coverStr;
             }
         }
     }

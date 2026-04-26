@@ -1,0 +1,15 @@
+{
+  "name": "Twinkling",
+  "desc": "Twinkling stars",
+  "author": "built-in",
+  "category": "Ambient",
+  "cover": {"from": "#0F172A", "to": "#F9FAFB", "via": "#1E3A5F", "angle": 185},
+  "pulse": "#F9FAFB",
+  "tags": ["stars", "night", "sparkling"],
+  "i18n": {
+    "ru": {
+      "name": "Мерцание",
+      "desc": "Мерцающие звёзды"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "RGB Cycle",
+  "desc": "Pure R-G-B color rotation",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#FF3B5C", "to": "#3B82FF", "via": "#00DC82", "angle": 135},
+  "pulse": "#FF3B5C",
+  "tags": ["rgb", "cycle", "primary"],
+  "i18n": {
+    "ru": {
+      "name": "Цикл RGB",
+      "desc": "Чистое вращение цветов R-G-B"
+    }
+  }
+}

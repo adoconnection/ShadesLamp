@@ -16,6 +16,12 @@ struct ProgramInfo {
     String  name;
     String  metaJson;
     bool    loaded;     // true if metadata was successfully extracted
+
+    // Cached fields from /meta/{id}.json for fast getProgramListJson()
+    String  author;
+    String  category;
+    String  pulse;
+    String  coverJson;  // serialized cover object e.g. {"from":"#...","to":"#...","angle":135}
 };
 
 class ProgramManager {
@@ -45,6 +51,12 @@ public:
 
     // Get JSON array of all programs: [{"id":0,"name":"..."},...]
     String getProgramListJson() const;
+
+    // Get full meta.json for a program (from /meta/{id}.json or fallback)
+    String getProgramMeta(uint8_t id) const;
+
+    // Set meta.json for a program (saves to /meta/{id}.json)
+    bool setProgramMeta(uint8_t id, const String& json);
 
     // Get params metadata JSON for a program (from WASM meta)
     String getProgramParamsJson(uint8_t id) const;

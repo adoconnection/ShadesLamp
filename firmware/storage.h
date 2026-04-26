@@ -45,6 +45,15 @@ namespace Storage {
     // Delete param values file for a program
     bool deleteParamValues(uint8_t id);
 
+    // Save meta JSON to /meta/{id}.json
+    bool saveProgramMeta(uint8_t id, const char* json);
+
+    // Load meta JSON from /meta/{id}.json (returns "" if not found)
+    String loadProgramMeta(uint8_t id);
+
+    // Delete /meta/{id}.json
+    bool deleteProgramMeta(uint8_t id);
+
 } // namespace Storage
 
 #endif // STORAGE_H

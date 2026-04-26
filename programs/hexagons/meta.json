@@ -1,0 +1,15 @@
+{
+  "name": "Hexagons",
+  "desc": "Hexagonal grid patterns",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#1A1A2E", "to": "#F97316", "via": "#9333EA", "angle": 125},
+  "pulse": "#F97316",
+  "tags": ["hexagon", "grid", "geometric", "pattern"],
+  "i18n": {
+    "ru": {
+      "name": "Гексагоны",
+      "desc": "Узоры из шестиугольной сетки"
+    }
+  }
+}

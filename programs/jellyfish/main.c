@@ -72,7 +72,7 @@ static float jf_drift[MAX_JELLY];  /* horizontal drift phase */
 static int   jf_hue_off[MAX_JELLY];/* per-jellyfish hue variation */
 
 static int cur_w, cur_h;
-static uint32_t tick_total;
+static int32_t prev_tick;
 
 /* Plankton sparkle state */
 #define MAX_SPARKLE 12
@@ -122,7 +122,7 @@ void init(void) {
     cur_h = get_height();
     if (cur_w < 1) cur_w = 1;
     if (cur_h < 1) cur_h = 1;
-    tick_total = 0;
+    prev_tick = 0;
 
     for (int i = 0; i < MAX_JELLY; i++) {
         spawn_jellyfish(i);
@@ -150,9 +150,11 @@ void update(int tick_ms) {
     if (count > MAX_JELLY) count = MAX_JELLY;
 
     rng ^= (uint32_t)tick_ms;
-    tick_total += (uint32_t)tick_ms;
+    int32_t delta_ms = tick_ms - prev_tick;
+    if (delta_ms <= 0 || delta_ms > 200) delta_ms = 33;
+    prev_tick = tick_ms;
 
-    float dt = (float)tick_ms / 1000.0f;
+    float dt = (float)delta_ms / 1000.0f;
     float spd = (float)speed / 25.0f;  /* normalize: 25 -> 1.0 */
 
     /* ---- Clear to dark deep blue background ---- */

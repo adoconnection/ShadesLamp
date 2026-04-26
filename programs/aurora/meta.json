@@ -1,0 +1,15 @@
+{
+  "name": "Aurora",
+  "desc": "Northern lights flowing curtains",
+  "author": "built-in",
+  "category": "Ambient",
+  "cover": {"from": "#064E3B", "to": "#7C3AED", "via": "#06B6D4", "angle": 200},
+  "pulse": "#06B6D4",
+  "tags": ["nature", "flowing", "colorful"],
+  "i18n": {
+    "ru": {
+      "name": "Северное сияние",
+      "desc": "Плавные переливы полярного сияния"
+    }
+  }
+}

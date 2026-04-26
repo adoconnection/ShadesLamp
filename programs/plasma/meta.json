@@ -1,0 +1,15 @@
+{
+  "name": "Plasma",
+  "desc": "Classic plasma effect with smooth sine blending",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#7C3AED", "to": "#EC4899", "via": "#3B82F6", "angle": 120},
+  "pulse": "#EC4899",
+  "tags": ["plasma", "smooth", "psychedelic"],
+  "i18n": {
+    "ru": {
+      "name": "Плазма",
+      "desc": "Классический эффект плазмы с плавным синусоидальным смешиванием"
+    }
+  }
+}

@@ -32,6 +32,12 @@ void renderTask(void* param) {
     Serial.printf("[MAIN] Render task started on core %d\r\n", xPortGetCoreID());
 
     while (true) {
+        // Skip rendering while upload is in progress (LED shows progress bar)
+        if (bleService->isPausedByUpload()) {
+            vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(33));
+            continue;
+        }
+
         // Process pending program switches + deferred saves
         uint8_t prevActive = programManager->getActiveId();
         programManager->processPending();
@@ -92,7 +98,7 @@ void setup() {
     // Create engine and manager with dynamic pointers
     wasmEngine = new WasmEngine(ledDriver, &paramStore);
     programManager = new ProgramManager(wasmEngine, &paramStore, ledDriver);
-    bleService = new BleService(programManager);
+    bleService = new BleService(programManager, ledDriver);
 
     // Initialize program manager (loads programs from flash, activates saved program)
     programManager->begin();

@@ -1,0 +1,15 @@
+{
+  "name": "Candle",
+  "desc": "Warm flickering candle light",
+  "author": "built-in",
+  "category": "Ambient",
+  "cover": {"from": "#7F1D1D", "to": "#FBBF24", "via": "#DC2626", "angle": 175},
+  "pulse": "#FBBF24",
+  "tags": ["candle", "warm", "flicker"],
+  "i18n": {
+    "ru": {
+      "name": "Свеча",
+      "desc": "Тёплый мерцающий свет свечи"
+    }
+  }
+}

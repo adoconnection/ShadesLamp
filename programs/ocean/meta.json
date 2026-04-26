@@ -1,0 +1,15 @@
+{
+  "name": "Ocean",
+  "desc": "Deep ocean waves",
+  "author": "built-in",
+  "category": "Ambient",
+  "cover": {"from": "#0C4A6E", "to": "#06B6D4", "via": "#0369A1", "angle": 210},
+  "pulse": "#06B6D4",
+  "tags": ["nature", "water", "calm"],
+  "i18n": {
+    "ru": {
+      "name": "Океан",
+      "desc": "Глубокие океанские волны"
+    }
+  }
+}

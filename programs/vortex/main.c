@@ -97,6 +97,7 @@ static uint8_t fb_sat[MAX_W * MAX_H];
 static uint8_t fb_val[MAX_W * MAX_H];
 
 static int cur_w, cur_h;
+static int32_t prev_tick;
 #define FB(x,y) ((x) * cur_h + (y))
 
 /* ---- Particles ---- */
@@ -182,6 +183,8 @@ void init(void) {
     float cy = (float)cur_h / 2.0f;
     float max_radius = fsqrt(cx * cx + cy * cy);
 
+    prev_tick = 0;
+
     /* Initialize particles spread across the field */
     for (int i = 0; i < MAX_P; i++) {
         p_angle[i] = (float)(rng_next() % 10000) / 10000.0f * TWO_PI;
@@ -214,7 +217,10 @@ void update(int tick_ms) {
     float cy = (float)cur_h / 2.0f;
     float max_radius = fsqrt(cx * cx + cy * cy);
 
-    float dt = (float)tick_ms / 1000.0f;
+    int32_t delta_ms = tick_ms - prev_tick;
+    if (delta_ms <= 0 || delta_ms > 200) delta_ms = 33;
+    prev_tick = tick_ms;
+    float dt = (float)delta_ms / 1000.0f;
     float base_angular_speed = (float)speed * 0.06f; /* radians/sec */
     float base_radial_speed  = (float)speed * 0.08f;  /* pixels/sec */
 

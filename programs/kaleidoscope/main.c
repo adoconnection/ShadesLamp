@@ -105,10 +105,12 @@ static void hsv2rgb(int hue, int sat, int val, int *r, int *g, int *b) {
 
 static float time_offset;
 static int cur_w, cur_h;
+static int32_t prev_tick;
 
 EXPORT(init)
 void init(void) {
     time_offset = 0.0f;
+    prev_tick = 0;
     cur_w = get_width();
     cur_h = get_height();
     if (cur_w > MAX_W) cur_w = MAX_W;
@@ -171,7 +173,10 @@ void update(int tick_ms) {
     if (palette > 3) palette = 3;
 
     /* Advance time */
-    float dt = (float)tick_ms / 1000.0f;
+    int32_t delta_ms = tick_ms - prev_tick;
+    if (delta_ms <= 0 || delta_ms > 200) delta_ms = 33;
+    prev_tick = tick_ms;
+    float dt = (float)delta_ms / 1000.0f;
     time_offset += dt * (float)speed * 0.04f;
     /* Keep time_offset from growing unbounded */
     if (time_offset > 1000.0f) time_offset -= 1000.0f;

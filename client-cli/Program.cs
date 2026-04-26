@@ -34,6 +34,8 @@ const byte CMD_GET_NAME = 0x21;
 const byte CMD_GET_HW_CONFIG = 0x22;
 const byte CMD_SET_HW_CONFIG = 0x23;
 const byte CMD_REBOOT = 0x24;
+const byte CMD_GET_META = 0x25;
+const byte CMD_SET_META = 0x26;
 
 // ─── Chunked response flags ─────────────────────────────────────────────────
 
@@ -397,6 +399,22 @@ try
             exitCode = await CmdReboot();
             break;
 
+        case "get-meta":
+            if (filteredArgs.Count < 2) { Console.Error.WriteLine("Usage: get-meta <program-id>"); exitCode = 1; break; }
+            if (!int.TryParse(filteredArgs[1], out var gmId)) { Console.Error.WriteLine("Invalid program ID"); exitCode = 1; break; }
+            exitCode = await CmdGetMeta(gmId);
+            break;
+
+        case "set-meta":
+            if (filteredArgs.Count < 3) { Console.Error.WriteLine("Usage: set-meta <program-id> <meta.json-path>"); exitCode = 1; break; }
+            if (!int.TryParse(filteredArgs[1], out var smId)) { Console.Error.WriteLine("Invalid program ID"); exitCode = 1; break; }
+            exitCode = await CmdSetMeta(smId, filteredArgs[2]);
+            break;
+
+        case "push-meta":
+            exitCode = await CmdPushMeta(filteredArgs);
+            break;
+
         default:
             Console.Error.WriteLine($"Unknown command: {command}");
             PrintUsage();
@@ -757,6 +775,156 @@ async Task<int> CmdSetHwConfig(List<string> cliArgs)
     return 1;
 }
 
+async Task<int> CmdGetMeta(int programId)
+{
+    var resp = await SendCommand(CMD_GET_META, new byte[] { (byte)programId });
+    Console.WriteLine(resp);
+    return 0;
+}
+
+async Task<int> CmdSetMeta(int programId, string filePath)
+{
+    if (!File.Exists(filePath))
+    {
+        Console.Error.WriteLine($"File not found: {filePath}");
+        return 1;
+    }
+
+    var json = await File.ReadAllTextAsync(filePath);
+    if (json.Length > 2048)
+    {
+        Console.Error.WriteLine($"Meta too large ({json.Length} bytes, max 2048)");
+        return 1;
+    }
+
+    var payload = new byte[1 + Encoding.UTF8.GetByteCount(json)];
+    payload[0] = (byte)programId;
+    Encoding.UTF8.GetBytes(json, 0, json.Length, payload, 1);
+
+    var resp = await SendCommand(CMD_SET_META, payload);
+    using var doc = JsonDocument.Parse(resp);
+
+    if (doc.RootElement.TryGetProperty("ok", out var ok) && ok.GetBoolean())
+    {
+        Console.WriteLine($"Meta set for program {programId}");
+        return 0;
+    }
+
+    var err = doc.RootElement.TryGetProperty("err", out var e) ? e.GetString() : "Unknown";
+    Console.Error.WriteLine($"Set meta failed: {err}");
+    return 1;
+}
+
+async Task<int> CmdPushMeta(List<string> cliArgs)
+{
+    // push-meta: uploads meta.json for all programs on device from local programs/ directory
+    // Optional: push-meta <directory> (defaults to programs/ relative to exe)
+    string programsDir;
+    if (cliArgs.Count >= 2 && Directory.Exists(cliArgs[1]))
+        programsDir = cliArgs[1];
+    else
+        programsDir = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "programs");
+
+    if (!Directory.Exists(programsDir))
+    {
+        Console.Error.WriteLine($"Programs directory not found: {programsDir}");
+        Console.Error.WriteLine("Usage: push-meta [programs-directory]");
+        return 1;
+    }
+
+    // Get program list from device
+    var listJson = await SendCommand(CMD_GET_PROGRAMS);
+    using var listDoc = JsonDocument.Parse(listJson);
+
+    int success = 0, skipped = 0, failed = 0;
+
+    foreach (var elem in listDoc.RootElement.EnumerateArray())
+    {
+        var id = elem.GetProperty("id").GetInt32();
+        var name = elem.GetProperty("name").GetString() ?? "";
+
+        // Find matching meta.json by scanning directories
+        string? metaPath = null;
+        foreach (var dir in Directory.GetDirectories(programsDir))
+        {
+            var candidate = Path.Combine(dir, "meta.json");
+            if (!File.Exists(candidate)) continue;
+
+            try
+            {
+                var metaContent = File.ReadAllText(candidate);
+                using var metaDoc = JsonDocument.Parse(metaContent);
+                var metaName = metaDoc.RootElement.TryGetProperty("name", out var mn) ? mn.GetString() : null;
+
+                // Match by meta name (exact, case-insensitive)
+                if (metaName != null && string.Equals(metaName, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    metaPath = candidate;
+                    break;
+                }
+                // Match by directory name (underscores → spaces)
+                var dirName = Path.GetFileName(dir).Replace("_", " ");
+                if (string.Equals(dirName, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    metaPath = candidate;
+                    break;
+                }
+                // Match by containment (e.g. "Rainbow Comet" contains "comet")
+                var slug = Path.GetFileName(dir).ToLower();
+                if (name.ToLower().Contains(slug) || slug.Contains(name.ToLower().Replace(" ", "")))
+                {
+                    metaPath = candidate;
+                    break;
+                }
+            }
+            catch { }
+        }
+
+        if (metaPath == null)
+        {
+            Console.Error.WriteLine($"  [{id}] {name}: no meta.json found, skipping");
+            skipped++;
+            continue;
+        }
+
+        var json = File.ReadAllText(metaPath);
+        if (json.Length > 2048)
+        {
+            Console.Error.WriteLine($"  [{id}] {name}: meta too large ({json.Length}), skipping");
+            skipped++;
+            continue;
+        }
+
+        var payload = new byte[1 + Encoding.UTF8.GetByteCount(json)];
+        payload[0] = (byte)id;
+        Encoding.UTF8.GetBytes(json, 0, json.Length, payload, 1);
+
+        try
+        {
+            var resp = await SendCommand(CMD_SET_META, payload);
+            using var doc = JsonDocument.Parse(resp);
+            if (doc.RootElement.TryGetProperty("ok", out var ok) && ok.GetBoolean())
+            {
+                Console.WriteLine($"  [{id}] {name}: OK");
+                success++;
+            }
+            else
+            {
+                Console.Error.WriteLine($"  [{id}] {name}: FAILED");
+                failed++;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"  [{id}] {name}: ERROR ({ex.Message})");
+            failed++;
+        }
+    }
+
+    Console.WriteLine($"\nDone: {success} uploaded, {skipped} skipped, {failed} failed");
+    return failed > 0 ? 1 : 0;
+}
+
 async Task<int> CmdReboot()
 {
     try
@@ -844,5 +1012,8 @@ void PrintUsage()
     Console.Error.WriteLine("    --height <N>                      Matrix height (1-1024)");
     Console.Error.WriteLine("    --zigzag                          Serpentine/zigzag wiring");
     Console.Error.WriteLine("    --no-zigzag                       Linear wiring (default)");
+    Console.Error.WriteLine("  get-meta <program-id>             Get program meta.json from device");
+    Console.Error.WriteLine("  set-meta <program-id> <file>      Upload meta.json to device");
+    Console.Error.WriteLine("  push-meta [programs-dir]          Push meta.json for all programs on device");
     Console.Error.WriteLine("  reboot                            Reboot the device");
 }

@@ -1,0 +1,453 @@
+{
+  "version": 1,
+  "updated": "2026-04-27T12:00:00Z",
+  "programs": [
+    {
+      "slug": "aurora",
+      "name": "Aurora",
+      "desc": "Northern lights flowing curtains",
+      "author": "built-in",
+      "category": "Ambient",
+      "cover": {"from": "#064E3B", "to": "#7C3AED", "via": "#06B6D4", "angle": 200},
+      "pulse": "#06B6D4",
+      "tags": ["nature", "flowing", "colorful"],
+      "size": 3039
+    },
+    {
+      "slug": "bouncing_balls",
+      "name": "Bouncing Balls",
+      "desc": "Bouncing colored balls with physics",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#1A1A2E", "to": "#E040FB", "via": "#4A00E0", "angle": 140},
+      "pulse": "#E040FB",
+      "tags": ["physics", "bouncing", "colorful"],
+      "size": 2834
+    },
+    {
+      "slug": "breathing",
+      "name": "Breathing",
+      "desc": "Gentle brightness pulsing",
+      "author": "built-in",
+      "category": "Ambient",
+      "cover": {"from": "#1a1a2e", "to": "#4a00e0", "via": "#3f37c9", "angle": 180},
+      "pulse": "#4a00e0",
+      "tags": ["calm", "minimal", "pulsing"],
+      "size": 1794
+    },
+    {
+      "slug": "candle",
+      "name": "Candle",
+      "desc": "Warm flickering candle light",
+      "author": "built-in",
+      "category": "Ambient",
+      "cover": {"from": "#7F1D1D", "to": "#FBBF24", "via": "#DC2626", "angle": 175},
+      "pulse": "#FBBF24",
+      "tags": ["candle", "warm", "flicker"]
+    },
+    {
+      "slug": "clouds",
+      "name": "Clouds",
+      "desc": "Soft drifting clouds",
+      "author": "built-in",
+      "category": "Ambient",
+      "cover": {"from": "#1B2838", "to": "#6B7280", "via": "#374151", "angle": 160},
+      "pulse": "#6B7280",
+      "tags": ["nature", "calm", "soft"]
+    },
+    {
+      "slug": "colored_rain",
+      "name": "Colored Rain",
+      "desc": "Colored rain drops falling down the display",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#0F172A", "to": "#38BDF8", "via": "#1E40AF", "angle": 180},
+      "pulse": "#38BDF8",
+      "tags": ["rain", "drops", "falling"]
+    },
+    {
+      "slug": "comet",
+      "name": "Comet",
+      "desc": "Glowing comet tail streaking across the display",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#1F2937", "to": "#FBBF24", "via": "#D97706", "angle": 130},
+      "pulse": "#FBBF24",
+      "tags": ["comet", "tail", "streak"]
+    },
+    {
+      "slug": "confetti",
+      "name": "Confetti",
+      "desc": "Random colored sparkles popping up",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#1E1B4B", "to": "#F472B6", "via": "#7C3AED", "angle": 110},
+      "pulse": "#F472B6",
+      "tags": ["sparkles", "random", "party"]
+    },
+    {
+      "slug": "cube",
+      "name": "Cube",
+      "desc": "3D rotating cube projection",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#1F2937", "to": "#60A5FA", "via": "#1E40AF", "angle": 140},
+      "pulse": "#60A5FA",
+      "tags": ["3d", "cube", "rotation", "geometric"],
+      "size": 4721
+    },
+    {
+      "slug": "dna",
+      "name": "DNA",
+      "desc": "DNA double helix rotation",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#064E3B", "to": "#34D399", "via": "#10B981", "angle": 155},
+      "pulse": "#34D399",
+      "tags": ["helix", "rotation", "science"]
+    },
+    {
+      "slug": "electrons",
+      "name": "Electrons",
+      "desc": "Orbiting electrons around a nucleus",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#0C4A6E", "to": "#60A5FA", "via": "#1D4ED8", "angle": 145},
+      "pulse": "#60A5FA",
+      "tags": ["orbit", "atoms", "science"],
+      "size": 3400
+    },
+    {
+      "slug": "fireflies",
+      "name": "Fireflies",
+      "desc": "Flickering fireflies in the dark",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#1A2E05", "to": "#A3E635", "via": "#365314", "angle": 175},
+      "pulse": "#A3E635",
+      "tags": ["fireflies", "flicker", "nature"]
+    },
+    {
+      "slug": "flame",
+      "name": "Flame",
+      "desc": "Realistic fire simulation",
+      "author": "built-in",
+      "category": "Ambient",
+      "cover": {"from": "#7F1D1D", "to": "#F59E0B", "via": "#DC2626", "angle": 175},
+      "pulse": "#F59E0B",
+      "tags": ["fire", "warm", "dynamic"]
+    },
+    {
+      "slug": "flame_particle",
+      "name": "Flame Particle",
+      "desc": "Particle-based fire simulation",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#451A03", "to": "#FBBF24", "via": "#B45309", "angle": 170},
+      "pulse": "#FBBF24",
+      "tags": ["fire", "particles", "warm"]
+    },
+    {
+      "slug": "helix",
+      "name": "Helix",
+      "desc": "Double helix DNA-like rotation",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#134E4A", "to": "#2DD4BF", "via": "#0D9488", "angle": 150},
+      "pulse": "#2DD4BF",
+      "tags": ["helix", "dna", "rotation", "organic"],
+      "size": 4193
+    },
+    {
+      "slug": "hexagons",
+      "name": "Hexagons",
+      "desc": "Hexagonal grid patterns",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#1A1A2E", "to": "#F97316", "via": "#9333EA", "angle": 125},
+      "pulse": "#F97316",
+      "tags": ["hexagon", "grid", "geometric", "pattern"],
+      "size": 3210
+    },
+    {
+      "slug": "jellyfish",
+      "name": "Jellyfish",
+      "desc": "Floating jellyfish drifting gracefully",
+      "author": "built-in",
+      "category": "Ambient",
+      "cover": {"from": "#1E1B4B", "to": "#C084FC", "via": "#5B21B6", "angle": 195},
+      "pulse": "#C084FC",
+      "tags": ["organic", "floating", "calm"],
+      "size": 6745
+    },
+    {
+      "slug": "kaleidoscope",
+      "name": "Kaleidoscope",
+      "desc": "Rotating kaleidoscope patterns",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#4C1D95", "to": "#F59E0B", "via": "#EC4899", "angle": 120},
+      "pulse": "#F59E0B",
+      "tags": ["geometric", "rotating", "colorful"],
+      "size": 3314
+    },
+    {
+      "slug": "lava",
+      "name": "Lava",
+      "desc": "Molten lava flow",
+      "author": "built-in",
+      "category": "Ambient",
+      "cover": {"from": "#7F1D1D", "to": "#FF6B35", "via": "#B91C1C", "angle": 190},
+      "pulse": "#FF6B35",
+      "tags": ["fire", "warm", "flowing"]
+    },
+    {
+      "slug": "lava_lamp",
+      "name": "Lava Lamp",
+      "desc": "Retro lava lamp blobs",
+      "author": "built-in",
+      "category": "Ambient",
+      "cover": {"from": "#4C1D95", "to": "#F472B6", "via": "#7C3AED", "angle": 170},
+      "pulse": "#F472B6",
+      "tags": ["retro", "blobs", "colorful"]
+    },
+    {
+      "slug": "matrix_rain",
+      "name": "Matrix Rain",
+      "desc": "Falling green matrix characters",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#022C22", "to": "#10B981", "via": "#064E3B", "angle": 180},
+      "pulse": "#10B981",
+      "tags": ["matrix", "rain", "green", "falling"],
+      "size": 2226
+    },
+    {
+      "slug": "matrix_test",
+      "name": "Matrix Test",
+      "desc": "Matrix LED test pattern",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#1F2937", "to": "#9CA3AF", "via": "#4B5563", "angle": 135},
+      "pulse": "#9CA3AF",
+      "tags": ["test", "diagnostic", "pattern"]
+    },
+    {
+      "slug": "metaballs",
+      "name": "Metaballs",
+      "desc": "Organic metaball blobs",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#3B0764", "to": "#F0ABFC", "via": "#7C3AED", "angle": 165},
+      "pulse": "#F0ABFC",
+      "tags": ["metaballs", "organic", "blobs", "smooth"]
+    },
+    {
+      "slug": "moire",
+      "name": "Moire",
+      "desc": "Moire interference patterns",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#0A0A0A", "to": "#E5E5E5", "via": "#525252", "angle": 145},
+      "pulse": "#E5E5E5",
+      "tags": ["moire", "interference", "pattern", "monochrome"],
+      "size": 4524
+    },
+    {
+      "slug": "morphing",
+      "name": "Morphing",
+      "desc": "Shape morphing transitions",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#1E3A5F", "to": "#FB7185", "via": "#BE185D", "angle": 155},
+      "pulse": "#FB7185",
+      "tags": ["morphing", "shapes", "transition", "smooth"],
+      "size": 6731
+    },
+    {
+      "slug": "ocean",
+      "name": "Ocean",
+      "desc": "Deep ocean waves",
+      "author": "built-in",
+      "category": "Ambient",
+      "cover": {"from": "#0C4A6E", "to": "#06B6D4", "via": "#0369A1", "angle": 210},
+      "pulse": "#06B6D4",
+      "tags": ["nature", "water", "calm"]
+    },
+    {
+      "slug": "plasma",
+      "name": "Plasma",
+      "desc": "Classic plasma effect with smooth sine blending",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#7C3AED", "to": "#EC4899", "via": "#3B82F6", "angle": 120},
+      "pulse": "#EC4899",
+      "tags": ["plasma", "smooth", "psychedelic"]
+    },
+    {
+      "slug": "police",
+      "name": "Police",
+      "desc": "Red-blue police lights flashing",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#1E3A8A", "to": "#EF4444", "via": "#1E40AF", "angle": 90},
+      "pulse": "#EF4444",
+      "tags": ["police", "flashing", "emergency"],
+      "size": 1670
+    },
+    {
+      "slug": "popcorn",
+      "name": "Popcorn",
+      "desc": "Popping kernels with gravity",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#292524", "to": "#FDE68A", "via": "#78350F", "angle": 175},
+      "pulse": "#FDE68A",
+      "tags": ["popcorn", "gravity", "bounce"],
+      "size": 2798
+    },
+    {
+      "slug": "pulse",
+      "name": "Pulse",
+      "desc": "Radial pulse expanding outward",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#1E1B4B", "to": "#818CF8", "via": "#4338CA", "angle": 160},
+      "pulse": "#818CF8",
+      "tags": ["pulse", "radial", "expanding"]
+    },
+    {
+      "slug": "rainbow",
+      "name": "Rainbow",
+      "desc": "Smooth HSV rainbow cycle",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#FF6B6B", "to": "#FFD93D", "via": "#6BCB77", "angle": 95},
+      "pulse": "#FFD93D",
+      "tags": ["rainbow", "hsv", "colorful", "smooth"]
+    },
+    {
+      "slug": "random_blink",
+      "name": "Random Blink",
+      "desc": "Random pixel flashes",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#0F2027", "to": "#7DF9FF", "via": "#2C5364", "angle": 160},
+      "pulse": "#7DF9FF",
+      "tags": ["random", "blink", "sparkle"]
+    },
+    {
+      "slug": "rgb_cycle",
+      "name": "RGB Cycle",
+      "desc": "Pure R-G-B color rotation",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#FF3B5C", "to": "#3B82FF", "via": "#00DC82", "angle": 135},
+      "pulse": "#FF3B5C",
+      "tags": ["rgb", "cycle", "primary"]
+    },
+    {
+      "slug": "sinusoid",
+      "name": "Sinusoid",
+      "desc": "Flowing sinusoidal wave",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#312E81", "to": "#A78BFA", "via": "#4C1D95", "angle": 155},
+      "pulse": "#A78BFA",
+      "tags": ["wave", "sinusoidal", "flowing"]
+    },
+    {
+      "slug": "snow",
+      "name": "Snow",
+      "desc": "Gently falling snowflakes",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#0C4A6E", "to": "#E0F2FE", "via": "#0EA5E9", "angle": 200},
+      "pulse": "#E0F2FE",
+      "tags": ["snow", "winter", "falling", "gentle"]
+    },
+    {
+      "slug": "solid_color",
+      "name": "Solid Color",
+      "desc": "Static solid color fill",
+      "author": "built-in",
+      "category": "Ambient",
+      "cover": {"from": "#1F2937", "to": "#FAFAF7", "via": "#6B7280", "angle": 135},
+      "pulse": "#FAFAF7",
+      "tags": ["minimal", "static", "simple"]
+    },
+    {
+      "slug": "spirals",
+      "name": "Spirals",
+      "desc": "Rotating spiral patterns",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#1E1B4B", "to": "#C084FC", "via": "#6D28D9", "angle": 130},
+      "pulse": "#C084FC",
+      "tags": ["spiral", "rotation", "geometric"]
+    },
+    {
+      "slug": "starfall",
+      "name": "Starfall",
+      "desc": "Shooting stars with trails",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#0F172A", "to": "#FBBF24", "via": "#1E3A5F", "angle": 170},
+      "pulse": "#FBBF24",
+      "tags": ["stars", "trails", "falling"]
+    },
+    {
+      "slug": "tricolor",
+      "name": "Tricolor",
+      "desc": "Three-color flag wave",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#FFFFFF", "to": "#1E40AF", "via": "#EF4444", "angle": 90},
+      "pulse": "#1E40AF",
+      "tags": ["flag", "tricolor", "wave"],
+      "size": 2611
+    },
+    {
+      "slug": "twinkling",
+      "name": "Twinkling",
+      "desc": "Twinkling stars",
+      "author": "built-in",
+      "category": "Ambient",
+      "cover": {"from": "#0F172A", "to": "#F9FAFB", "via": "#1E3A5F", "angle": 185},
+      "pulse": "#F9FAFB",
+      "tags": ["stars", "night", "sparkling"]
+    },
+    {
+      "slug": "vortex",
+      "name": "Vortex",
+      "desc": "Swirling vortex effect",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#0C0A09", "to": "#7C3AED", "via": "#312E81", "angle": 190},
+      "pulse": "#7C3AED",
+      "tags": ["vortex", "swirl", "rotation", "hypnotic"],
+      "size": 4785
+    },
+    {
+      "slug": "warp",
+      "name": "Warp",
+      "desc": "Space warp speed effect",
+      "author": "built-in",
+      "category": "Effects",
+      "cover": {"from": "#0A0A0A", "to": "#E0F2FE", "via": "#0C4A6E", "angle": 180},
+      "pulse": "#E0F2FE",
+      "tags": ["space", "speed", "stars"],
+      "size": 4241
+    },
+    {
+      "slug": "waves",
+      "name": "Waves",
+      "desc": "Smooth sine waves flowing across the display",
+      "author": "built-in",
+      "category": "Ambient",
+      "cover": {"from": "#0E4429", "to": "#22D3EE", "via": "#14B8A6", "angle": 165},
+      "pulse": "#22D3EE",
+      "tags": ["smooth", "sine", "flowing"]
+    }
+  ]
+}

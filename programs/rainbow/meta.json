@@ -1,0 +1,15 @@
+{
+  "name": "Rainbow",
+  "desc": "Smooth HSV rainbow cycle",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#FF6B6B", "to": "#FFD93D", "via": "#6BCB77", "angle": 95},
+  "pulse": "#FFD93D",
+  "tags": ["rainbow", "hsv", "colorful", "smooth"],
+  "i18n": {
+    "ru": {
+      "name": "Радуга",
+      "desc": "Плавный радужный цикл HSV"
+    }
+  }
+}

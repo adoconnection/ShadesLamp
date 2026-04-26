@@ -1,0 +1,15 @@
+{
+  "name": "Waves",
+  "desc": "Smooth sine waves flowing across the display",
+  "author": "built-in",
+  "category": "Ambient",
+  "cover": {"from": "#0E4429", "to": "#22D3EE", "via": "#14B8A6", "angle": 165},
+  "pulse": "#22D3EE",
+  "tags": ["smooth", "sine", "flowing"],
+  "i18n": {
+    "ru": {
+      "name": "Волны",
+      "desc": "Плавные синусоидальные волны"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Moire",
+  "desc": "Moire interference patterns",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#0A0A0A", "to": "#E5E5E5", "via": "#525252", "angle": 145},
+  "pulse": "#E5E5E5",
+  "tags": ["moire", "interference", "pattern", "monochrome"],
+  "i18n": {
+    "ru": {
+      "name": "Муар",
+      "desc": "Интерференционные муаровые узоры"
+    }
+  }
+}

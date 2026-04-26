@@ -1,0 +1,15 @@
+{
+  "name": "Spirals",
+  "desc": "Rotating spiral patterns",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#1E1B4B", "to": "#C084FC", "via": "#6D28D9", "angle": 130},
+  "pulse": "#C084FC",
+  "tags": ["spiral", "rotation", "geometric"],
+  "i18n": {
+    "ru": {
+      "name": "Спирали",
+      "desc": "Вращающиеся спиральные узоры"
+    }
+  }
+}

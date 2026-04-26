@@ -1,0 +1,15 @@
+{
+  "name": "Colored Rain",
+  "desc": "Colored rain drops falling down the display",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#0F172A", "to": "#38BDF8", "via": "#1E40AF", "angle": 180},
+  "pulse": "#38BDF8",
+  "tags": ["rain", "drops", "falling"],
+  "i18n": {
+    "ru": {
+      "name": "Цветной дождь",
+      "desc": "Падающие цветные капли дождя"
+    }
+  }
+}

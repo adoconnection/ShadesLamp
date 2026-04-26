@@ -1,0 +1,15 @@
+{
+  "name": "Confetti",
+  "desc": "Random colored sparkles popping up",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#1E1B4B", "to": "#F472B6", "via": "#7C3AED", "angle": 110},
+  "pulse": "#F472B6",
+  "tags": ["sparkles", "random", "party"],
+  "i18n": {
+    "ru": {
+      "name": "Конфетти",
+      "desc": "Случайные цветные вспышки"
+    }
+  }
+}
