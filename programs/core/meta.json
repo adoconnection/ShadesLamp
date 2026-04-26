@@ -1,0 +1,15 @@
+{
+  "name": "Core",
+  "desc": "Particles orbiting around the equator with tilted orbits",
+  "author": "built-in",
+  "category": "Effects",
+  "cover": {"from": "#FF4500", "to": "#FFD700", "angle": 180},
+  "pulse": "#FF6B00",
+  "tags": ["particles", "orbit", "fire"],
+  "i18n": {
+    "ru": {
+      "name": "Ядро",
+      "desc": "Частицы на орбитах вокруг экватора"
+    }
+  }
+}
