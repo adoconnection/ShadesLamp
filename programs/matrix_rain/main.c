@@ -102,13 +102,14 @@ void update(int tick_ms) {
     }
 
     /* Move existing drops and paint head */
+    /* Drops fall from top (Y=H-1) to bottom (Y=0) on physical display */
     int speed_inc = speed * 60;  /* speed in 1/256 units */
     for (int i = 0; i < W && i < MAX_DROPS; i++) {
         if (!drop_active[i]) {
             /* Chance to spawn a new drop in this column */
             if (random_range(0, 100) < density) {
                 drop_active[i] = 1;
-                drop_y[i] = 0;
+                drop_y[i] = (H - 1) << 8;  /* start at top of physical display */
                 drop_speed[i] = speed_inc + random_range(-20, 20);
                 if (drop_speed[i] < 30) drop_speed[i] = 30;
             }
@@ -123,17 +124,17 @@ void update(int tick_ms) {
             fb_g[i][iy] = 255;
         }
 
-        /* Move drop down */
-        drop_y[i] += drop_speed[i];
+        /* Move drop down (decreasing Y = falling on physical display) */
+        drop_y[i] -= drop_speed[i];
         int new_iy = drop_y[i] >> 8;
 
         /* Fill any skipped rows (for fast speeds) */
-        for (int fill = iy + 1; fill <= new_iy && fill < H; fill++) {
-            if (fill >= 0) fb_g[i][fill] = 255;
+        for (int fill = iy - 1; fill >= new_iy && fill >= 0; fill--) {
+            fb_g[i][fill] = 255;
         }
 
-        /* If drop fell off bottom, deactivate */
-        if (new_iy >= H + 5) {
+        /* If drop fell off bottom of physical display, deactivate */
+        if (new_iy < -5) {
             drop_active[i] = 0;
         }
     }

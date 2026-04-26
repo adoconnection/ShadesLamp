@@ -32,6 +32,15 @@ void renderTask(void* param) {
     Serial.printf("[MAIN] Render task started on core %d\r\n", xPortGetCoreID());
 
     while (true) {
+        // Process pending program switches + deferred saves
+        uint8_t prevActive = programManager->getActiveId();
+        programManager->processPending();
+        uint8_t newActive = programManager->getActiveId();
+        if (newActive != prevActive) {
+            bleService->notifyActiveProgram(newActive);
+            Serial.printf("[MAIN] Program switched: %u -> %u\r\n", prevActive, newActive);
+        }
+
         if (wasmEngine->isLoaded()) {
             int32_t tick = (int32_t)(millis() - startTick);
             wasmEngine->tick(tick);
@@ -95,7 +104,7 @@ void setup() {
     BaseType_t taskResult = xTaskCreatePinnedToCore(
         renderTask,     // task function
         "render",       // name
-        32768,          // stack size (bytes) — wasm3 interpreter needs generous stack
+        65536,          // stack size (bytes) — wasm3 interpreter + switchProgram needs generous stack
         NULL,           // parameter
         2,              // priority
         NULL,           // task handle
@@ -125,7 +134,5 @@ void setup() {
 // ── Arduino Loop ───────────────────────────────────────────────────────────
 
 void loop() {
-    // Process pending program switches + deferred saves
-    programManager->processPending();
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(1000));
 }
