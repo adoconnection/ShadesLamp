@@ -1,4 +1,6 @@
 {
+  "guid": "a1f8091a-2132-4431-a2b3-c4d5e6f7324d",
+  "version": "1.0.0",
   "name": "Random Blink",
   "desc": "Random pixel flashes",
   "author": "built-in",

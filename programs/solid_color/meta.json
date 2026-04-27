@@ -1,4 +1,6 @@
 {
+  "guid": "e53c4d5e-6576-4875-a6b7-c8d9e0f17681",
+  "version": "1.0.0",
   "name": "Solid Color",
   "desc": "Static solid color fill",
   "author": "built-in",

@@ -1,4 +1,6 @@
 {
+  "guid": "c31a2b3c-4354-4653-a4b5-c6d7e8f9546f",
+  "version": "1.0.0",
   "name": "Sinusoid",
   "desc": "Flowing sinusoidal wave",
   "author": "built-in",

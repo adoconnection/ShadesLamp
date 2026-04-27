@@ -1,4 +1,6 @@
 {
+  "guid": "a1f8091a-2132-4435-a6b7-c8d9e0f1324d",
+  "version": "1.0.0",
   "name": "Hexagons",
   "desc": "Hexagonal grid patterns",
   "author": "built-in",

@@ -335,6 +335,28 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 break;
             }
 
+            case CMD_GET_POWER: {
+                bool on = g_bleService->isPowerOn();
+                char buf[32];
+                snprintf(buf, sizeof(buf), "{\"ok\":true,\"power\":%s}", on ? "true" : "false");
+                g_bleService->sendResponse(buf);
+                break;
+            }
+
+            case CMD_SET_POWER: {
+                if (payloadLen < 1) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"missing payload\"}", true);
+                    break;
+                }
+                bool on = payload[0] != 0;
+                g_bleService->setPower(on);
+                Serial.printf("%s Power %s\r\n", TAG, on ? "ON" : "OFF");
+                char buf[32];
+                snprintf(buf, sizeof(buf), "{\"ok\":true,\"power\":%s}", on ? "true" : "false");
+                g_bleService->sendResponse(buf);
+                break;
+            }
+
             default:
                 Serial.printf("%s Unknown command: 0x%02X\r\n", TAG, cmd);
                 g_bleService->sendResponse("{\"ok\":false,\"err\":\"unknown command\"}", true);
@@ -427,6 +449,7 @@ BleService::BleService(ProgramManager* pm, LedDriver* led)
     , _connectedClients(0)
     , _negotiatedMtu(23)
     , pausedByUpload(false)
+    , powerOn(true)
     , uploadBuffer(nullptr)
     , uploadSize(0)
     , uploadOffset(0)
@@ -607,4 +630,12 @@ void BleService::notifyParamValues() {
 
 bool BleService::isConnected() const {
     return _server && _server->getConnectedCount() > 0;
+}
+
+void BleService::setPower(bool on) {
+    powerOn = on;
+    if (!on && _led) {
+        _led->clear();
+        _led->show();
+    }
 }

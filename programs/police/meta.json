@@ -1,4 +1,6 @@
 {
+  "guid": "6db4c5d6-edfe-40f7-a8b9-c0d1e2f3fe09",
+  "version": "1.0.0",
   "name": "Police",
   "desc": "Red-blue police lights flashing",
   "author": "built-in",

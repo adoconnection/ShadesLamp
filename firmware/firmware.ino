@@ -38,6 +38,12 @@ void renderTask(void* param) {
             continue;
         }
 
+        // Skip rendering when power is off (LEDs stay dark)
+        if (!bleService->isPowerOn()) {
+            vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(100));
+            continue;
+        }
+
         // Process pending program switches + deferred saves
         uint8_t prevActive = programManager->getActiveId();
         programManager->processPending();

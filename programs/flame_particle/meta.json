@@ -1,4 +1,6 @@
 {
+  "guid": "8fd6e7f8-0910-4213-a4b5-c6d7e8f9102b",
+  "version": "1.0.0",
   "name": "Flame Particle",
   "desc": "Particle-based fire simulation",
   "author": "built-in",

@@ -1,4 +1,6 @@
 {
+  "guid": "3a8192a3-bacb-4dc4-a5b6-c7d8e9f0cbd6",
+  "version": "1.0.0",
   "name": "Morphing",
   "desc": "Shape morphing transitions",
   "author": "built-in",

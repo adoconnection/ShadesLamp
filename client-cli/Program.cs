@@ -790,10 +790,10 @@ async Task<int> CmdSetMeta(int programId, string filePath)
         return 1;
     }
 
-    var json = await File.ReadAllTextAsync(filePath);
-    if (json.Length > 2048)
+    var json = StripCoverSvg(await File.ReadAllTextAsync(filePath));
+    if (json.Length > 8192)
     {
-        Console.Error.WriteLine($"Meta too large ({json.Length} bytes, max 2048)");
+        Console.Error.WriteLine($"Meta too large ({json.Length} bytes, max 8192)");
         return 1;
     }
 
@@ -887,8 +887,8 @@ async Task<int> CmdPushMeta(List<string> cliArgs)
             continue;
         }
 
-        var json = File.ReadAllText(metaPath);
-        if (json.Length > 2048)
+        var json = StripCoverSvg(File.ReadAllText(metaPath));
+        if (json.Length > 8192)
         {
             Console.Error.WriteLine($"  [{id}] {name}: meta too large ({json.Length}), skipping");
             skipped++;
@@ -982,6 +982,36 @@ async Task<string> SendCommand(byte commandCode, byte[]? payload = null)
         {
             if (pendingResponse == tcs) { pendingResponse = null; responseChunks.Clear(); }
         }
+    }
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+string StripCoverSvg(string json)
+{
+    // Remove coverSvg field before sending to device (too large, not needed on lamp)
+    try
+    {
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("coverSvg", out _))
+            return json; // no coverSvg, return as-is
+
+        using var ms = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(ms))
+        {
+            writer.WriteStartObject();
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Name == "coverSvg") continue;
+                prop.WriteTo(writer);
+            }
+            writer.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(ms.ToArray());
+    }
+    catch
+    {
+        return json; // if parsing fails, return original
     }
 }
 

@@ -1,4 +1,6 @@
 {
+  "guid": "5ca3b4c5-dced-4fec-a3b4-c5d6e7f8edf8",
+  "version": "1.0.0",
   "name": "Waves",
   "desc": "Smooth sine waves flowing across the display",
   "author": "built-in",

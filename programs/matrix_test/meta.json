@@ -1,4 +1,6 @@
 {
+  "guid": "075e6f70-8798-4a91-a2b3-c4d5e6f798a3",
+  "version": "1.0.0",
   "name": "Matrix Test",
   "desc": "Matrix LED test pattern",
   "author": "built-in",

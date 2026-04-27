@@ -115,6 +115,13 @@ export const RefreshIcon = ({ size = 18, color = '#FAFAF7' }: IconProps) => (
   </Svg>
 );
 
+export const PowerIcon = ({ size = 22, color = '#FAFAF7' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 3v9" stroke={color} strokeWidth={2} strokeLinecap="round" />
+    <Path d="M17.66 6.34A8 8 0 1 1 6.34 6.34" stroke={color} strokeWidth={2} strokeLinecap="round" />
+  </Svg>
+);
+
 export const SignalIcon = ({ rssi, color = '#FAFAF7' }: { rssi: number; color?: string }) => {
   const bars = rssi > -55 ? 4 : rssi > -70 ? 3 : rssi > -85 ? 2 : 1;
   return (

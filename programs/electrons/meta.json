@@ -1,4 +1,6 @@
 {
+  "guid": "5ca3b4c5-d6e7-4f80-91a2-b3c4d5e6f708",
+  "version": "1.0.0",
   "name": "Electrons",
   "desc": "Orbiting electrons around a nucleus",
   "author": "built-in",

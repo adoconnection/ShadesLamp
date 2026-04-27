@@ -1,4 +1,6 @@
 {
+  "guid": "c31a2b3c-4354-4657-a8b9-c0d1e2f3546f",
+  "version": "1.0.0",
   "name": "Kaleidoscope",
   "desc": "Rotating kaleidoscope patterns",
   "author": "built-in",

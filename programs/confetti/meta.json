@@ -1,4 +1,6 @@
 {
+  "guid": "18c9d0e1-f2a3-4b4c-5d6e-7f8091a2b3c4",
+  "version": "1.0.0",
   "name": "Confetti",
   "desc": "Random colored sparkles popping up",
   "author": "built-in",

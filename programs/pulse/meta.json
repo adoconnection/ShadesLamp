@@ -1,4 +1,6 @@
 {
+  "guid": "8fd6e7f8-0f10-4219-a0b1-c2d3e4f5102b",
+  "version": "1.0.0",
   "name": "Pulse",
   "desc": "Radial pulse expanding outward",
   "author": "built-in",

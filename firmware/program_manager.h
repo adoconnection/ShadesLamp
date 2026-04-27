@@ -100,6 +100,7 @@ private:
     int findProgramIndex(uint8_t id) const;
     void loadConfig();
     void loadProgramMeta(uint8_t id);
+    void ensureMetaLoaded(uint8_t id) const;
 
     WasmEngine* _engine;
     ParamStore* _paramStore;

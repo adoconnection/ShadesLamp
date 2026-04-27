@@ -1,4 +1,6 @@
 {
+  "guid": "7ec5d6e7-fe0f-4108-a9b0-c1d2e3f40f1a",
+  "version": "1.0.0",
   "name": "Popcorn",
   "desc": "Popping kernels with gravity",
   "author": "built-in",

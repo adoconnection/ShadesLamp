@@ -1,4 +1,6 @@
 {
+  "guid": "90e7f809-1021-4324-a5b6-c7d8e9f0213c",
+  "version": "1.0.0",
   "name": "Helix",
   "desc": "Double helix DNA-like rotation",
   "author": "built-in",

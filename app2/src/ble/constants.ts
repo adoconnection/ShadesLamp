@@ -23,6 +23,8 @@ export const CMD = {
   REBOOT:          0x24,
   GET_META:        0x25,
   SET_META:        0x26,
+  GET_POWER:       0x27,
+  SET_POWER:       0x28,
 } as const;
 
 export const FLAG_FINAL = 0x01;

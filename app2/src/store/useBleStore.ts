@@ -17,10 +17,12 @@ interface BleState {
   deviceId: string | null;
   deviceMac: string;
   deviceInfo: DeviceInfo;
+  powerOn: boolean;
   setConnectionState: (state: ConnectionState) => void;
   setDeviceId: (id: string | null) => void;
   setDeviceMac: (mac: string) => void;
   setDeviceInfo: (info: Partial<DeviceInfo>) => void;
+  setPowerOn: (on: boolean) => void;
   reset: () => void;
 }
 
@@ -29,9 +31,11 @@ export const useBleStore = create<BleState>((set) => ({
   deviceId: null,
   deviceMac: '',
   deviceInfo: DEFAULT_DEVICE_INFO,
+  powerOn: true,
   setConnectionState: (connectionState) => set({ connectionState }),
   setDeviceId: (deviceId) => set({ deviceId }),
   setDeviceMac: (deviceMac) => set({ deviceMac }),
   setDeviceInfo: (info) => set((s) => ({ deviceInfo: { ...s.deviceInfo, ...info } })),
-  reset: () => set({ connectionState: 'disconnected', deviceId: null, deviceMac: '', deviceInfo: DEFAULT_DEVICE_INFO }),
+  setPowerOn: (powerOn) => set({ powerOn }),
+  reset: () => set({ connectionState: 'disconnected', deviceId: null, deviceMac: '', deviceInfo: DEFAULT_DEVICE_INFO, powerOn: true }),
 }));

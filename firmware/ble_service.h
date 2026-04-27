@@ -34,6 +34,8 @@ class LedDriver;
 #define CMD_REBOOT          0x24
 #define CMD_GET_META        0x25
 #define CMD_SET_META        0x26
+#define CMD_GET_POWER       0x27
+#define CMD_SET_POWER       0x28
 
 // Response chunk flags
 #define CHUNK_FLAG_FINAL    0x01
@@ -61,6 +63,10 @@ public:
     // Upload progress: pause/resume rendering
     bool isPausedByUpload() const { return pausedByUpload; }
 
+    // Power on/off (LEDs off but BLE still active)
+    bool isPowerOn() const { return powerOn; }
+    void setPower(bool on);
+
     ProgramManager* getProgramManager() const { return _pm; }
     LedDriver* getLedDriver() const { return _led; }
 
@@ -73,6 +79,7 @@ public:
     uint32_t  uploadOffset;
     bool      uploadInProgress;
     volatile bool pausedByUpload;
+    volatile bool powerOn;
 
 private:
     uint16_t getChunkPayload() const;

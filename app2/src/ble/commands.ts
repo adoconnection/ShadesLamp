@@ -112,4 +112,13 @@ export async function setMeta(programId: number, meta: object): Promise<any> {
   });
 }
 
+export async function getPower(): Promise<boolean> {
+  const result = await queue.enqueue(() => writeCommand(new Uint8Array([CMD.GET_POWER])));
+  return result.power;
+}
+
+export async function setPower(on: boolean): Promise<any> {
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.SET_POWER, on ? 1 : 0])));
+}
+
 export { writeActiveProgram as setActiveProgram, readActiveProgram as getActiveProgram };

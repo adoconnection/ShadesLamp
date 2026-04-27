@@ -1,4 +1,6 @@
 {
+  "guid": "07b8c9d0-e1f2-4a3b-4c5d-6e7f8091a2b3",
+  "version": "1.0.0",
   "name": "Comet",
   "desc": "Glowing comet tail streaking across the display",
   "author": "built-in",

@@ -1,4 +1,6 @@
 {
+  "guid": "7ec5d6e7-f809-4102-a3b4-c5d6e7f8091a",
+  "version": "1.0.0",
   "name": "Flame",
   "desc": "Realistic fire simulation",
   "author": "built-in",

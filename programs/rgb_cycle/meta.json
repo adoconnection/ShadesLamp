@@ -1,4 +1,6 @@
 {
+  "guid": "b2091a2b-3243-4542-a3b4-c5d6e7f8435e",
+  "version": "1.0.0",
   "name": "RGB Cycle",
   "desc": "Pure R-G-B color rotation",
   "author": "built-in",

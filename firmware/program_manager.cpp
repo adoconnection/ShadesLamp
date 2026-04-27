@@ -27,12 +27,12 @@ ProgramManager::ProgramManager(WasmEngine* engine, ParamStore* paramStore, LedDr
 void ProgramManager::begin() {
     Serial.printf("%s Initializing...\r\n", TAG);
 
-    // Load metadata for all stored programs
+    // Register all program IDs (no file reads, just directory listing)
     std::vector<uint8_t> ids = Storage::listPrograms();
     Serial.printf("%s Found %u programs on flash\r\n", TAG, ids.size());
 
     for (uint8_t id : ids) {
-        loadProgramMeta(id);
+        loadProgramMeta(id);  // Just registers ID, no I/O
     }
 
     // Load config (active program, device name, hw settings)
@@ -257,6 +257,7 @@ uint8_t ProgramManager::getProgramCount() const {
 }
 
 String ProgramManager::getProgramName(uint8_t id) const {
+    ensureMetaLoaded(id);
     int idx = findProgramIndex(id);
     if (idx < 0) return String("Unknown");
     return _programs[idx].name;
@@ -267,6 +268,7 @@ String ProgramManager::getProgramListJson() const {
     JsonArray arr = doc.to<JsonArray>();
 
     for (const ProgramInfo& p : _programs) {
+        ensureMetaLoaded(p.id);
         JsonObject obj = arr.add<JsonObject>();
         obj["id"] = p.id;
         obj["name"] = p.name;
@@ -282,19 +284,13 @@ String ProgramManager::getProgramMeta(uint8_t id) const {
     String metaStr = Storage::loadProgramMeta(id);
     if (metaStr.length() > 2) return metaStr;
 
-    // Generate fallback from WASM-embedded metadata
+    // Generate minimal fallback (no WASM loading here)
     int idx = findProgramIndex(id);
     if (idx < 0) return "{}";
 
     JsonDocument out;
-    JsonDocument wasmDoc;
-    if (!deserializeJson(wasmDoc, _programs[idx].metaJson)) {
-        out["name"] = wasmDoc["name"] | "Untitled";
-        out["desc"] = wasmDoc["desc"] | "";
-    } else {
-        out["name"] = _programs[idx].name;
-        out["desc"] = "";
-    }
+    out["name"] = _programs[idx].name;
+    out["desc"] = "";
     out["author"] = "unknown";
     out["category"] = "Effects";
 
@@ -337,6 +333,23 @@ bool ProgramManager::setProgramMeta(uint8_t id, const String& json) {
 String ProgramManager::getProgramParamsJson(uint8_t id) const {
     int idx = findProgramIndex(id);
     if (idx < 0) return "[]";
+
+    // If metaJson is empty, it hasn't been extracted from WASM yet
+    // For the active program, it was populated during switchProgram()
+    // For non-active programs, extract on demand
+    if (_programs[idx].metaJson.length() < 3) {
+        // Lazy-load WASM metadata
+        uint8_t* wasmData = nullptr;
+        size_t wasmSize = Storage::loadProgram(id, &wasmData);
+        if (wasmSize > 0 && wasmData) {
+            String meta = wasmExtractMeta(wasmData, wasmSize);
+            free(wasmData);
+            if (meta.length() > 2) {
+                // Cache it (cast away const for lazy init)
+                const_cast<ProgramInfo&>(_programs[idx]).metaJson = meta;
+            }
+        }
+    }
 
     // Extract "params" array from the cached meta JSON
     JsonDocument doc;
@@ -552,42 +565,37 @@ void ProgramManager::loadConfig() {
 }
 
 void ProgramManager::loadProgramMeta(uint8_t id) {
-    // Load WASM binary from storage
-    uint8_t* wasmData = nullptr;
-    size_t wasmSize = Storage::loadProgram(id, &wasmData);
-    if (wasmSize == 0 || !wasmData) {
-        Serial.printf("%s Cannot load program %u for metadata\r\n", TAG, id);
-        return;
-    }
-
+    // At startup: just register the program ID. No file reads.
+    // Meta is loaded lazily when a BLE client requests it.
     ProgramInfo info;
     info.id = id;
-    info.name = "Program " + String(id);
-    info.metaJson = "{}";
+    info.name = "";
+    info.metaJson = "";
     info.loaded = false;
 
-    // Use the standalone metadata extractor from wasm_engine
-    String meta = wasmExtractMeta(wasmData, wasmSize);
-    free(wasmData);
-
-    if (meta.length() > 2) { // More than "{}"
-        info.metaJson = meta;
-        info.loaded = true;
-
-        // Extract program name from metadata JSON
-        JsonDocument metaDoc;
-        if (!deserializeJson(metaDoc, meta)) {
-            if (metaDoc.containsKey("name")) {
-                info.name = metaDoc["name"].as<String>();
-            }
-        }
+    xSemaphoreTake(_mutex, portMAX_DELAY);
+    int existing = findProgramIndex(id);
+    if (existing >= 0) {
+        _programs[existing] = info;
+    } else {
+        _programs.push_back(info);
     }
+    xSemaphoreGive(_mutex);
+}
 
-    // Cache fields from /meta/{id}.json for fast getProgramListJson()
+// Ensure /meta/{id}.json fields are cached for a program (lazy load)
+void ProgramManager::ensureMetaLoaded(uint8_t id) const {
+    int idx = findProgramIndex(id);
+    if (idx < 0) return;
+    if (_programs[idx].loaded) return;  // Already cached
+
+    ProgramInfo& info = const_cast<ProgramInfo&>(_programs[idx]);
+
     String richMeta = Storage::loadProgramMeta(id);
     if (richMeta.length() > 2) {
         JsonDocument richDoc;
         if (!deserializeJson(richDoc, richMeta)) {
+            if (richDoc.containsKey("name"))     info.name = richDoc["name"].as<String>();
             if (richDoc.containsKey("author"))   info.author = richDoc["author"].as<String>();
             if (richDoc.containsKey("category")) info.category = richDoc["category"].as<String>();
             if (richDoc.containsKey("pulse"))    info.pulse = richDoc["pulse"].as<String>();
@@ -599,16 +607,10 @@ void ProgramManager::loadProgramMeta(uint8_t id) {
         }
     }
 
-    // Add to program list (or update existing)
-    xSemaphoreTake(_mutex, portMAX_DELAY);
-    int existing = findProgramIndex(id);
-    if (existing >= 0) {
-        _programs[existing] = info;
-    } else {
-        _programs.push_back(info);
+    // If still no name, use fallback
+    if (info.name.length() == 0) {
+        info.name = "Program " + String(id);
     }
-    xSemaphoreGive(_mutex);
 
-    Serial.printf("%s Program %u: '%s' (meta: %s)\r\n", TAG, id, info.name.c_str(),
-                  info.loaded ? "OK" : "none");
+    info.loaded = true;
 }

@@ -7,11 +7,11 @@ import { RootStackParamList } from '../types/navigation';
 import { useProgramStore } from '../store/useProgramStore';
 import { useFavoritesStore } from '../store/useFavoritesStore';
 import { useBleStore } from '../store/useBleStore';
-import { setActiveProgram } from '../ble/commands';
+import { setActiveProgram, setPower } from '../ble/commands';
 import BleStatusPill from '../components/BleStatusPill';
 import ProgramRow from '../components/ProgramRow';
 import ActionTile from '../components/ActionTile';
-import { MarketIcon, StarOutlineIcon, SettingsIcon } from '../components/Icon';
+import { MarketIcon, StarOutlineIcon, SettingsIcon, PowerIcon } from '../components/Icon';
 import { gradientColors } from '../utils/color';
 import { padId } from '../utils/format';
 import { fonts } from '../theme/typography';
@@ -23,7 +23,7 @@ export default function LibraryScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { programs, activeId, setActiveId } = useProgramStore();
   const { favorites } = useFavoritesStore();
-  const { connectionState, deviceInfo } = useBleStore();
+  const { connectionState, deviceInfo, powerOn, setPowerOn } = useBleStore();
 
   const activeProgram = programs.find((p) => p.id === activeId);
 
@@ -38,6 +38,19 @@ export default function LibraryScreen({ navigation }: Props) {
     setActiveId(id);
   }, [connectionState, setActiveId]);
 
+  const handlePowerToggle = useCallback(async () => {
+    const newState = !powerOn;
+    setPowerOn(newState);
+    if (connectionState === 'connected') {
+      try {
+        await setPower(newState);
+      } catch (err) {
+        console.warn('Failed to toggle power via BLE:', err);
+        setPowerOn(!newState); // revert on failure
+      }
+    }
+  }, [connectionState, powerOn, setPowerOn]);
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
       {/* Header */}
@@ -46,11 +59,20 @@ export default function LibraryScreen({ navigation }: Props) {
           <Text style={styles.headerLabel}>SHADES</Text>
           <Text style={styles.headerTitle}>Library</Text>
         </View>
-        <BleStatusPill
-          state={connectionState}
-          name={deviceInfo.name}
-          onPress={() => navigation.navigate('BleConnect')}
-        />
+        <View style={styles.headerRight}>
+          <Pressable
+            onPress={handlePowerToggle}
+            style={[styles.powerBtn, !powerOn && styles.powerBtnOff]}
+            hitSlop={8}
+          >
+            <PowerIcon size={18} color={powerOn ? '#4ADE80' : 'rgba(250,250,247,0.4)'} />
+          </Pressable>
+          <BleStatusPill
+            state={connectionState}
+            name={deviceInfo.name}
+            onPress={() => navigation.navigate('BleConnect')}
+          />
+        </View>
       </View>
 
       {/* Now Playing Hero */}
@@ -170,6 +192,22 @@ const styles = StyleSheet.create({
     color: colors.text,
     letterSpacing: -0.5,
     marginTop: 1,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  powerBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(74,222,128,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  powerBtnOff: {
+    backgroundColor: 'rgba(250,250,247,0.06)',
   },
   heroWrap: {
     paddingHorizontal: 20,
