@@ -127,7 +127,7 @@ void update(int tick_ms) {
             /* Chance to spawn */
             if (random_range(0, 100) < density) {
                 drop_active[i] = 1;
-                drop_y[i] = 0;
+                drop_y[i] = (H - 1) << 8;
                 drop_speed[i] = speed_inc + random_range(-20, 20);
                 if (drop_speed[i] < 30) drop_speed[i] = 30;
                 drop_hue[i] = (uint8_t)random8(); /* random color for this drop */
@@ -143,16 +143,16 @@ void update(int tick_ms) {
         }
 
         /* Move */
-        drop_y[i] += drop_speed[i];
+        drop_y[i] -= drop_speed[i];
         int new_iy = drop_y[i] >> 8;
 
         /* Fill skipped rows */
-        for (int fill = iy + 1; fill <= new_iy && fill < H; fill++) {
-            if (fill >= 0) fb_val[i][fill] = 255;
+        for (int fill = iy - 1; fill >= new_iy && fill >= 0; fill--) {
+            if (fill < H) fb_val[i][fill] = 255;
         }
 
         /* Deactivate if off bottom */
-        if (new_iy >= H + 5) {
+        if (new_iy < -5) {
             drop_active[i] = 0;
         }
     }
