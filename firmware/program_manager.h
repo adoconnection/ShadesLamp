@@ -22,6 +22,8 @@ struct ProgramInfo {
     String  category;
     String  pulse;
     String  coverJson;  // serialized cover object e.g. {"from":"#...","to":"#...","angle":135}
+    String  guid;
+    String  version;
 };
 
 class ProgramManager {
@@ -66,6 +68,10 @@ public:
 
     // Set a parameter value for a program
     bool setParam(uint8_t programId, uint8_t paramId, const uint8_t* value, size_t len);
+
+    // Program display order
+    String getOrderJson() const;
+    bool setOrder(const String& json);
 
     // Persist global config (active program, name, hw) to /config.json
     void saveConfig();
@@ -115,6 +121,8 @@ private:
     uint16_t _ledWidth;
     uint16_t _ledHeight;
     bool     _ledZigzag;
+
+    std::vector<uint8_t> _order;  // custom display order (program IDs)
 
     SemaphoreHandle_t _mutex;
 

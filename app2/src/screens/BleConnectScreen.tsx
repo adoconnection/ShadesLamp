@@ -13,10 +13,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Device } from 'react-native-ble-plx';
 import { RootStackParamList } from '../types/navigation';
 import { useBleStore } from '../store/useBleStore';
-import { useProgramStore } from '../store/useProgramStore';
-import { scanDevices, connectToDevice, setOnDisconnected } from '../ble/manager';
-import { getPrograms, getActiveProgram, getHwConfig, getDeviceName } from '../ble/commands';
-import { Program } from '../types/program';
+import { scanDevices } from '../ble/manager';
+import { connectAndLoadDevice } from '../ble/connectFlow';
 import NavButton from '../components/NavButton';
 import { BackIcon, RefreshIcon, BluetoothIcon, SignalIcon } from '../components/Icon';
 import { fonts } from '../theme/typography';
@@ -32,11 +30,11 @@ interface ScannedDevice {
 
 export default function BleConnectScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { connectionState, setConnectionState, setDeviceId, setDeviceMac, setDeviceInfo } = useBleStore();
-  const { setPrograms, setActiveId } = useProgramStore();
+  const { connectionState, setConnectionState } = useBleStore();
   const [scanning, setScanning] = useState(true);
   const [devices, setDevices] = useState<ScannedDevice[]>([]);
   const [connectingId, setConnectingId] = useState<string | null>(null);
+  const scanIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   const doScan = useCallback(() => {
     setScanning(true);
@@ -57,55 +55,21 @@ export default function BleConnectScreen({ navigation }: Props) {
 
   useEffect(() => {
     doScan();
+    scanIntervalRef.current = setInterval(doScan, 10000);
+    return () => {
+      if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
+    };
   }, [doScan]);
 
   const handleConnect = async (deviceId: string) => {
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current);
+      scanIntervalRef.current = null;
+    }
     setConnectingId(deviceId);
-    setConnectionState('connecting');
 
     try {
-      const device = await connectToDevice(deviceId);
-      setDeviceId(deviceId);
-      setDeviceMac(device.id);
-
-      // Set disconnect handler
-      setOnDisconnected(() => {
-        setConnectionState('disconnected');
-      });
-
-      // Load data from device
-      const [programList, activeId, hwConfig, deviceName] = await Promise.all([
-        getPrograms(),
-        getActiveProgram(),
-        getHwConfig(),
-        getDeviceName(),
-      ]);
-
-      // Map BLE response to Program objects
-      const programs: Program[] = (programList as any[]).map((p: any) => ({
-        id: p.id,
-        name: p.name || `Program ${p.id}`,
-        desc: '',
-        author: p.author || 'built-in',
-        size: '',
-        cover: p.cover || { from: '#555555', to: '#999999', angle: 135 },
-        pulse: p.pulse || '#888888',
-        category: p.category || 'Effects',
-        params: [],
-      }));
-
-      setPrograms(programs);
-      setActiveId(activeId);
-
-      // Update device info
-      setDeviceInfo({
-        name: deviceName,
-        mac: device.id,
-        matrix: hwConfig.ok ? `${hwConfig.width} × ${hwConfig.height}` : '—',
-        rssi: device.rssi ?? 0,
-      });
-
-      setConnectionState('connected');
+      await connectAndLoadDevice(deviceId);
       navigation.goBack();
     } catch (err) {
       console.warn('BLE connect error:', err);
@@ -144,45 +108,39 @@ export default function BleConnectScreen({ navigation }: Props) {
         </Text>
       </View>
 
-      {/* Device list */}
-      <View style={styles.listArea}>
-        <Text style={styles.listLabel}>NEARBY</Text>
-        <View style={styles.listCard}>
-          {devices.length === 0 && !scanning && (
-            <View style={styles.deviceRow}>
-              <Text style={styles.emptyText}>No devices found</Text>
-            </View>
-          )}
-          {devices.map((d, i) => (
-            <Pressable
-              key={d.id}
-              onPress={() => handleConnect(d.id)}
-              disabled={connectingId !== null}
-              style={[styles.deviceRow, i < devices.length - 1 && styles.deviceBorder]}
-            >
-              <View style={styles.bleIcon}>
-                <BluetoothIcon size={18} color="#60A5FA" />
-              </View>
-              <View style={styles.deviceInfo}>
-                <View style={styles.deviceNameRow}>
-                  <Text style={styles.deviceName}>{d.name}</Text>
-                  {connectingId === d.id && (
-                    <Text style={styles.connectingLabel}>connecting…</Text>
-                  )}
-                  {connectionState === 'connected' && connectingId === d.id && (
-                    <Text style={styles.connectedLabel}>● connected</Text>
-                  )}
+      {/* Device list — only shown when devices found */}
+      {devices.length > 0 && (
+        <View style={styles.listArea}>
+          <Text style={styles.listLabel}>NEARBY</Text>
+          <View style={styles.listCard}>
+            {devices.map((d, i) => (
+              <Pressable
+                key={d.id}
+                onPress={() => handleConnect(d.id)}
+                disabled={connectingId !== null}
+                style={[styles.deviceRow, i < devices.length - 1 && styles.deviceBorder]}
+              >
+                <View style={styles.bleIcon}>
+                  <BluetoothIcon size={18} color="#60A5FA" />
                 </View>
-                <Text style={styles.deviceMac}>{d.id} · {d.rssi} dBm</Text>
-              </View>
-              <SignalIcon rssi={d.rssi} color="rgba(250,250,247,0.5)" />
-            </Pressable>
-          ))}
+                <View style={styles.deviceInfo}>
+                  <View style={styles.deviceNameRow}>
+                    <Text style={styles.deviceName}>{d.name}</Text>
+                    {connectingId === d.id && (
+                      <Text style={styles.connectingLabel}>connecting…</Text>
+                    )}
+                    {connectionState === 'connected' && connectingId === d.id && (
+                      <Text style={styles.connectedLabel}>● connected</Text>
+                    )}
+                  </View>
+                  <Text style={styles.deviceMac}>{d.id.length > 17 ? d.id.slice(-17) : d.id} · {d.rssi} dBm</Text>
+                </View>
+                <SignalIcon rssi={d.rssi} color="rgba(250,250,247,0.5)" />
+              </Pressable>
+            ))}
+          </View>
         </View>
-        <Text style={styles.uuidLabel}>
-          Service UUID 0000ff00-0000-1000-8000-00805f9b34fb
-        </Text>
-      </View>
+      )}
     </ScrollView>
   );
 }

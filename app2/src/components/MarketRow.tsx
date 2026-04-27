@@ -25,6 +25,18 @@ export default function MarketRow({ item, installed, onPress }: MarketRowProps) 
           <Text style={styles.metaText}>{item.category}</Text>
           <Text style={styles.sep}>·</Text>
           <Text style={styles.metaText}>{item.author}</Text>
+          {item.rating != null && (
+            <>
+              <Text style={styles.sep}>·</Text>
+              <Text style={styles.metaText}>★ {item.rating.toFixed(1)}</Text>
+            </>
+          )}
+          {item.downloads != null && (
+            <>
+              <Text style={styles.sep}>·</Text>
+              <Text style={styles.metaText}>{item.downloads}</Text>
+            </>
+          )}
         </View>
       </View>
       <View style={[styles.actionBtn, { backgroundColor: installed ? 'transparent' : item.pulse + '22' }]}>

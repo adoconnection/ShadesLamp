@@ -38,6 +38,19 @@ void ProgramManager::begin() {
     // Load config (active program, device name, hw settings)
     loadConfig();
 
+    // Load custom order if exists
+    String orderStr = Storage::loadFile("/order.json");
+    if (orderStr.length() > 2) {
+        JsonDocument orderDoc;
+        if (!deserializeJson(orderDoc, orderStr)) {
+            JsonArray arr = orderDoc.as<JsonArray>();
+            for (JsonVariant v : arr) {
+                _order.push_back(v.as<uint8_t>());
+            }
+            Serial.printf("%s Loaded custom order: %u entries\r\n", TAG, _order.size());
+        }
+    }
+
     // If we have a saved active program, switch to it
     if (_activeId != 0xFF) {
         int idx = findProgramIndex(_activeId);
@@ -267,11 +280,29 @@ String ProgramManager::getProgramListJson() const {
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
 
-    for (const ProgramInfo& p : _programs) {
+    auto addProgram = [&](uint8_t id) {
+        int idx = findProgramIndex(id);
+        if (idx < 0) return;
+        const ProgramInfo& p = _programs[idx];
         ensureMetaLoaded(p.id);
         JsonObject obj = arr.add<JsonObject>();
         obj["id"] = p.id;
         obj["name"] = p.name;
+        if (p.guid.length() > 0)    obj["guid"] = p.guid;
+        if (p.version.length() > 0) obj["version"] = p.version;
+    };
+
+    if (_order.size() > 0) {
+        // Emit in custom order first
+        for (uint8_t id : _order) addProgram(id);
+        // Add any programs not in the order list
+        for (const ProgramInfo& p : _programs) {
+            bool found = false;
+            for (uint8_t oid : _order) { if (oid == p.id) { found = true; break; } }
+            if (!found) addProgram(p.id);
+        }
+    } else {
+        for (const ProgramInfo& p : _programs) addProgram(p.id);
     }
 
     String output;
@@ -604,6 +635,8 @@ void ProgramManager::ensureMetaLoaded(uint8_t id) const {
                 serializeJson(richDoc["cover"], coverStr);
                 info.coverJson = coverStr;
             }
+            if (richDoc.containsKey("guid"))    info.guid = richDoc["guid"].as<String>();
+            if (richDoc.containsKey("version")) info.version = richDoc["version"].as<String>();
         }
     }
 
@@ -613,4 +646,34 @@ void ProgramManager::ensureMetaLoaded(uint8_t id) const {
     }
 
     info.loaded = true;
+}
+
+String ProgramManager::getOrderJson() const {
+    JsonDocument doc;
+    JsonArray arr = doc.to<JsonArray>();
+
+    if (_order.size() > 0) {
+        for (uint8_t id : _order) arr.add(id);
+    } else {
+        for (const ProgramInfo& p : _programs) arr.add(p.id);
+    }
+
+    String output;
+    serializeJson(doc, output);
+    return output;
+}
+
+bool ProgramManager::setOrder(const String& json) {
+    JsonDocument doc;
+    if (deserializeJson(doc, json)) return false;
+
+    JsonArray arr = doc.as<JsonArray>();
+    _order.clear();
+    for (JsonVariant v : arr) {
+        _order.push_back(v.as<uint8_t>());
+    }
+
+    // Persist to /order.json
+    Storage::saveFile("/order.json", json.c_str());
+    return true;
 }

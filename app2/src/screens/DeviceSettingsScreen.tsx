@@ -6,7 +6,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { useBleStore } from '../store/useBleStore';
 import { useProgramStore } from '../store/useProgramStore';
-import { reboot } from '../ble/commands';
+import { reboot, setPower } from '../ble/commands';
 import NavButton from '../components/NavButton';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
@@ -19,7 +19,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'DeviceSettings'>;
 
 export default function DeviceSettingsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { deviceInfo, connectionState } = useBleStore();
+  const { deviceInfo, connectionState, powerOn, setPowerOn } = useBleStore();
   const { programs } = useProgramStore();
 
   const handleRestart = () => {
@@ -47,7 +47,7 @@ export default function DeviceSettingsScreen({ navigation }: Props) {
       </View>
 
       <View style={styles.titleArea}>
-        <Text style={styles.titleLabel}>ESP32-S3 · WasmLED</Text>
+        <Text style={styles.titleLabel}>{deviceInfo.mac || 'Shades Lamp'}</Text>
         <Text style={styles.title}>{deviceInfo.name}</Text>
       </View>
 
@@ -67,7 +67,6 @@ export default function DeviceSettingsScreen({ navigation }: Props) {
         </View>
         <View style={styles.statsGrid}>
           <StatBlock label="MATRIX" value={deviceInfo.matrix} />
-          <StatBlock label="UPTIME" value={deviceInfo.uptime} />
           <StatBlock label="FIRMWARE" value={deviceInfo.firmware} />
           <StatBlock
             label="STORAGE"
@@ -77,30 +76,26 @@ export default function DeviceSettingsScreen({ navigation }: Props) {
         </View>
       </View>
 
-      <SectionLabel>CONNECTION</SectionLabel>
-      <Card>
-        <SettingsRow
-          label="BLE Device"
-          detail={deviceInfo.name}
-          chev
-          onPress={() => navigation.navigate('BleConnect')}
-        />
-        <SettingsRow label="MAC Address" detail={deviceInfo.mac} mono />
-        <SettingsRow label="Service UUID" detail="…ff00" mono last />
-      </Card>
-
       <SectionLabel>PROGRAMS</SectionLabel>
       <Card>
-        <SettingsRow label="Installed" detail={`${programs.length} of 128`} chev />
-        <SettingsRow label="Auto-start last program" toggle defaultOn />
-        <SettingsRow label="Marketplace registry" detail="github" chev last />
+        <SettingsRow label="Installed" detail={`${programs.length} of 128`} last />
       </Card>
 
       <SectionLabel>DEVICE</SectionLabel>
       <Card>
         <SettingsRow label="Restart" onPress={handleRestart} />
-        <SettingsRow label="Wipe storage" danger />
-        <SettingsRow label="Firmware OTA update" detail="up to date" chev last />
+        <SettingsRow
+          label="Power"
+          toggle
+          defaultOn={powerOn}
+          onToggle={async (on: boolean) => {
+            setPowerOn(on);
+            if (connectionState === 'connected') {
+              try { await setPower(on); } catch (e) { setPowerOn(!on); }
+            }
+          }}
+          last
+        />
       </Card>
 
       <View style={styles.footer}>

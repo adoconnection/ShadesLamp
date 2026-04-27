@@ -7,12 +7,15 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import RootNavigator from './navigation/RootNavigator';
+import { useAutoReconnect } from './hooks/useAutoReconnect';
 
 if (Platform.OS !== 'web') {
   SplashScreen.preventAutoHideAsync().catch(() => {});
 }
 
 export default function App() {
+  useAutoReconnect();
+
   const [fontsLoaded, fontError] = useFonts({
     InterTight: require('../assets/fonts/InterTight-Regular.ttf'),
     'InterTight-Bold': require('../assets/fonts/InterTight-Bold.ttf'),

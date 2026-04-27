@@ -10,6 +10,8 @@ export interface MarketItem {
   coverSvg?: string;
   pulse: string;
   tags: string[];
+  rating?: number;
+  downloads?: number;
   wasmUrl: string;
   metaUrl: string;
   i18n?: { ru?: { name: string; desc: string } };

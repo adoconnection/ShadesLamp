@@ -1,5 +1,13 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
 import Cover from './Cover';
 import { ChevronIcon, StarSmallIcon } from './Icon';
 import { Program } from '../types/program';
@@ -12,22 +20,26 @@ interface ProgramRowProps {
   isFavorite?: boolean;
   onTap: () => void;
   onOpen: () => void;
+  onLongPress?: () => void;
+  isDragging?: boolean;
 }
 
-export default function ProgramRow({ program, active, isFavorite, onTap, onOpen }: ProgramRowProps) {
+export default function ProgramRow({ program, active, isFavorite, onTap, onOpen, onLongPress, isDragging }: ProgramRowProps) {
   return (
-    <View style={[styles.container, active && styles.containerActive]}>
+    <Pressable
+      onLongPress={onLongPress}
+      delayLongPress={200}
+      style={[styles.container, active && styles.containerActive, isDragging && styles.containerDragging]}
+    >
       <Pressable onPress={onTap} style={styles.coverWrap}>
         <Cover cover={program.cover} pulse={program.pulse} size={56} radius={12} animated={active} />
         {active && (
           <View style={styles.eqOverlay}>
             <View style={styles.eqBars}>
-              {[0, 1, 2, 3].map((i) => (
-                <View
-                  key={i}
-                  style={[styles.eqBar, { height: 6 + (i % 2) * 6 }]}
-                />
-              ))}
+              <EqBar duration={500} minH={4} maxH={14} delay={0} />
+              <EqBar duration={700} minH={4} maxH={16} delay={100} />
+              <EqBar duration={600} minH={4} maxH={12} delay={200} />
+              <EqBar duration={900} minH={4} maxH={14} delay={50} />
             </View>
           </View>
         )}
@@ -44,15 +56,35 @@ export default function ProgramRow({ program, active, isFavorite, onTap, onOpen 
           {isFavorite && <StarSmallIcon size={12} />}
         </View>
         <Text style={styles.meta} numberOfLines={1}>
-          {program.author} · {program.params.length} params · {program.size}
+          {program.author}{program.category ? ` · ${program.category}` : ''}
         </Text>
       </Pressable>
 
       <Pressable onPress={onOpen} style={styles.chevronBtn}>
         <ChevronIcon color="rgba(250,250,247,0.5)" />
       </Pressable>
-    </View>
+    </Pressable>
   );
+}
+
+function EqBar({ duration, minH, maxH, delay }: { duration: number; minH: number; maxH: number; delay: number }) {
+  const height = useSharedValue(minH);
+
+  useEffect(() => {
+    height.value = withRepeat(
+      withSequence(
+        withTiming(maxH, { duration, easing: Easing.inOut(Easing.ease) }),
+        withTiming(minH, { duration, easing: Easing.inOut(Easing.ease) }),
+      ),
+      -1,
+    );
+  }, []);
+
+  const style = useAnimatedStyle(() => ({
+    height: height.value,
+  }));
+
+  return <Animated.View style={[styles.eqBar, style]} />;
 }
 
 const styles = StyleSheet.create({
@@ -65,6 +97,14 @@ const styles = StyleSheet.create({
   },
   containerActive: {
     backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  containerDragging: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
   coverWrap: {
     position: 'relative',

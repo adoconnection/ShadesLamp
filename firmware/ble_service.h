@@ -36,6 +36,9 @@ class LedDriver;
 #define CMD_SET_META        0x26
 #define CMD_GET_POWER       0x27
 #define CMD_SET_POWER       0x28
+#define CMD_GET_STORAGE     0x29
+#define CMD_SET_ORDER       0x2A
+#define CMD_GET_ORDER       0x2B
 
 // Response chunk flags
 #define CHUNK_FLAG_FINAL    0x01

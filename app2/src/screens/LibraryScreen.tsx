@@ -1,13 +1,22 @@
-import React, { useCallback } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect } from 'react';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
+import { Program } from '../types/program';
 import { useProgramStore } from '../store/useProgramStore';
 import { useFavoritesStore } from '../store/useFavoritesStore';
 import { useBleStore } from '../store/useBleStore';
-import { setActiveProgram, setPower } from '../ble/commands';
+import { setActiveProgram, setPower, setOrder } from '../ble/commands';
 import BleStatusPill from '../components/BleStatusPill';
 import ProgramRow from '../components/ProgramRow';
 import ActionTile from '../components/ActionTile';
@@ -21,7 +30,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Library'>;
 
 export default function LibraryScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { programs, activeId, setActiveId } = useProgramStore();
+  const { programs, activeId, setActiveId, reorderPrograms } = useProgramStore();
   const { favorites } = useFavoritesStore();
   const { connectionState, deviceInfo, powerOn, setPowerOn } = useBleStore();
 
@@ -51,8 +60,33 @@ export default function LibraryScreen({ navigation }: Props) {
     }
   }, [connectionState, powerOn, setPowerOn]);
 
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
+  const handleDragEnd = useCallback(({ data }: { data: Program[] }) => {
+    reorderPrograms(data);
+    if (connectionState === 'connected') {
+      setOrder(data.map((p) => p.id)).catch(() => {});
+    }
+  }, [connectionState, reorderPrograms]);
+
+  const renderItem = useCallback(({ item: p, drag, isActive: isDragging }: RenderItemParams<Program>) => (
+    <ScaleDecorator>
+      <View style={styles.listItem}>
+        <ProgramRow
+          program={p}
+          active={p.id === activeId}
+          isFavorite={favorites.includes(p.id)}
+          onTap={() => handleActivate(p.id)}
+          onOpen={() => navigation.navigate('ProgramDetail', { programId: p.id })}
+          onLongPress={drag}
+          isDragging={isDragging}
+        />
+      </View>
+    </ScaleDecorator>
+  ), [activeId, favorites, handleActivate, navigation]);
+
+  const keyExtractor = useCallback((p: Program) => String(p.id), []);
+
+  const ListHeader = (
+    <>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View>
@@ -81,12 +115,30 @@ export default function LibraryScreen({ navigation }: Props) {
           onPress={() => navigation.navigate('ProgramDetail', { programId: activeProgram.id })}
           style={styles.heroWrap}
         >
-          <View style={styles.hero}>
+          <View style={[styles.hero, {
+            shadowColor: activeProgram.pulse,
+            shadowOffset: { width: 0, height: 20 },
+            shadowOpacity: 0.2,
+            shadowRadius: 25,
+            elevation: 12,
+          }]}>
             <LinearGradient
               colors={gradientColors(activeProgram.cover)}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={StyleSheet.absoluteFill}
+            />
+            <HeroOverlay
+              color={activeProgram.cover.via || activeProgram.cover.from}
+              startX={0.3}
+              startY={0.2}
+              duration={6000}
+            />
+            <HeroOverlay
+              color={activeProgram.cover.to}
+              startX={0.8}
+              startY={0.8}
+              duration={8000}
             />
             <View style={styles.heroContent}>
               <View style={styles.heroTop}>
@@ -149,21 +201,65 @@ export default function LibraryScreen({ navigation }: Props) {
         <Text style={styles.sectionTitle}>Installed</Text>
         <Text style={styles.sectionCount}>{programs.length} / 128</Text>
       </View>
+    </>
+  );
 
-      {/* Program list */}
-      <View style={styles.list}>
-        {programs.map((p) => (
-          <ProgramRow
-            key={p.id}
-            program={p}
-            active={p.id === activeId}
-            isFavorite={favorites.includes(p.id)}
-            onTap={() => handleActivate(p.id)}
-            onOpen={() => navigation.navigate('ProgramDetail', { programId: p.id })}
-          />
-        ))}
-      </View>
-    </ScrollView>
+  return (
+    <DraggableFlatList
+      data={programs}
+      keyExtractor={keyExtractor}
+      renderItem={renderItem}
+      onDragEnd={handleDragEnd}
+      ListHeaderComponent={ListHeader}
+      contentContainerStyle={{ paddingBottom: 80 }}
+      containerStyle={styles.container}
+      activationDistance={15}
+    />
+  );
+}
+
+function HeroOverlay({ color, startX, startY, duration }: {
+  color: string; startX: number; startY: number; duration: number;
+}) {
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+
+  useEffect(() => {
+    translateX.value = withRepeat(
+      withTiming(30, { duration, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true,
+    );
+    translateY.value = withRepeat(
+      withTiming(20, { duration: duration * 0.8, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      true,
+    );
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+    ],
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        StyleSheet.absoluteFill,
+        {
+          backgroundColor: color,
+          opacity: 0.35,
+          borderRadius: 999,
+          top: `${startY * 100 - 30}%`,
+          left: `${startX * 100 - 30}%`,
+          width: '60%',
+          height: '60%',
+        },
+        animStyle,
+      ]}
+    />
   );
 }
 
@@ -325,7 +421,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: 'rgba(250,250,247,0.5)',
   },
-  list: {
+  listItem: {
     paddingHorizontal: 12,
   },
 });

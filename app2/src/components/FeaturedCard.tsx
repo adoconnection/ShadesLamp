@@ -19,7 +19,7 @@ export default function FeaturedCard({ item, installed, onPress }: FeaturedCardP
   return (
     <Pressable onPress={onPress} style={styles.card}>
       {item.coverSvg ? (
-        <SvgXml xml={item.coverSvg} width="100%" height="100%" style={StyleSheet.absoluteFill} />
+        <SvgXml xml={item.coverSvg} width="100%" height="100%" preserveAspectRatio="xMidYMid slice" style={StyleSheet.absoluteFill} />
       ) : (
         <LinearGradient colors={gColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
       )}
@@ -38,7 +38,11 @@ export default function FeaturedCard({ item, installed, onPress }: FeaturedCardP
 
       <View style={styles.bottom}>
         <Text style={styles.name}>{item.name}</Text>
-        <Text style={styles.author}>{item.author}</Text>
+        <Text style={styles.author}>
+          {item.author}
+          {item.rating != null ? ` · ★ ${item.rating.toFixed(1)}` : ''}
+          {item.downloads != null ? ` · ${item.downloads}` : ''}
+        </Text>
       </View>
     </Pressable>
   );

@@ -18,7 +18,7 @@ interface BleStatusPillProps {
 
 export default function BleStatusPill({ state, name, onPress }: BleStatusPillProps) {
   const dotColor = state === 'connected' ? colors.green : state === 'connecting' ? colors.yellow : colors.gray;
-  const label = state === 'connected' ? (name || 'Connected') : state === 'connecting' ? 'Подключение…' : 'Не подключено';
+  const label = state === 'connected' ? (name || 'Connected') : state === 'connecting' ? 'Connecting…' : 'Not connected';
 
   const pulseOpacity = useSharedValue(1);
 

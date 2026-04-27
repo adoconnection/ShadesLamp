@@ -54,6 +54,10 @@ namespace Storage {
     // Delete /meta/{id}.json
     bool deleteProgramMeta(uint8_t id);
 
+    // Generic file save/load
+    bool saveFile(const char* path, const char* data);
+    String loadFile(const char* path);
+
 } // namespace Storage
 
 #endif // STORAGE_H

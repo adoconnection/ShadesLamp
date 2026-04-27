@@ -6,9 +6,10 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { useMarketStore } from '../store/useMarketStore';
 import { useBleStore } from '../store/useBleStore';
-import { uploadWasm, setMeta } from '../ble/commands';
+import { useProgramStore } from '../store/useProgramStore';
+import { uploadWasm, setMeta, setActiveProgram, deleteProgram as bleDeleteProgram } from '../ble/commands';
 import NavButton from '../components/NavButton';
-import { BackIcon, MoreIcon, DownloadIcon, CheckIcon } from '../components/Icon';
+import { BackIcon, DownloadIcon, CheckIcon, TrashIcon } from '../components/Icon';
 import { gradientColors } from '../utils/color';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
@@ -20,8 +21,9 @@ type Phase = 'idle' | 'downloading' | 'uploading' | 'verifying' | 'done' | 'erro
 export default function MarketDetailScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { itemId } = route.params;
-  const { catalog, installedSlugs, markInstalled } = useMarketStore();
+  const { catalog, installedSlugs, markInstalled, unmarkInstalled } = useMarketStore();
   const { connectionState } = useBleStore();
+  const { activeId, setActiveId, addProgram, removeProgram } = useProgramStore();
   const item = catalog.find((i) => i.slug === itemId);
 
   const installed = installedSlugs.includes(itemId);
@@ -29,6 +31,7 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
   const [progress, setProgress] = useState(installed ? 1 : 0);
   const [errorMsg, setErrorMsg] = useState('');
   const [wasmSize, setWasmSize] = useState(0);
+  const [installedId, setInstalledId] = useState<number | null>(null);
 
   if (!item) return null;
 
@@ -78,6 +81,26 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
         tags: item!.tags,
       });
 
+      // Auto-activate the new program
+      try {
+        await setActiveProgram(newId);
+        setActiveId(newId);
+      } catch {}
+
+      // Add to local program store
+      addProgram({
+        id: newId,
+        name: item!.name,
+        desc: item!.desc,
+        author: item!.author,
+        size: '',
+        cover: item!.cover,
+        pulse: item!.pulse,
+        category: item!.category,
+        params: [],
+      });
+
+      setInstalledId(newId);
       setProgress(1);
       setPhase('done');
       markInstalled(itemId);
@@ -104,7 +127,7 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
         />
         <View style={[styles.nav, { paddingTop: insets.top + 8 }]}>
           <NavButton icon={<BackIcon />} onPress={() => navigation.goBack()} />
-          <NavButton icon={<MoreIcon />} />
+          <View style={{ width: 36 }} />
         </View>
         <View style={styles.heroInfo}>
           <Text style={styles.heroLabel}>{item.category} · by {item.author}</Text>
@@ -149,14 +172,54 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
         )}
 
         {phase === 'done' && (
-          <View style={styles.doneCard}>
-            <View style={styles.doneCircle}>
-              <CheckIcon size={18} color="#0A0A08" />
+          <View style={{ gap: 10 }}>
+            <View style={styles.doneCard}>
+              <View style={styles.doneCircle}>
+                <CheckIcon size={18} color="#0A0A08" />
+              </View>
+              <View>
+                <Text style={styles.doneTitle}>
+                  {installedId != null && activeId === installedId ? 'Installed & Running' : 'Installed'}
+                </Text>
+                <Text style={styles.donePath}>littlefs:/programs/{item.slug}.wasm</Text>
+              </View>
             </View>
-            <View>
-              <Text style={styles.doneTitle}>Installed</Text>
-              <Text style={styles.donePath}>littlefs:/programs/{item.slug}.wasm</Text>
-            </View>
+            {installedId != null && activeId !== installedId && (
+              <Pressable
+                onPress={async () => {
+                  if (connected && installedId != null) {
+                    try {
+                      await setActiveProgram(installedId);
+                      setActiveId(installedId);
+                    } catch {}
+                  }
+                }}
+                style={[styles.installBtn, { backgroundColor: colors.green }]}
+              >
+                <Text style={styles.installText}>Run</Text>
+              </Pressable>
+            )}
+            <Pressable
+              onPress={async () => {
+                if (connected && installedId != null) {
+                  try {
+                    await bleDeleteProgram(installedId);
+                    removeProgram(installedId);
+                    unmarkInstalled(itemId);
+                    setInstalledId(null);
+                    setPhase('idle');
+                    setProgress(0);
+                  } catch (e: any) {
+                    setErrorMsg(e.message || 'Delete failed');
+                    setPhase('error');
+                  }
+                }
+              }}
+              style={styles.deleteBtn}
+            >
+              <TrashIcon color={colors.red} />
+              <Text style={styles.deleteText}>Remove from device</Text>
+            </Pressable>
           </View>
         )}
 
@@ -192,8 +255,7 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
       <View style={styles.techCard}>
         <TechRow label="Module" value={`${item.slug}/main.wasm`} />
         <TechRow label="Source" value="github.com/adoconnection/ShadesLamp" />
-        <TechRow label="Memory" value="1 page (64 KB)" />
-        <TechRow label="Target" value="wasm32-unknown" last />
+        <TechRow label="Memory" value="1 page (64 KB)" last />
       </View>
 
       <View style={{ height: 40 }} />
@@ -249,4 +311,6 @@ const styles = StyleSheet.create({
   sectionTitle: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 6, fontSize: 17, fontWeight: '700', color: colors.text, letterSpacing: -0.3 },
   aboutText: { paddingHorizontal: 20, paddingBottom: 16, fontSize: 14, color: 'rgba(250,250,247,0.7)', lineHeight: 22 },
   techCard: { marginHorizontal: 20, backgroundColor: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.06)', borderWidth: 0.5, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 6 },
+  deleteBtn: { backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  deleteText: { color: colors.red, fontSize: 14, fontWeight: '600' },
 });

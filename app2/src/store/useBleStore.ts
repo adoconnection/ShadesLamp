@@ -8,7 +8,6 @@ const DEFAULT_DEVICE_INFO: DeviceInfo = {
   firmware: '—',
   matrix: '—',
   storage: { used: 0, total: 256 },
-  uptime: '—',
   rssi: 0,
 };
 

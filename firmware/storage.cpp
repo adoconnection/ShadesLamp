@@ -264,4 +264,21 @@ bool deleteProgramMeta(uint8_t id) {
     return LittleFS.remove(path);
 }
 
+bool saveFile(const char* path, const char* data) {
+    File f = LittleFS.open(path, "w");
+    if (!f) return false;
+    f.print(data);
+    f.close();
+    return true;
+}
+
+String loadFile(const char* path) {
+    if (!LittleFS.exists(path)) return String();
+    File f = LittleFS.open(path, "r");
+    if (!f) return String();
+    String content = f.readString();
+    f.close();
+    return content;
+}
+
 } // namespace Storage

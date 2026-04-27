@@ -14,6 +14,5 @@ export interface DeviceInfo {
   firmware: string;
   matrix: string;
   storage: { used: number; total: number };
-  uptime: string;
   rssi: number;
 }

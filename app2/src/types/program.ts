@@ -20,10 +20,8 @@ export interface Param {
 export interface ProgramListItem {
   id: number;
   name: string;
-  author?: string;
-  category?: string;
-  cover?: Gradient;
-  pulse?: string;
+  guid?: string;
+  version?: string;
 }
 
 export interface Program {

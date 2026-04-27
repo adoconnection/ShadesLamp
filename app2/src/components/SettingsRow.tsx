@@ -12,6 +12,7 @@ interface SettingsRowProps {
   chev?: boolean;
   toggle?: boolean;
   defaultOn?: boolean;
+  onToggle?: (value: boolean) => void;
   danger?: boolean;
   last?: boolean;
   onPress?: () => void;
@@ -24,15 +25,21 @@ export default function SettingsRow({
   chev,
   toggle,
   defaultOn,
+  onToggle,
   danger,
   last,
   onPress,
 }: SettingsRowProps) {
   const [on, setOn] = useState(!!defaultOn);
 
+  const handleToggle = (v: boolean) => {
+    setOn(v);
+    onToggle?.(v);
+  };
+
   return (
     <Pressable
-      onPress={onPress || (toggle ? () => setOn(!on) : undefined)}
+      onPress={onPress || (toggle ? () => handleToggle(!on) : undefined)}
       style={[styles.row, !last && styles.border]}
     >
       <Text style={[styles.label, danger && styles.danger]}>{label}</Text>
@@ -40,7 +47,7 @@ export default function SettingsRow({
         <Text style={[styles.detail, mono && styles.mono]}>{detail}</Text>
       )}
       {chev && <ChevronIcon color="rgba(250,250,247,0.4)" />}
-      {toggle && <Toggle value={on} onChange={setOn} color={colors.text} />}
+      {toggle && <Toggle value={on} onChange={handleToggle} color={colors.text} />}
     </Pressable>
   );
 }

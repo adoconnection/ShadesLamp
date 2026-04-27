@@ -10,6 +10,7 @@ interface ProgramState {
   setProgramParams: (programId: number, params: Program['params']) => void;
   addProgram: (program: Program) => void;
   removeProgram: (programId: number) => void;
+  reorderPrograms: (programs: Program[]) => void;
 }
 
 export const useProgramStore = create<ProgramState>((set) => ({
@@ -43,4 +44,5 @@ export const useProgramStore = create<ProgramState>((set) => ({
       programs: state.programs.filter((p) => p.id !== programId),
       activeId: state.activeId === programId ? 0 : state.activeId,
     })),
+  reorderPrograms: (programs) => set({ programs }),
 }));

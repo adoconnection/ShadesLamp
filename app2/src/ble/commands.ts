@@ -121,4 +121,22 @@ export async function setPower(on: boolean): Promise<any> {
   return queue.enqueue(() => writeCommand(new Uint8Array([CMD.SET_POWER, on ? 1 : 0])));
 }
 
+export async function getStorage(): Promise<{ used: number; total: number; free: number }> {
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.GET_STORAGE])));
+}
+
+export async function getOrder(): Promise<number[]> {
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.GET_ORDER])));
+}
+
+export async function setOrder(ids: number[]): Promise<any> {
+  const json = JSON.stringify(ids);
+  const encoder = new TextEncoder();
+  const payload = encoder.encode(json);
+  const cmd = new Uint8Array(1 + payload.length);
+  cmd[0] = CMD.SET_ORDER;
+  cmd.set(payload, 1);
+  return queue.enqueue(() => writeCommand(cmd));
+}
+
 export { writeActiveProgram as setActiveProgram, readActiveProgram as getActiveProgram };

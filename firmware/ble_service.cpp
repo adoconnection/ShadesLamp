@@ -1,6 +1,7 @@
 #include "ble_service.h"
 #include "program_manager.h"
 #include "led_driver.h"
+#include <LittleFS.h>
 
 #define TAG "[BLE]"
 
@@ -260,11 +261,17 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
             }
 
             case CMD_GET_HW_CONFIG: {
-                char resp[128];
+                // Get chip serial from eFuse MAC
+                uint64_t mac = ESP.getEfuseMac();
+                char serial[16];
+                snprintf(serial, sizeof(serial), "%04X%08X",
+                    (uint16_t)(mac >> 32), (uint32_t)mac);
+
+                char resp[192];
                 snprintf(resp, sizeof(resp),
-                    "{\"ok\":true,\"pin\":%u,\"width\":%u,\"height\":%u,\"zigzag\":%s}",
+                    "{\"ok\":true,\"pin\":%u,\"width\":%u,\"height\":%u,\"zigzag\":%s,\"serial\":\"%s\"}",
                     pm->getLedPin(), pm->getLedWidth(), pm->getLedHeight(),
-                    pm->getLedZigzag() ? "true" : "false");
+                    pm->getLedZigzag() ? "true" : "false", serial);
                 Serial.printf("%s CMD GET_HW_CONFIG: %s\r\n", TAG, resp);
                 g_bleService->sendResponse(String(resp));
                 break;
@@ -354,6 +361,37 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 char buf[32];
                 snprintf(buf, sizeof(buf), "{\"ok\":true,\"power\":%s}", on ? "true" : "false");
                 g_bleService->sendResponse(buf);
+                break;
+            }
+
+            case CMD_GET_STORAGE: {
+                size_t total = LittleFS.totalBytes();
+                size_t used = LittleFS.usedBytes();
+                char resp[96];
+                snprintf(resp, sizeof(resp),
+                    "{\"ok\":true,\"used\":%u,\"total\":%u,\"free\":%u}",
+                    (unsigned)used, (unsigned)total, (unsigned)(total - used));
+                Serial.printf("%s CMD GET_STORAGE: %s\r\n", TAG, resp);
+                g_bleService->sendResponse(String(resp));
+                break;
+            }
+
+            case CMD_GET_ORDER: {
+                String order = pm->getOrderJson();
+                Serial.printf("%s CMD GET_ORDER: %s\r\n", TAG, order.c_str());
+                g_bleService->sendResponse(order);
+                break;
+            }
+
+            case CMD_SET_ORDER: {
+                // Payload: JSON array of program IDs
+                String json((const char*)payload, payloadLen);
+                Serial.printf("%s CMD SET_ORDER: %s\r\n", TAG, json.c_str());
+                if (pm->setOrder(json)) {
+                    g_bleService->sendResponse("{\"ok\":true}");
+                } else {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"invalid order\"}", true);
+                }
                 break;
             }
 

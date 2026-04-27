@@ -1,70 +1,78 @@
-# WasmLED — WASM-программируемый LED контроллер на ESP32-S3
+# Shades Lamp — WASM-программируемый LED контроллер на ESP32-S3
 
 ## Обзор
 
 Прошивка для ESP32-S3 (N16R8), которая выполняет WASM-программы для управления адресными светодиодами WS2812. Программы загружаются по BLE, хранятся в LittleFS. Управление через BLE: выбор программы, настройка параметров.
 
-**Железо:** ESP32-S3-DevKitC-1 N16R8 (16MB Flash, 8MB PSRAM), 1× WS2812 на GPIO 48.
-**Будущее:** матрица 32×32 (1024 LED). API проектируется с учётом этого.
+**Железо:** ESP32-S3-DevKitC-1 N16R8 (16MB Flash, 8MB PSRAM), WS2812 на GPIO 48 (настраивается).
+**Матрица:** произвольный размер (настраивается через BLE), поддержка zigzag-проводки.
+**Имя устройства:** "Shades Lamp" (по умолчанию "Shades LED Lamp").
 
 ---
 
 ## Архитектура
 
 ```
-┌─────────────────────────────────────────────┐
-│                 ESP32-S3                     │
-│                                              │
-│  ┌──────────┐  ┌──────────┐  ┌───────────┐  │
-│  │ BLE GATT │──│ Program  │──│  WASM3    │  │
-│  │ Service  │  │ Manager  │  │  Runtime  │  │
-│  └──────────┘  └──────────┘  └─────┬─────┘  │
-│                                    │         │
-│  ┌──────────┐  ┌──────────┐  ┌─────▼─────┐  │
-│  │ LittleFS │  │ Param    │  │ LED       │  │
-│  │ Storage  │  │ Store    │  │ Driver    │  │
-│  └──────────┘  └──────────┘  └───────────┘  │
-└─────────────────────────────────────────────┘
-         ▲ BLE
-         │
-┌────────▼────────┐
-│   C# Client     │
-│  (Console App)  │
-└─────────────────┘
++---------------------------------------------+
+|                 ESP32-S3                     |
+|                                              |
+|  +----------+  +----------+  +-----------+  |
+|  | BLE GATT |--| Program  |--| WASM3     |  |
+|  | Service  |  | Manager  |  | Runtime   |  |
+|  +----------+  +----------+  +-----+-----+  |
+|                                    |         |
+|  +----------+  +----------+  +-----v-----+  |
+|  | LittleFS |  | Param    |  | LED       |  |
+|  | Storage  |  | Store    |  | Driver    |  |
+|  +----------+  +----------+  +-----------+  |
++---------------------------------------------+
+         ^ BLE
+         |
++--------v--------+    +------------------+
+|  C# CLI Client  |    |  C# Console App  |
+| (client-cli/)   |    | (client-console/)|
++-----------------+    +------------------+
 ```
 
 ### Компоненты
 
 | Компонент | Ответственность |
 |-----------|----------------|
-| **LED Driver** | Абстракция над NeoPixel. Фреймбуфер `width × height × 3` байт. Методы `setPixel(x, y, r, g, b)` и `show()` |
+| **LED Driver** | Абстракция над NeoPixel. Фреймбуфер `width * height * 3` байт. Методы `setPixel(x, y, r, g, b)` и `show()`. Поддержка zigzag-проводки |
 | **WASM3 Runtime** | Загрузка и исполнение .wasm программ. Экспорт host-функций, вызов `update()` на каждом тике |
-| **Program Manager** | Загрузка/удаление программ из LittleFS, переключение активной программы, управление жизненным циклом |
-| **Param Store** | Хранение текущих значений параметров активной программы в RAM |
-| **BLE Service** | GATT-сервер: команды, ответы, загрузка WASM, уведомления |
-| **LittleFS Storage** | Файловая система во flash для .wasm файлов |
+| **Program Manager** | Загрузка/удаление программ из LittleFS, асинхронное переключение активной программы, управление жизненным циклом |
+| **Param Store** | Хранение текущих значений параметров активной программы в RAM. Сохранение в config.json с throttling (не чаще 1 раз в 2 сек) |
+| **BLE Service** | GATT-сервер: команды, ответы, загрузка WASM, уведомления. MTU negotiation |
+| **LittleFS Storage** | Файловая система во flash для .wasm файлов и конфигурации |
 
 ---
 
 ## WASM Program API
 
+### Система координат
+
+- **Y=0 — это НИЗ физического дисплея**, Y=H-1 — верх
+- "Падающие" эффекты = уменьшение Y, "поднимающиеся" = увеличение Y
+- X=0 — начало LED-ленты, X оборачивается по цилиндру
+
 ### Host-функции (импортируются WASM-программой из модуля `env`)
 
 ```c
 // Размер матрицы
-int      get_width();           // Ширина (1 для одиночного LED, 32 для матрицы)
-int      get_height();          // Высота (1 для одиночного LED, 32 для матрицы)
+int      get_width();           // Ширина матрицы
+int      get_height();          // Высота матрицы
 
 // Управление пикселями
-void     set_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b);
-void     draw();                // Применить изменения (flush framebuffer → LED strip)
+void     set_pixel(int x, int y, int r, int g, int b);
+void     draw();                // Применить изменения (flush framebuffer -> LED strip)
 
-// Чтение параметров
-int32_t  get_param_i32(int param_id);
-float    get_param_f32(int param_id);
+// Параметры
+int32_t  get_param_i32(int param_id);   // Чтение int/bool/select параметра
+float    get_param_f32(int param_id);   // Чтение float параметра
+void     set_param_i32(int param_id, int value);  // Запись параметра из программы
 ```
 
-### Экспортируемые функции (WASM → Host)
+### Экспортируемые функции (WASM -> Host)
 
 ```c
 void     init();                    // Вызывается один раз при загрузке программы
@@ -75,12 +83,35 @@ int32_t  get_meta_ptr();
 int32_t  get_meta_len();
 ```
 
+### tick_ms — ВАЖНО
+
+`tick_ms` — это **полное время в миллисекундах с момента старта программы**, а НЕ дельта между кадрами.
+
+Два паттерна использования:
+
+**1. Время как фаза (для синусоид, вращений)** — используем tick_ms напрямую:
+```c
+float t = (float)tick_ms * (float)speed * 0.00003f;
+float wave = fsin(t);
+```
+
+**2. Физика с dt (гравитация, скорость)** — вычисляем дельту вручную:
+```c
+static int32_t prev_tick;
+// В init(): prev_tick = 0;
+// В update():
+int32_t delta_ms = tick_ms - prev_tick;
+if (delta_ms <= 0 || delta_ms > 200) delta_ms = 33;
+prev_tick = tick_ms;
+float dt = (float)delta_ms / 1000.0f;
+```
+
 ### Формат метаданных (JSON в WASM memory)
 
 ```json
 {
   "name": "Rainbow",
-  "desc": "Плавная радуга",
+  "desc": "Smooth HSV rainbow",
   "params": [
     {
       "id": 0,
@@ -89,40 +120,17 @@ int32_t  get_meta_len();
       "min": 1,
       "max": 100,
       "default": 50,
-      "desc": "Скорость анимации"
+      "desc": "Animation speed"
     },
     {
       "id": 1,
-      "name": "Brightness",
-      "type": "int",
-      "min": 1,
-      "max": 255,
-      "default": 128,
-      "desc": "Яркость"
-    },
-    {
-      "id": 2,
-      "name": "Reverse",
-      "type": "bool",
-      "default": 0,
-      "desc": "Обратное направление"
-    },
-    {
-      "id": 3,
-      "name": "Saturation",
-      "type": "float",
-      "min": 0.0,
-      "max": 1.0,
-      "default": 1.0,
-      "desc": "Насыщенность"
-    },
-    {
-      "id": 4,
       "name": "Mode",
-      "type": "select",
+      "type": "int",
+      "min": 0,
+      "max": 2,
       "options": ["Wave", "Solid", "Pulse"],
       "default": 0,
-      "desc": "Режим отображения"
+      "desc": "Display mode"
     }
   ]
 }
@@ -134,46 +142,23 @@ int32_t  get_meta_len();
 |-----|----------|------|-------------|
 | `int` | int32 | `min`, `max`, `default` | `get_param_i32(id)` |
 | `float` | float32 | `min`, `max`, `default` | `get_param_f32(id)` |
-| `bool` | int32 (0/1) | `default` | `get_param_i32(id)` |
-| `select` | int32 (index) | `options[]`, `default` | `get_param_i32(id)` |
+| `select` | int32 (index) | `options[]`, `default`, `min`=0, `max`=N-1 | `get_param_i32(id)` |
+| switch (On/Off) | int32 (0/1) | `options: ["Off","On"]`, `default` | `get_param_i32(id)` |
 
-### Пример WASM-программы на C (RGB Cycle)
+### WASM-компиляция
 
-```c
-#include "wasmlеd.h"  // минимальные объявления host-функций
-
-static const char META[] =
-  "{\"name\":\"RGB Cycle\",\"desc\":\"Перебор R-G-B\","
-  "\"params\":["
-    "{\"id\":0,\"name\":\"Speed\",\"type\":\"int\",\"min\":1,\"max\":200,\"default\":50,\"desc\":\"Скорость\"}"
-  "]}";
-
-__attribute__((export_name("get_meta_ptr")))
-int get_meta_ptr() { return (int)META; }
-
-__attribute__((export_name("get_meta_len")))
-int get_meta_len() { return sizeof(META) - 1; }
-
-__attribute__((export_name("init")))
-void init() {}
-
-__attribute__((export_name("update")))
-void update(int tick_ms) {
-    int speed = get_param_i32(0);
-    int w = get_width();
-    int h = get_height();
-
-    int phase = (tick_ms * speed / 1000) % 3;
-    uint8_t r = (phase == 0) ? 255 : 0;
-    uint8_t g = (phase == 1) ? 255 : 0;
-    uint8_t b = (phase == 2) ? 255 : 0;
-
-    for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++)
-            set_pixel(x, y, r, g, b);
-    draw();
-}
+```bash
+clang --target=wasm32 -nostdlib -O2 \
+  -Wl,--no-entry -Wl,--export-dynamic -Wl,--allow-undefined \
+  -I programs/common \
+  -o programs/<name>/main.wasm programs/<name>/main.c
 ```
+
+**Ограничения:**
+- Нет stdlib (нужны свои sin, sqrt, rand и т.д.)
+- WASM memory: 1 page (64 KB) — статические массивы живут здесь, не на C-стеке
+- Максимальный размер .wasm: ~64 KB
+- `MAX_W=64`, `MAX_H=64` для статических фреймбуферов
 
 ---
 
@@ -193,6 +178,7 @@ SERVICE:  0000ff00-0000-1000-8000-00805f9b34fb
 | `ff02` | Response | NOTIFY | Устройство отправляет ответы (с чанкированием) |
 | `ff03` | Active Program | READ / WRITE / NOTIFY | Текущий ID программы (uint8). Запись переключает программу |
 | `ff04` | Upload | WRITE_NR | Чанки WASM-файла при загрузке |
+| `ff05` | Param Values | NOTIFY | Уведомление об изменении параметров |
 
 ### Формат Response (чанкированный)
 
@@ -204,29 +190,22 @@ SERVICE:  0000ff00-0000-1000-8000-00805f9b34fb
 - `flags`: bit 0 = последний чанк (FINAL), bit 1 = ошибка (ERROR)
 - `payload` — данные (до MTU-2 байт)
 
-Клиент собирает чанки до получения пакета с флагом FINAL, склеивает payload.
-
-### Команды (Command characteristic)
+### Команды
 
 | Код | Команда | Payload | Ответ |
 |-----|---------|---------|-------|
 | `0x01` | GET_PROGRAMS | — | JSON: `[{"id":0,"name":"RGB Cycle"},...]` |
 | `0x02` | GET_PARAMS | `[program_id: uint8]` | JSON: массив параметров из мета |
-| `0x03` | SET_PARAM | `[program_id: uint8, param_id: uint8, value: 4 bytes]` | `{"ok":true}` или `{"ok":false,"err":"..."}` |
-| `0x04` | GET_PARAM_VALUES | `[program_id: uint8]` | JSON: `{"0":50,"1":128,...}` (id→значение) |
-| `0x10` | UPLOAD_START | `[total_size: uint32_le]` | `{"ok":true}` или `{"ok":false,"err":"..."}` |
-| `0x11` | UPLOAD_FINISH | — | `{"ok":true,"id":3}` — ID новой программы |
-| `0x12` | DELETE_PROGRAM | `[program_id: uint8]` | `{"ok":true}` или `{"ok":false,"err":"..."}` |
-
-### Протокол загрузки WASM
-
-1. Клиент → `UPLOAD_START` с размером файла
-2. ESP выделяет буфер (в PSRAM), отвечает OK
-3. Клиент → пишет чанки в `Upload` characteristic (WRITE_NR, без ответа — быстро)
-4. Клиент → `UPLOAD_FINISH`
-5. ESP валидирует WASM (пробует загрузить в WASM3), извлекает метаданные
-6. Если ОК — сохраняет в LittleFS, отвечает с ID новой программы
-7. Если ошибка — отвечает с описанием ошибки
+| `0x03` | SET_PARAM | `[program_id: uint8, param_id: uint8, value: 4 bytes LE]` | `{"ok":true}` |
+| `0x04` | GET_PARAM_VALUES | `[program_id: uint8]` | JSON: `{"0":50,"1":128,...}` |
+| `0x10` | UPLOAD_START | `[total_size: uint32_le]` | `{"ok":true}` |
+| `0x11` | UPLOAD_FINISH | — | `{"ok":true,"id":3}` |
+| `0x12` | DELETE_PROGRAM | `[program_id: uint8]` | `{"ok":true}` |
+| `0x20` | SET_NAME | `[name: string]` | `{"ok":true}` |
+| `0x21` | GET_NAME | — | `{"ok":true,"name":"Shades Lamp"}` |
+| `0x22` | GET_HW_CONFIG | — | `{"ok":true,"pin":48,"width":16,"height":16,"zigzag":true}` |
+| `0x23` | SET_HW_CONFIG | `[pin:1, width:2 LE, height:2 LE, flags:1]` | `{"ok":true,"reboot":true}` |
+| `0x30` | REBOOT | — | `{"ok":true}` |
 
 ---
 
@@ -234,145 +213,135 @@ SERVICE:  0000ff00-0000-1000-8000-00805f9b34fb
 
 ```
 /
-├── programs/
-│   ├── 0.wasm          # Программа с ID=0
-│   ├── 1.wasm          # Программа с ID=1
-│   └── 2.wasm          # ...
-└── config.json          # Настройки: активная программа, значения параметров
++-- programs/
+|   +-- 0.wasm          # Программа с ID=0
+|   +-- 1.wasm
+|   +-- ...
++-- config.json          # Настройки: активная программа, hw config, параметры
 ```
 
 ### config.json
 
 ```json
 {
-  "active": 0,
+  "active": 7,
+  "ledPin": 48,
+  "ledWidth": 16,
+  "ledHeight": 16,
+  "zigzag": true,
+  "name": "Shades Lamp",
   "params": {
-    "0": {"0": 50, "1": 128},
-    "1": {"0": 30},
-    "2": {}
+    "7": {"0": 25, "1": 200},
+    "8": {"0": 50}
   }
 }
 ```
 
-При старте ESP:
-1. Монтирует LittleFS
-2. Читает `config.json`
-3. Загружает все .wasm из `programs/`, извлекает метаданные
-4. Запускает активную программу с сохранёнными параметрами
-
 ---
 
-## Структура прошивки
+## Структура проекта
 
 ```
 esp32-led-test/
-├── firmware/
-│   ├── esp32-led-test.ino          # Главный скетч: setup(), loop(), FreeRTOS tasks
-│   ├── led_driver.h / .cpp         # LED Driver: фреймбуфер, NeoPixel
-│   ├── wasm_engine.h / .cpp        # WASM3 обёртка: загрузка, host-функции, tick
-│   ├── program_manager.h / .cpp    # Управление программами: load, switch, delete
-│   ├── ble_service.h / .cpp        # BLE GATT сервер
-│   ├── storage.h / .cpp            # LittleFS + config
-│   └── param_store.h / .cpp        # Параметры программ в RAM
-├── programs/                        # Исходники WASM-программ (C)
-│   ├── common/
-│   │   └── api.h                   # Объявления host-функций
-│   ├── rgb_cycle/
-│   │   └── main.c
-│   ├── rainbow/
-│   │   └── main.c
-│   └── random_blink/
-│       └── main.c
-├── client/
-│   ├── WasmLedClient.csproj
-│   └── Program.cs
-├── tools/
-│   └── build_wasm.bat              # Скрипт сборки .wasm из C (clang --target=wasm32)
-├── SPEC.md
-└── README.md
++-- firmware/
+|   +-- firmware.ino              # Главный скетч: setup(), renderTask()
+|   +-- led_driver.h / .cpp       # LED Driver: фреймбуфер, NeoPixel, zigzag
+|   +-- wasm_engine.h / .cpp      # WASM3 обёртка: загрузка, host-функции, tick
+|   +-- program_manager.h / .cpp  # Управление программами: load, switch, delete
+|   +-- ble_service.h / .cpp      # BLE GATT сервер
+|   +-- storage.h / .cpp          # LittleFS + config
+|   +-- param_store.h / .cpp      # Параметры программ в RAM
+|   +-- partitions.csv            # Custom partition table (4MB app + 12MB spiffs)
++-- programs/                      # Исходники WASM-программ (C)
+|   +-- common/
+|   |   +-- api.h                 # Объявления host-функций
+|   +-- aurora/
+|   +-- bouncing_balls/
+|   +-- breathing/
+|   +-- clouds/
+|   +-- comet/
+|   +-- confetti/
+|   +-- core/
+|   +-- cube/
+|   +-- dna/
+|   +-- electrons/
+|   +-- fireflies/
+|   +-- flame/
+|   +-- flame_particle/
+|   +-- helix/
+|   +-- hexagons/
+|   +-- jellyfish/
+|   +-- kaleidoscope/
+|   +-- lava/
+|   +-- lava_lamp/
+|   +-- matrix_rain/
+|   +-- matrix_test/
+|   +-- metaballs/
+|   +-- moire/
+|   +-- morphing/
+|   +-- ocean/
+|   +-- plasma/
+|   +-- police/
+|   +-- popcorn/
+|   +-- pulse/
+|   +-- rainbow/
+|   +-- random_blink/
+|   +-- rgb_cycle/
+|   +-- sinusoid/
+|   +-- snow/
+|   +-- solid_color/
+|   +-- spirals/
+|   +-- starfall/
+|   +-- colored_rain/
+|   +-- tricolor/
+|   +-- twinkling/
+|   +-- vortex/
+|   +-- warp/
+|   +-- waves/
++-- client-cli/                   # CLI-клиент (C#)
+|   +-- WasmLedCli.csproj
+|   +-- Program.cs
++-- client-console/               # Консольный клиент (C#)
+|   +-- WasmLedClient.csproj
+|   +-- Program.cs
++-- app/                          # MAUI-приложение
++-- SPEC.md
++-- .gitignore
 ```
 
 ---
 
 ## FreeRTOS задачи
 
-| Задача | Core | Приоритет | Описание |
-|--------|------|-----------|----------|
-| `renderTask` | 1 | 2 | Основной цикл: вызывает `wasm_update()` каждые ~33ms (30 FPS) |
-| `bleTask` | 0 | 1 | Обработка BLE-событий (Arduino BLE работает на Core 0 по умолчанию) |
+| Задача | Core | Приоритет | Stack | Описание |
+|--------|------|-----------|-------|----------|
+| `renderTask` | 1 | 2 | **64 KB** | Основной цикл: `processPending()` + `wasm_update()` каждые ~33ms (30 FPS) |
+| BLE (Arduino) | 0 | 1 | default | Обработка BLE-событий |
 
-`loop()` остаётся пустым или используется для watchdog.
+**Важно:** Arduino `loop()` на Core 1 вытесняется renderTask (приоритет 2). Вся логика (переключение программ, тики, уведомления) выполняется внутри `renderTask`. `loop()` содержит только `vTaskDelay(1000)`.
+
+Stack renderTask = 64 KB, потому что `switchProgram()` (JSON-парсинг + инициализация wasm3) и `tick()` (интерпретатор wasm3) выполняются в одном таске.
 
 ---
 
-## C# клиент
+## C# клиенты
 
-### Функциональность
+### CLI (client-cli/)
 
-- Сканирование BLE, подключение к устройству по Service UUID
-- Главное меню:
-  ```
-  === WasmLED Controller ===
-  Connected to: WasmLED (XX:XX:XX:XX:XX:XX)
+```bash
+dotnet run --project client-cli/ -- <command> [args]
+```
 
-  Programs:
-    [*] 0: RGB Cycle
-    [ ] 1: Rainbow
-    [ ] 2: Random Blink
+Команды: `scan`, `list`, `upload <file.wasm>`, `delete <id>`, `activate <id>`, `params <id>`, `set-param <prog> <par> <val>`, `rename <name>`, `hw-config`, `set-hw-config`, `reboot`.
 
-  [1-9] Select program  [P] Parameters  [U] Upload  [D] Delete  [Q] Quit
-  ```
-- Меню параметров:
-  ```
-  === RGB Cycle — Parameters ===
+### Console (client-console/)
 
-  0: Speed     = 50    (int, 1..200)
-  1: Brightness = 128  (int, 1..255)
-
-  Enter: <id> <value>  |  [B] Back
-  > 0 80
-  Speed set to 80
-  ```
-- Загрузка WASM: указать путь к .wasm файлу, клиент отправляет по BLE
+Интерактивный TUI с меню.
 
 ### Зависимости
 
-- .NET 9.0, `net9.0-windows10.0.19041.0`
-- `Windows.Devices.Bluetooth` (Windows SDK)
-- Без внешних NuGet-пакетов
-
----
-
-## Три встроенные программы
-
-### 1. RGB Cycle
-Перебор чистых цветов: красный → зелёный → синий → красный.
-
-**Параметры:**
-| ID | Имя | Тип | Диапазон | Default | Описание |
-|----|-----|-----|----------|---------|----------|
-| 0 | Speed | int | 1–200 | 50 | Скорость перебора |
-| 1 | Brightness | int | 1–255 | 255 | Яркость |
-
-### 2. Rainbow
-Плавная HSV-радуга, hue вращается по кругу.
-
-**Параметры:**
-| ID | Имя | Тип | Диапазон | Default | Описание |
-|----|-----|-----|----------|---------|----------|
-| 0 | Speed | int | 1–100 | 30 | Скорость вращения |
-| 1 | Brightness | int | 1–255 | 128 | Яркость |
-| 2 | Saturation | float | 0.0–1.0 | 1.0 | Насыщенность |
-
-### 3. Random Blink
-Случайные цветные вспышки.
-
-**Параметры:**
-| ID | Имя | Тип | Диапазон | Default | Описание |
-|----|-----|-----|----------|---------|----------|
-| 0 | Speed | int | 1–100 | 50 | Частота вспышек |
-| 1 | Brightness | int | 1–255 | 200 | Яркость |
-| 2 | Fade | bool | — | 1 | Плавное затухание |
+- .NET 9.0, `net9.0-windows10.0.19041.0`, win-x64
+- `Windows.Devices.Bluetooth` (Windows SDK, без NuGet)
 
 ---
 
@@ -381,42 +350,22 @@ esp32-led-test/
 ### Прошивка
 
 ```bash
-# Установить arduino-cli, добавить ESP32 board package
-arduino-cli core install esp32:esp32
-
-# Компиляция
-arduino-cli compile --fqbn esp32:esp32:esp32s3 --build-property "build.partitions=default_16MB" firmware/
-
-# Прошивка
-arduino-cli upload --fqbn esp32:esp32:esp32s3 --port COM3 firmware/
+arduino-cli compile --fqbn "esp32:esp32:esp32s3:PSRAM=opi,FlashSize=16M,PartitionScheme=custom" firmware/
+arduino-cli upload --fqbn "esp32:esp32:esp32s3:PSRAM=opi,FlashSize=16M,PartitionScheme=custom" --port COM13 firmware/
 ```
 
 ### WASM-программы
 
-Требуется: [WASI SDK](https://github.com/WebAssembly/wasi-sdk) или clang с wasm32 target.
-
 ```bash
-clang --target=wasm32 -nostdlib -O2 \
-  -Wl,--no-entry -Wl,--export-all -Wl,--allow-undefined \
-  -o rgb_cycle.wasm programs/rgb_cycle/main.c
+"C:\Program Files\LLVM\bin\clang.exe" --target=wasm32 -nostdlib -O2 \
+  -Wl,--no-entry -Wl,--export-dynamic -Wl,--allow-undefined \
+  -I programs/common \
+  -o programs/<name>/main.wasm programs/<name>/main.c
 ```
 
 ### C# клиент
 
 ```bash
-cd client
-dotnet build -r win-x64
-dotnet run
+dotnet build client-cli/
+dotnet run --project client-cli/ -- list
 ```
-
----
-
-## Ограничения и допущения (MVP)
-
-- Максимум 16 программ одновременно
-- Максимальный размер .wasm файла: 64 KB
-- WASM memory: 1 page (64 KB) — достаточно для MVP
-- Параметры хранятся в RAM, персистятся в config.json при изменении
-- BLE MTU: минимум 20 байт (работает с любым клиентом), оптимально 512
-- Один клиент одновременно (BLE single connection)
-- WASM3 runtime в PSRAM для экономии основной RAM

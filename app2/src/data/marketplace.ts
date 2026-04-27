@@ -132,7 +132,6 @@ export const DEVICE_INFO: DeviceInfo = {
   firmware: 'v0.4.1',
   matrix: '16 × 32',
   storage: { used: 31, total: 256 },
-  uptime: '4d 12h',
   rssi: -52,
 };
 

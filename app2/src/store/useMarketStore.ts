@@ -18,6 +18,7 @@ interface MarketState {
   error: string | null;
   fetchCatalog: () => Promise<void>;
   markInstalled: (slug: string) => void;
+  unmarkInstalled: (slug: string) => void;
   isInstalled: (slug: string) => boolean;
 }
 
@@ -75,6 +76,11 @@ export const useMarketStore = create<MarketState>((set, get) => ({
   markInstalled: (slug) =>
     set((state) => ({
       installedSlugs: [...new Set([...state.installedSlugs, slug])],
+    })),
+
+  unmarkInstalled: (slug) =>
+    set((state) => ({
+      installedSlugs: state.installedSlugs.filter((s) => s !== slug),
     })),
 
   isInstalled: (slug) => get().installedSlugs.includes(slug),

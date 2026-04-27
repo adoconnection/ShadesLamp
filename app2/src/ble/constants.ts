@@ -25,6 +25,9 @@ export const CMD = {
   SET_META:        0x26,
   GET_POWER:       0x27,
   SET_POWER:       0x28,
+  GET_STORAGE:     0x29,
+  SET_ORDER:       0x2A,
+  GET_ORDER:       0x2B,
 } as const;
 
 export const FLAG_FINAL = 0x01;
