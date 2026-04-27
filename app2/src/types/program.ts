@@ -30,8 +30,11 @@ export interface Program {
   desc: string;
   author: string;
   size: string;
+  version?: string;
   cover: Gradient;
+  coverSvg?: string;
   pulse: string;
   category: string;
   params: Param[];
+  slug?: string;
 }

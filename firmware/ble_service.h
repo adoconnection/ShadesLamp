@@ -18,6 +18,11 @@ class LedDriver;
 #define CHAR_ACTIVE_UUID    "0000ff03-0000-1000-8000-00805f9b34fb"
 #define CHAR_UPLOAD_UUID    "0000ff04-0000-1000-8000-00805f9b34fb"
 #define CHAR_PARAM_VALUES_UUID "0000ff05-0000-1000-8000-00805f9b34fb"
+#define CHAR_EVENTS_UUID       "0000ff06-0000-1000-8000-00805f9b34fb"
+
+// Event types for CHAR_EVENTS notifications
+#define EVT_PROGRAM_ADDED   0x01
+#define EVT_PROGRAM_DELETED 0x02
 
 // Command codes
 #define CMD_GET_PROGRAMS    0x01
@@ -60,6 +65,9 @@ public:
     // Notify all clients with current parameter values JSON (chunked)
     void notifyParamValues();
 
+    // Notify clients about program list changes (added/deleted)
+    void notifyEvent(uint8_t eventType, uint8_t programId);
+
     // Check if a client is connected
     bool isConnected() const;
 
@@ -97,6 +105,7 @@ private:
     BLECharacteristic*  _charActive;
     BLECharacteristic*  _charUpload;
     BLECharacteristic*  _charParamValues;
+    BLECharacteristic*  _charEvents;
 
     uint16_t _connectedClients;
     uint16_t _negotiatedMtu;

@@ -54,6 +54,7 @@ export const useMarketStore = create<MarketState>((set, get) => ({
                 desc: meta.desc || '',
                 category: meta.category || 'Effects',
                 cover: meta.cover || { from: '#333', to: '#666', angle: 135 },
+                version: meta.version,
                 coverSvg: meta.coverSvg,
                 pulse: meta.pulse || '#FFFFFF',
                 tags: meta.tags || [],

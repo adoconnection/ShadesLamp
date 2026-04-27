@@ -6,6 +6,7 @@ export interface MarketItem {
   author: string;
   desc: string;
   category: string;
+  version?: string;
   cover: Gradient;
   coverSvg?: string;
   pulse: string;

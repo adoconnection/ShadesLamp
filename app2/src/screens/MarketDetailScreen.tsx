@@ -26,12 +26,16 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
   const { activeId, setActiveId, addProgram, removeProgram } = useProgramStore();
   const item = catalog.find((i) => i.slug === itemId);
 
+  const { programs } = useProgramStore();
   const installed = installedSlugs.includes(itemId);
+
+  // Find the device program ID for this marketplace item by matching slug
+  const existingProgram = programs.find((p) => p.slug === itemId);
   const [phase, setPhase] = useState<Phase>(installed ? 'done' : 'idle');
   const [progress, setProgress] = useState(installed ? 1 : 0);
   const [errorMsg, setErrorMsg] = useState('');
   const [wasmSize, setWasmSize] = useState(0);
-  const [installedId, setInstalledId] = useState<number | null>(null);
+  const [installedId, setInstalledId] = useState<number | null>(existingProgram?.id ?? null);
 
   if (!item) return null;
 
@@ -77,8 +81,10 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
         author: item!.author,
         category: item!.category,
         cover: item!.cover,
+        coverSvg: item!.coverSvg,
         pulse: item!.pulse,
         tags: item!.tags,
+        slug: item!.slug,
       });
 
       // Auto-activate the new program
@@ -95,9 +101,11 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
         author: item!.author,
         size: '',
         cover: item!.cover,
+        coverSvg: item!.coverSvg,
         pulse: item!.pulse,
         category: item!.category,
         params: [],
+        slug: item!.slug,
       });
 
       setInstalledId(newId);
@@ -130,7 +138,7 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
           <View style={{ width: 36 }} />
         </View>
         <View style={styles.heroInfo}>
-          <Text style={styles.heroLabel}>{item.category} · by {item.author}</Text>
+          <Text style={styles.heroLabel}>{item.category} · by {item.author}{item.version ? ` · v${item.version}` : ''}</Text>
           <Text style={styles.heroTitle}>{item.name}</Text>
           <Text style={styles.heroDesc}>{item.desc}</Text>
         </View>
@@ -177,28 +185,27 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
               <View style={styles.doneCircle}>
                 <CheckIcon size={18} color="#0A0A08" />
               </View>
-              <View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.doneTitle}>
                   {installedId != null && activeId === installedId ? 'Installed & Running' : 'Installed'}
                 </Text>
-                <Text style={styles.donePath}>littlefs:/programs/{item.slug}.wasm</Text>
               </View>
+              {installedId != null && activeId !== installedId && (
+                <Pressable
+                  onPress={async () => {
+                    if (connected && installedId != null) {
+                      try {
+                        await setActiveProgram(installedId);
+                        setActiveId(installedId);
+                      } catch {}
+                    }
+                  }}
+                  style={styles.playBtn}
+                >
+                  <Text style={styles.playText}>▶ Run</Text>
+                </Pressable>
+              )}
             </View>
-            {installedId != null && activeId !== installedId && (
-              <Pressable
-                onPress={async () => {
-                  if (connected && installedId != null) {
-                    try {
-                      await setActiveProgram(installedId);
-                      setActiveId(installedId);
-                    } catch {}
-                  }
-                }}
-                style={[styles.installBtn, { backgroundColor: colors.green }]}
-              >
-                <Text style={styles.installText}>Run</Text>
-              </Pressable>
-            )}
             <Pressable
               onPress={async () => {
                 if (connected && installedId != null) {
@@ -300,7 +307,8 @@ const styles = StyleSheet.create({
   doneCard: { backgroundColor: 'rgba(52,211,153,0.1)', borderColor: 'rgba(52,211,153,0.25)', borderWidth: 0.5, borderRadius: 18, padding: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
   doneCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
   doneTitle: { fontSize: 14, fontWeight: '600', color: colors.green },
-  donePath: { fontFamily: fonts.mono, fontSize: 11, color: 'rgba(52,211,153,0.7)', marginTop: 2 },
+  playBtn: { backgroundColor: colors.green, borderRadius: 12, paddingVertical: 7, paddingHorizontal: 14 },
+  playText: { fontSize: 13, fontWeight: '700', color: '#0A0A08' },
   errorCard: { backgroundColor: 'rgba(248,113,113,0.08)', borderColor: 'rgba(248,113,113,0.25)', borderWidth: 0.5, borderRadius: 18, padding: 14, alignItems: 'center', gap: 8 },
   errorText: { fontSize: 13, color: '#F87171', textAlign: 'center' },
   retryBtn: { paddingVertical: 6, paddingHorizontal: 16, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.08)' },

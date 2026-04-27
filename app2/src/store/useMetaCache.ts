@@ -10,8 +10,10 @@ export interface CachedMeta {
   author: string;
   category: string;
   cover: Gradient;
+  coverSvg?: string;
   pulse: string;
   tags?: string[];
+  slug?: string;
 }
 
 type MetaCache = Record<string, CachedMeta>;

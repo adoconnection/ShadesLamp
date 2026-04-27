@@ -6,6 +6,12 @@ export const CHAR = {
   ACTIVE_PROGRAM: '0000ff03-0000-1000-8000-00805f9b34fb',
   UPLOAD:         '0000ff04-0000-1000-8000-00805f9b34fb',
   PARAM_VALUES:   '0000ff05-0000-1000-8000-00805f9b34fb',
+  EVENTS:         '0000ff06-0000-1000-8000-00805f9b34fb',
+} as const;
+
+export const EVT = {
+  PROGRAM_ADDED:  0x01,
+  PROGRAM_DELETED: 0x02,
 } as const;
 
 export const CMD = {

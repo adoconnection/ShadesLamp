@@ -15,6 +15,8 @@ export function getBleManager(): PlxBleManager {
 let connectedDevice: Device | null = null;
 let disconnectSubscription: { remove: () => void } | null = null;
 let onDisconnectedCallback: (() => void) | null = null;
+let onActiveChangedCallback: ((id: number) => void) | null = null;
+let onEventCallback: ((eventType: number, programId: number) => void) | null = null;
 const responseAssembler = new ChunkedResponseAssembler();
 const paramValuesAssembler = new ChunkedResponseAssembler();
 
@@ -42,6 +44,14 @@ export async function scanDevices(
 
 export function setOnDisconnected(cb: (() => void) | null) {
   onDisconnectedCallback = cb;
+}
+
+export function setOnActiveChanged(cb: ((id: number) => void) | null) {
+  onActiveChangedCallback = cb;
+}
+
+export function setOnEvent(cb: ((eventType: number, programId: number) => void) | null) {
+  onEventCallback = cb;
 }
 
 export async function connectToDevice(deviceId: string): Promise<Device> {
@@ -73,6 +83,32 @@ export async function connectToDevice(deviceId: string): Promise<Device> {
       if (error || !char?.value) return;
       const data = Buffer.from(char.value, 'base64');
       paramValuesAssembler.onNotification(new Uint8Array(data));
+    },
+  );
+
+  // Subscribe to active program change notifications
+  device.monitorCharacteristicForService(
+    SERVICE_UUID,
+    CHAR.ACTIVE_PROGRAM,
+    (error, char) => {
+      if (error || !char?.value) return;
+      const data = Buffer.from(char.value, 'base64');
+      if (data.length >= 1) {
+        onActiveChangedCallback?.(data[0]);
+      }
+    },
+  );
+
+  // Subscribe to event notifications (program added/deleted)
+  device.monitorCharacteristicForService(
+    SERVICE_UUID,
+    CHAR.EVENTS,
+    (error, char) => {
+      if (error || !char?.value) return;
+      const data = Buffer.from(char.value, 'base64');
+      if (data.length >= 2) {
+        onEventCallback?.(data[0], data[1]);
+      }
     },
   );
 

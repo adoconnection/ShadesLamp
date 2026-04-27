@@ -213,6 +213,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                     snprintf(resp, sizeof(resp), "{\"ok\":true,\"id\":%d}", newId);
                     Serial.printf("%s UPLOAD_FINISH: saved as ID %d\r\n", TAG, newId);
                     g_bleService->sendResponse(String(resp));
+                    g_bleService->notifyEvent(EVT_PROGRAM_ADDED, (uint8_t)newId);
                 }
                 break;
             }
@@ -228,6 +229,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 if (ok) {
                     Serial.printf("%s CMD DELETE prog=%u OK\r\n", TAG, progId);
                     g_bleService->sendResponse("{\"ok\":true}");
+                    g_bleService->notifyEvent(EVT_PROGRAM_DELETED, progId);
                     // Notify active program change if it changed
                     g_bleService->notifyActiveProgram(pm->getActiveId());
                 } else {
@@ -484,6 +486,7 @@ BleService::BleService(ProgramManager* pm, LedDriver* led)
     , _charActive(nullptr)
     , _charUpload(nullptr)
     , _charParamValues(nullptr)
+    , _charEvents(nullptr)
     , _connectedClients(0)
     , _negotiatedMtu(23)
     , pausedByUpload(false)
@@ -547,6 +550,13 @@ void BleService::begin(const char* deviceName) {
         BLECharacteristic::PROPERTY_NOTIFY
     );
     _charParamValues->addDescriptor(new BLE2902());
+
+    // Events characteristic (NOTIFY — push program added/deleted events)
+    _charEvents = _service->createCharacteristic(
+        CHAR_EVENTS_UUID,
+        BLECharacteristic::PROPERTY_NOTIFY
+    );
+    _charEvents->addDescriptor(new BLE2902());
 
     _service->start();
 
@@ -621,6 +631,15 @@ void BleService::notifyActiveProgram(uint8_t id) {
     if (_charActive) {
         _charActive->setValue(&id, 1);
         _charActive->notify();
+    }
+}
+
+void BleService::notifyEvent(uint8_t eventType, uint8_t programId) {
+    if (_charEvents && _server && _server->getConnectedCount() > 0) {
+        uint8_t buf[2] = { eventType, programId };
+        _charEvents->setValue(buf, 2);
+        _charEvents->notify();
+        Serial.printf("%s notifyEvent: type=0x%02X id=%u\r\n", TAG, eventType, programId);
     }
 }
 

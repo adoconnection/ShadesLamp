@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, ScrollView, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { useMarketStore } from '../store/useMarketStore';
 import { useBleStore } from '../store/useBleStore';
+import { useProgramStore } from '../store/useProgramStore';
+import { uploadWasm, setMeta, setActiveProgram } from '../ble/commands';
+import { MarketItem } from '../types/marketplace';
 import NavButton from '../components/NavButton';
 import BleStatusPill from '../components/BleStatusPill';
 import FeaturedCard from '../components/FeaturedCard';
@@ -19,16 +22,72 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Marketplace'>;
 
 export default function MarketplaceScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { catalog, featured, installedSlugs, loading, error, fetchCatalog } = useMarketStore();
+  const { catalog, featured, installedSlugs, loading, error, fetchCatalog, markInstalled } = useMarketStore();
   const { connectionState, deviceInfo } = useBleStore();
+  const { addProgram, setActiveId } = useProgramStore();
   const [category, setCategory] = useState('All');
   const [search, setSearch] = useState('');
+  const [installingSlug, setInstallingSlug] = useState<string | null>(null);
+  const connected = connectionState === 'connected';
 
   useEffect(() => {
     if (catalog.length === 0) {
       fetchCatalog();
     }
   }, []);
+
+  const quickInstall = useCallback(async (item: MarketItem) => {
+    if (!connected) {
+      Alert.alert('Not connected', 'Connect to a device first.');
+      return;
+    }
+    if (installingSlug) return;
+    setInstallingSlug(item.slug);
+    try {
+      const response = await fetch(item.wasmUrl);
+      if (!response.ok) throw new Error(`Download failed: ${response.status}`);
+      const wasmData = new Uint8Array(await response.arrayBuffer());
+
+      const newId = await uploadWasm(wasmData);
+
+      await setMeta(newId, {
+        name: item.name,
+        desc: item.desc,
+        author: item.author,
+        category: item.category,
+        cover: item.cover,
+        coverSvg: item.coverSvg,
+        pulse: item.pulse,
+        tags: item.tags,
+        slug: item.slug,
+      });
+
+      try {
+        await setActiveProgram(newId);
+        setActiveId(newId);
+      } catch {}
+
+      addProgram({
+        id: newId,
+        name: item.name,
+        desc: item.desc,
+        author: item.author,
+        size: '',
+        cover: item.cover,
+        coverSvg: item.coverSvg,
+        pulse: item.pulse,
+        category: item.category,
+        params: [],
+        slug: item.slug,
+      });
+
+      markInstalled(item.slug);
+    } catch (err: any) {
+      Alert.alert('Install failed', err.message || 'Unknown error');
+    } finally {
+      setInstallingSlug(null);
+    }
+  }, [connected, installingSlug]);
 
   const filtered = catalog.filter((item) => {
     if (category !== 'All' && item.category !== category) return false;
@@ -137,7 +196,9 @@ export default function MarketplaceScreen({ navigation }: Props) {
                 key={item.slug}
                 item={item}
                 installed={installedSlugs.includes(item.slug)}
+                installing={installingSlug === item.slug}
                 onPress={() => navigation.navigate('MarketDetail', { itemId: item.slug })}
+                onAction={() => quickInstall(item)}
               />
             ))}
             {filtered.length === 0 && !loading && (

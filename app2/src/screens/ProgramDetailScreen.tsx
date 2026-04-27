@@ -186,8 +186,7 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
       {/* Meta strip */}
       <View style={styles.metaStrip}>
         <MetaCol label="AUTHOR" value={program.author} />
-        <MetaCol label="SIZE" value={program.size || '—'} />
-        <MetaCol label="PARAMS" value={String(program.params.length)} />
+        <MetaCol label="VERSION" value={program.version || '—'} />
       </View>
 
       {/* Parameters */}
@@ -244,7 +243,7 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
 
 function MetaCol({ label, value }: { label: string; value: string }) {
   return (
-    <View>
+    <View style={metaStyles.col}>
       <Text style={metaStyles.label}>{label}</Text>
       <Text style={metaStyles.value}>{value}</Text>
     </View>
@@ -252,6 +251,9 @@ function MetaCol({ label, value }: { label: string; value: string }) {
 }
 
 const metaStyles = StyleSheet.create({
+  col: {
+    flex: 1,
+  },
   label: {
     fontFamily: fonts.mono,
     fontSize: 10,

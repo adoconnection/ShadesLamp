@@ -32,7 +32,7 @@ export default function ProgramRow({ program, active, isFavorite, onTap, onOpen,
       style={[styles.container, active && styles.containerActive, isDragging && styles.containerDragging]}
     >
       <Pressable onPress={onTap} style={styles.coverWrap}>
-        <Cover cover={program.cover} pulse={program.pulse} size={56} radius={12} animated={active} />
+        <Cover cover={program.cover} coverSvg={program.coverSvg} pulse={program.pulse} size={56} radius={12} animated={active} />
         {active && (
           <View style={styles.eqOverlay}>
             <View style={styles.eqBars}>

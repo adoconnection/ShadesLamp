@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import Cover from './Cover';
 import { CheckIcon, ChevronIcon, DownloadIcon } from './Icon';
 import { MarketItem } from '../types/marketplace';
@@ -9,10 +9,12 @@ import { colors } from '../theme/colors';
 interface MarketRowProps {
   item: MarketItem;
   installed: boolean;
+  installing?: boolean;
   onPress: () => void;
+  onAction?: () => void;
 }
 
-export default function MarketRow({ item, installed, onPress }: MarketRowProps) {
+export default function MarketRow({ item, installed, installing, onPress, onAction }: MarketRowProps) {
   return (
     <Pressable onPress={onPress} style={styles.row}>
       <Cover cover={item.cover} coverSvg={item.coverSvg} pulse={item.pulse} size={56} radius={12} />
@@ -39,12 +41,17 @@ export default function MarketRow({ item, installed, onPress }: MarketRowProps) 
           )}
         </View>
       </View>
-      <View style={[styles.actionBtn, { backgroundColor: installed ? 'transparent' : item.pulse + '22' }]}>
-        {installed
-          ? <ChevronIcon color="rgba(250,250,247,0.5)" />
-          : <DownloadIcon color={item.pulse} />
+      <Pressable
+        onPress={installed ? onPress : onAction}
+        style={[styles.actionBtn, { backgroundColor: installed ? 'transparent' : item.pulse + '22' }]}
+      >
+        {installing
+          ? <ActivityIndicator size={16} color={item.pulse} />
+          : installed
+            ? <ChevronIcon color="rgba(250,250,247,0.5)" />
+            : <DownloadIcon color={item.pulse} />
         }
-      </View>
+      </Pressable>
     </Pressable>
   );
 }
