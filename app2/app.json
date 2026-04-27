@@ -17,7 +17,8 @@
       "bundleIdentifier": "com.adoconnection.ledlamp",
       "infoPlist": {
         "NSBluetoothAlwaysUsageDescription": "Shades Lamp uses Bluetooth to connect to your LED lamp",
-        "NSBluetoothPeripheralUsageDescription": "Shades Lamp uses Bluetooth to connect to your LED lamp"
+        "NSBluetoothPeripheralUsageDescription": "Shades Lamp uses Bluetooth to connect to your LED lamp",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
