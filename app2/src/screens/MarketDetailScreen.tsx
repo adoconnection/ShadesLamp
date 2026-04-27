@@ -81,7 +81,6 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
         author: item!.author,
         category: item!.category,
         cover: item!.cover,
-        coverSvg: item!.coverSvg,
         pulse: item!.pulse,
         tags: item!.tags,
         slug: item!.slug,
