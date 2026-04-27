@@ -51,6 +51,15 @@ workflows:
             --workspace "ShadesLamp.xcworkspace" \
             --scheme "ShadesLamp"
 
+      - name: Set beta test info
+        script: |
+          app-store-connect beta-app-localizations create \
+            --app-id "$APP_STORE_CONNECT_APP_ID" \
+            --locale "en-US" \
+            --description "Shades Lamp lets you control your WasmLED lamp via Bluetooth. Browse programs, install light effects, adjust parameters in real-time, and manage your device." \
+            --feedback-email "adoconnection@gmail.com" \
+            2>/dev/null || echo "Beta localization already exists, skipping"
+
     artifacts:
       - app2/ios/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
@@ -58,9 +67,7 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        # Don't auto-submit for external beta review (requires beta description in ASC)
-        # Internal testers see builds immediately without review
-        submit_to_testflight: false
+        submit_to_testflight: true
 
   android-debug:
     name: Android Debug APK
