@@ -1,0 +1,16 @@
+{
+  "name": "Forest",
+  "desc": "Deep forest noise with flowing green palette",
+  "author": "Gyver",
+  "category": "Ambient",
+  "version": "1.0.0",
+  "cover": { "from": "#0A2E0A", "to": "#50C850", "angle": 170 },
+  "pulse": "#34C759",
+  "tags": ["forest", "nature", "green", "calm"],
+  "i18n": {
+    "ru": {
+      "name": "Лес",
+      "desc": "Глубокий лесной шум с зелёной палитрой"
+    }
+  }
+}
