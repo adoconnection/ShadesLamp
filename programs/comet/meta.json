@@ -4,7 +4,7 @@
   "name": "Comet",
   "desc": "Glowing comet tail streaking across the display",
   "author": "built-in",
-  "category": "Effects",
+  "category": "Particles",
   "cover": {"from": "#1F2937", "to": "#FBBF24", "via": "#D97706", "angle": 130},
   "pulse": "#FBBF24",
   "tags": ["comet", "tail", "streak"],

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, ScrollView, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -16,8 +16,6 @@ import { BackIcon, SearchIcon } from '../components/Icon';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
-const CATEGORIES = ['All', 'Effects', 'Ambient', 'Games', 'Visualizers'] as const;
-
 type Props = NativeStackScreenProps<RootStackParamList, 'Marketplace'>;
 
 export default function MarketplaceScreen({ navigation }: Props) {
@@ -29,6 +27,11 @@ export default function MarketplaceScreen({ navigation }: Props) {
   const [search, setSearch] = useState('');
   const [installingSlug, setInstallingSlug] = useState<string | null>(null);
   const connected = connectionState === 'connected';
+
+  const categories = useMemo(() => {
+    const cats = [...new Set(catalog.map((item) => item.category))].sort();
+    return ['All', ...cats];
+  }, [catalog]);
 
   useEffect(() => {
     if (catalog.length === 0) {
@@ -172,7 +175,7 @@ export default function MarketplaceScreen({ navigation }: Props) {
 
           {/* Category tabs */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
-            {CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <Pressable
                 key={cat}
                 onPress={() => setCategory(cat)}

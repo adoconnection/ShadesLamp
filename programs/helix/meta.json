@@ -4,7 +4,7 @@
   "name": "Helix",
   "desc": "Double helix DNA-like rotation",
   "author": "built-in",
-  "category": "Effects",
+  "category": "Streams",
   "cover": {"from": "#134E4A", "to": "#2DD4BF", "via": "#0D9488", "angle": 150},
   "pulse": "#2DD4BF",
   "tags": ["helix", "dna", "rotation", "organic"],

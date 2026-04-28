@@ -4,7 +4,7 @@
   "name": "Core",
   "desc": "Particles orbiting around the equator with tilted orbits",
   "author": "built-in",
-  "category": "Effects",
+  "category": "Ambient",
   "cover": {"from": "#FF4500", "to": "#FFD700", "angle": 180},
   "pulse": "#FF6B00",
   "tags": ["particles", "orbit", "fire"],

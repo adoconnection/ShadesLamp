@@ -4,7 +4,7 @@
   "name": "Pulse",
   "desc": "Radial pulse expanding outward",
   "author": "built-in",
-  "category": "Effects",
+  "category": "Ambient",
   "cover": {"from": "#1E1B4B", "to": "#818CF8", "via": "#4338CA", "angle": 160},
   "pulse": "#818CF8",
   "tags": ["pulse", "radial", "expanding"],

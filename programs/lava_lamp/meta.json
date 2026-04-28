@@ -4,7 +4,7 @@
   "name": "Lava Lamp",
   "desc": "Retro lava lamp blobs",
   "author": "built-in",
-  "category": "Ambient",
+  "category": "Fire",
   "cover": {"from": "#4C1D95", "to": "#F472B6", "via": "#7C3AED", "angle": 170},
   "pulse": "#F472B6",
   "tags": ["retro", "blobs", "colorful"],

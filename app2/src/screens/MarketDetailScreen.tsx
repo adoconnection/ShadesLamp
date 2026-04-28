@@ -253,7 +253,7 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
       {/* About */}
       <Text style={styles.sectionTitle}>About</Text>
       <Text style={styles.aboutText}>
-        {item.desc}. Self-contained WASM module compiled for wasm32. Runs at 30 FPS on LED matrix using wasm3 interpreter.
+        {item.desc}
       </Text>
 
       {/* Technical */}

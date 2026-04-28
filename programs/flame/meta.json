@@ -4,7 +4,7 @@
   "name": "Flame",
   "desc": "Realistic fire simulation",
   "author": "built-in",
-  "category": "Ambient",
+  "category": "Fire",
   "cover": {"from": "#7F1D1D", "to": "#F59E0B", "via": "#DC2626", "angle": 175},
   "pulse": "#F59E0B",
   "tags": ["fire", "warm", "dynamic"],

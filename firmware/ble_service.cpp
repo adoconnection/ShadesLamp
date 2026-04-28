@@ -213,7 +213,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                     snprintf(resp, sizeof(resp), "{\"ok\":true,\"id\":%d}", newId);
                     Serial.printf("%s UPLOAD_FINISH: saved as ID %d\r\n", TAG, newId);
                     g_bleService->sendResponse(String(resp));
-                    g_bleService->notifyEvent(EVT_PROGRAM_ADDED, (uint8_t)newId);
+                    g_bleService->queueEvent(EVT_PROGRAM_ADDED, (uint8_t)newId);
                 }
                 break;
             }
@@ -229,9 +229,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 if (ok) {
                     Serial.printf("%s CMD DELETE prog=%u OK\r\n", TAG, progId);
                     g_bleService->sendResponse("{\"ok\":true}");
-                    g_bleService->notifyEvent(EVT_PROGRAM_DELETED, progId);
-                    // Notify active program change if it changed
-                    g_bleService->notifyActiveProgram(pm->getActiveId());
+                    g_bleService->queueEvent(EVT_PROGRAM_DELETED, progId);
                 } else {
                     Serial.printf("%s CMD DELETE prog=%u FAIL\r\n", TAG, progId);
                     g_bleService->sendResponse("{\"ok\":false,\"err\":\"delete failed\"}", true);
@@ -488,6 +486,7 @@ BleService::BleService(ProgramManager* pm, LedDriver* led)
     , _charParamValues(nullptr)
     , _charEvents(nullptr)
     , _connectedClients(0)
+    , _pendingEventCount(0)
     , _negotiatedMtu(23)
     , pausedByUpload(false)
     , powerOn(true)
@@ -640,6 +639,31 @@ void BleService::notifyEvent(uint8_t eventType, uint8_t programId) {
         _charEvents->setValue(buf, 2);
         _charEvents->notify();
         Serial.printf("%s notifyEvent: type=0x%02X id=%u\r\n", TAG, eventType, programId);
+    }
+}
+
+void BleService::queueEvent(uint8_t eventType, uint8_t programId) {
+    if (_pendingEventCount < MAX_PENDING_EVENTS) {
+        int idx = _pendingEventCount;
+        _pendingEvents[idx].type = eventType;
+        _pendingEvents[idx].id = programId;
+        _pendingEventCount = idx + 1;
+    }
+}
+
+void BleService::processPendingEvents() {
+    int count = _pendingEventCount;
+    if (count == 0) return;
+    _pendingEventCount = 0;
+
+    for (int i = 0; i < count; i++) {
+        uint8_t type = _pendingEvents[i].type;
+        uint8_t id = _pendingEvents[i].id;
+        notifyEvent(type, id);
+        // After delete, also notify active program change
+        if (type == EVT_PROGRAM_DELETED) {
+            notifyActiveProgram(_pm->getActiveId());
+        }
     }
 }
 

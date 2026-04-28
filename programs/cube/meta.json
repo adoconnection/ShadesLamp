@@ -4,7 +4,7 @@
   "name": "Cube",
   "desc": "3D rotating cube projection",
   "author": "built-in",
-  "category": "Effects",
+  "category": "Ambient",
   "cover": {"from": "#1F2937", "to": "#60A5FA", "via": "#1E40AF", "angle": 140},
   "pulse": "#60A5FA",
   "tags": ["3d", "cube", "rotation", "geometric"],

@@ -4,7 +4,7 @@
   "name": "Jellyfish",
   "desc": "Floating jellyfish drifting gracefully",
   "author": "built-in",
-  "category": "Ambient",
+  "category": "Streams",
   "cover": {"from": "#1E1B4B", "to": "#C084FC", "via": "#5B21B6", "angle": 195},
   "pulse": "#C084FC",
   "tags": ["organic", "floating", "calm"],

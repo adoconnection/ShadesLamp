@@ -66,7 +66,14 @@ public:
     void notifyParamValues();
 
     // Notify clients about program list changes (added/deleted)
+    // Called from render task (large stack), NOT from BLE callbacks
     void notifyEvent(uint8_t eventType, uint8_t programId);
+
+    // Queue a deferred event (safe to call from BLE callbacks on small stack)
+    void queueEvent(uint8_t eventType, uint8_t programId);
+
+    // Process queued events — call from render task
+    void processPendingEvents();
 
     // Check if a client is connected
     bool isConnected() const;
@@ -111,6 +118,12 @@ private:
     uint16_t _negotiatedMtu;
 
     SemaphoreHandle_t _mutex;
+
+    // Deferred event queue (max 4 pending events)
+    static const int MAX_PENDING_EVENTS = 4;
+    struct PendingEvent { uint8_t type; uint8_t id; };
+    volatile PendingEvent _pendingEvents[4];
+    volatile int _pendingEventCount;
 };
 
 // Global pointer for BLE callbacks

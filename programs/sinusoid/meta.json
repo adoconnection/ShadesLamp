@@ -4,7 +4,7 @@
   "name": "Sinusoid",
   "desc": "Flowing sinusoidal wave",
   "author": "built-in",
-  "category": "Effects",
+  "category": "Streams",
   "cover": {"from": "#312E81", "to": "#A78BFA", "via": "#4C1D95", "angle": 155},
   "pulse": "#A78BFA",
   "tags": ["wave", "sinusoidal", "flowing"],

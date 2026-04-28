@@ -53,6 +53,9 @@ void renderTask(void* param) {
             Serial.printf("[MAIN] Program switched: %u -> %u\r\n", prevActive, newActive);
         }
 
+        // Process deferred BLE event notifications (queued from BLE callbacks)
+        bleService->processPendingEvents();
+
         if (wasmEngine->isLoaded()) {
             int32_t tick = (int32_t)(millis() - startTick);
             wasmEngine->tick(tick);

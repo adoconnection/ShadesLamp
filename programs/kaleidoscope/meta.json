@@ -4,7 +4,7 @@
   "name": "Kaleidoscope",
   "desc": "Rotating kaleidoscope patterns",
   "author": "built-in",
-  "category": "Effects",
+  "category": "Streams",
   "cover": {"from": "#4C1D95", "to": "#F59E0B", "via": "#EC4899", "angle": 120},
   "pulse": "#F59E0B",
   "tags": ["geometric", "rotating", "colorful"],
