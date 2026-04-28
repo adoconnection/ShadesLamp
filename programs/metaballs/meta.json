@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Metaballs",
   "desc": "Organic metaball blobs",
-  "author": "built-in",
+  "author": "Gunner47",
   "category": "Streams",
   "cover": {"from": "#3B0764", "to": "#F0ABFC", "via": "#7C3AED", "angle": 165},
   "pulse": "#F0ABFC",

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Popcorn",
   "desc": "Popping kernels with gravity",
-  "author": "built-in",
+  "author": "Gunner47",
   "category": "Particles",
   "cover": {"from": "#292524", "to": "#FDE68A", "via": "#78350F", "angle": 175},
   "pulse": "#FDE68A",

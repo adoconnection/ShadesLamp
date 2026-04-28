@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Comet",
   "desc": "Glowing comet tail streaking across the display",
-  "author": "built-in",
+  "author": "Gunner47",
   "category": "Particles",
   "cover": {"from": "#1F2937", "to": "#FBBF24", "via": "#D97706", "angle": 130},
   "pulse": "#FBBF24",

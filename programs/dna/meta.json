@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "DNA",
   "desc": "DNA double helix rotation",
-  "author": "built-in",
+  "author": "Gunner47",
   "category": "Streams",
   "cover": {"from": "#064E3B", "to": "#34D399", "via": "#10B981", "angle": 155},
   "pulse": "#34D399",

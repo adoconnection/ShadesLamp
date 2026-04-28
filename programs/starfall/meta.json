@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Starfall",
   "desc": "Shooting stars with trails",
-  "author": "built-in",
+  "author": "Gunner47",
   "category": "Particles",
   "cover": {"from": "#0F172A", "to": "#FBBF24", "via": "#1E3A5F", "angle": 170},
   "pulse": "#FBBF24",

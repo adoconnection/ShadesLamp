@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Pulse",
   "desc": "Radial pulse expanding outward",
-  "author": "built-in",
+  "author": "Gunner47",
   "category": "Ambient",
   "cover": {"from": "#1E1B4B", "to": "#818CF8", "via": "#4338CA", "angle": 160},
   "pulse": "#818CF8",

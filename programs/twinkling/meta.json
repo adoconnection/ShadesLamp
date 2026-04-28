@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Twinkling",
   "desc": "Twinkling stars",
-  "author": "built-in",
+  "author": "Gunner47",
   "category": "Ambient",
   "cover": {"from": "#0F172A", "to": "#F9FAFB", "via": "#1E3A5F", "angle": 185},
   "pulse": "#F9FAFB",

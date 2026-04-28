@@ -3,7 +3,7 @@
   "version": "1.0.1",
   "name": "Colored Rain",
   "desc": "Colored rain drops falling down the display",
-  "author": "built-in",
+  "author": "Gunner47",
   "category": "Particles",
   "cover": {"from": "#0F172A", "to": "#38BDF8", "via": "#1E40AF", "angle": 180},
   "pulse": "#38BDF8",
