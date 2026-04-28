@@ -207,6 +207,13 @@ void WasmEngine::tick(int32_t tickMs) {
         return; // Skip this frame if we can't acquire the lock quickly
     }
 
+    // Re-check after acquiring mutex: unload() on another core may have
+    // cleared these between the pre-check above and the mutex acquisition.
+    if (!_loaded || !_funcUpdate) {
+        xSemaphoreGive(_mutex);
+        return;
+    }
+
     M3Result result = m3_CallV(_funcUpdate, tickMs);
     if (result) {
         Serial.printf("%s update() error: %s\r\n", TAG, result);

@@ -88,6 +88,9 @@ public:
     // Request async program switch (returns immediately, processed in processPending())
     void requestSwitch(uint8_t programId);
 
+    // Request async program delete (returns immediately, processed in processPending())
+    void requestDelete(uint8_t programId);
+
     // Process pending switch + deferred saves; call from loop()
     void processPending();
 
@@ -131,8 +134,9 @@ private:
     volatile bool     _paramsDirty;
     unsigned long     _lastParamDirtyTime;
 
-    // Async program switch (set from BLE callback, processed in loop)
+    // Async program switch / delete (set from BLE callback, processed in loop)
     volatile uint8_t  _pendingSwitchId;  // 0xFF = none
+    volatile uint8_t  _pendingDeleteId;  // 0xFF = none
 };
 
 #endif // PROGRAM_MANAGER_H

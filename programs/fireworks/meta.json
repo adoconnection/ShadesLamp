@@ -1,0 +1,10 @@
+{
+  "name": "Fireworks",
+  "desc": "Rockets launch upward and explode into colorful particle bursts",
+  "author": "ShadesLamp",
+  "category": "Particles",
+  "version": "1.0.0",
+  "cover": { "from": "#0a0020", "to": "#ff4444", "angle": 0 },
+  "pulse": "#ff4444",
+  "tags": ["fireworks", "particles", "explosion"]
+}

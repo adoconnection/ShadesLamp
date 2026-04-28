@@ -1,25 +1,30 @@
 #include "api.h"
 
 /*
- * Color Fountains -- Multiple fountain streams that launch particles upward
- * (Y=0 is bottom). Each stream has a drifting hue. Particles decelerate
- * under gravity, reach a peak, and fall back down while fading out.
+ * Color Fountains — Multiple overlapping fountain waves.
+ * Each wave launches all columns simultaneously to different heights.
+ * New waves render on top of previous ones.
+ * Asymmetric arc: fast explosive rise (30%), slow graceful fall (70%).
+ * Y=0 is the bottom of the display.
  */
 
 /* ---- Metadata JSON ---- */
 static const char META[] =
     "{\"name\":\"Color Fountains\","
-    "\"desc\":\"Colorful fountain streams that launch upward and fade as they fall\","
+    "\"desc\":\"Overlapping fountain waves with dynamic rise and fade\","
     "\"params\":["
-        "{\"id\":0,\"name\":\"Fountains\",\"type\":\"int\","
-         "\"min\":2,\"max\":6,\"default\":4,"
-         "\"desc\":\"Number of fountain sources\"},"
-        "{\"id\":1,\"name\":\"Intensity\",\"type\":\"int\","
-         "\"min\":1,\"max\":10,\"default\":5,"
-         "\"desc\":\"Particles per burst\"},"
-        "{\"id\":2,\"name\":\"Brightness\",\"type\":\"int\","
-         "\"min\":1,\"max\":255,\"default\":220,"
-         "\"desc\":\"Overall brightness\"}"
+        "{\"id\":0,\"name\":\"Intensity\",\"type\":\"int\","
+         "\"min\":1,\"max\":255,\"default\":200,"
+         "\"desc\":\"Brightness of the fountain columns\"},"
+        "{\"id\":1,\"name\":\"Fade\",\"type\":\"int\","
+         "\"min\":1,\"max\":10,\"default\":4,"
+         "\"desc\":\"Fade speed: 1=slow glow, 10=fast sharp fade\"},"
+        "{\"id\":2,\"name\":\"Waves\",\"type\":\"int\","
+         "\"min\":1,\"max\":5,\"default\":3,"
+         "\"desc\":\"Number of overlapping fountain waves\"},"
+        "{\"id\":3,\"name\":\"Delay\",\"type\":\"int\","
+         "\"min\":2,\"max\":20,\"default\":10,"
+         "\"desc\":\"Delay between waves (x100ms)\"}"
     "]}";
 
 EXPORT(get_meta_ptr)
@@ -54,11 +59,9 @@ static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
     h = h & 0xFF;
     int region = h / 43;
     int remainder = (h - region * 43) * 6;
-
     int p = (v * (255 - s)) >> 8;
     int q = (v * (255 - ((s * remainder) >> 8))) >> 8;
     int t = (v * (255 - ((s * (255 - remainder)) >> 8))) >> 8;
-
     switch (region) {
         case 0:  *r = v; *g = t; *b = p; break;
         case 1:  *r = q; *g = v; *b = p; break;
@@ -69,127 +72,60 @@ static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
     }
 }
 
-/* ---- Particle state ---- */
-#define MAX_PARTICLES 30
-
-static float part_x[MAX_PARTICLES];      /* horizontal position */
-static float part_y[MAX_PARTICLES];      /* vertical position (Y=0 bottom) */
-static float part_vx[MAX_PARTICLES];     /* horizontal velocity */
-static float part_vy[MAX_PARTICLES];     /* vertical velocity */
-static int   part_hue[MAX_PARTICLES];    /* hue 0-255 */
-static int   part_peak_y[MAX_PARTICLES]; /* peak Y reached (for fade calc) */
-static int   part_active[MAX_PARTICLES]; /* 1 = alive, 0 = dead */
-static int   part_falling[MAX_PARTICLES];/* 1 = already past peak */
-
-/* ---- Fountain source state ---- */
-#define MAX_FOUNTAINS 6
-
-static int   fount_x[MAX_FOUNTAINS];    /* fixed X position of each fountain */
-static int   fount_hue[MAX_FOUNTAINS];  /* current hue of this fountain */
-static int   fount_timer[MAX_FOUNTAINS];/* frames until next burst */
-
-/* ---- Fade framebuffer ---- */
+/* ---- Multi-wave state ---- */
+#define MAX_WAVES 5
 #define MAX_W 64
-#define MAX_H 64
 
-static uint8_t fb_r[MAX_W * MAX_H];
-static uint8_t fb_g[MAX_W * MAX_H];
-static uint8_t fb_b[MAX_W * MAX_H];
+static float wave_target[MAX_WAVES][MAX_W];  /* peak height per column */
+static int   wave_hue[MAX_WAVES][MAX_W];     /* hue per column */
+static float wave_phase[MAX_WAVES];           /* 0.0 -> 1.0 */
+static int   wave_active[MAX_WAVES];          /* 1 = animating */
+static int   wave_seq[MAX_WAVES];             /* launch sequence for render order */
 
-/* Saturating subtract for fading */
-static uint8_t qsub(uint8_t a, uint8_t b) {
-    return a > b ? (uint8_t)(a - b) : 0;
-}
-
-/* ---- Timing ---- */
 static int32_t prev_tick;
-static int initialized;
+static int32_t launch_timer;      /* countdown to next wave launch */
+static int     next_hue;          /* hue for the next wave */
+static int     seq_counter;       /* monotonically increasing launch counter */
 
-/* ---- Global hue offset that slowly drifts ---- */
-static int global_hue_phase;
+/* Asymmetric arc: peak at 30% of cycle for explosive rise */
+#define T_PEAK 0.3f
 
 EXPORT(init)
 void init(void) {
-    int W = get_width();
-    int H = get_height();
-    if (W > MAX_W) W = MAX_W;
-    if (H > MAX_H) H = MAX_H;
-
-    /* Clear framebuffer */
-    for (int i = 0; i < W * H; i++) {
-        fb_r[i] = 0;
-        fb_g[i] = 0;
-        fb_b[i] = 0;
-    }
-
-    /* All particles inactive */
-    for (int i = 0; i < MAX_PARTICLES; i++) {
-        part_active[i] = 0;
-    }
-
-    /* Spread fountain sources evenly across width */
-    for (int i = 0; i < MAX_FOUNTAINS; i++) {
-        fount_x[i] = 0;
-        fount_hue[i] = (i * 256 / MAX_FOUNTAINS) & 0xFF;
-        fount_timer[i] = 0;
-    }
-
+    rng_state = 73291;
+    for (int w = 0; w < MAX_WAVES; w++)
+        wave_active[w] = 0;
     prev_tick = 0;
-    initialized = 0;
-    global_hue_phase = 0;
+    launch_timer = 0;
+    next_hue = 0;
+    seq_counter = 0;
 }
 
-/* Find a free particle slot, return -1 if none */
-static int find_free_particle(void) {
-    for (int i = 0; i < MAX_PARTICLES; i++) {
-        if (!part_active[i]) return i;
-    }
-    return -1;
-}
-
-/* Launch a burst of particles from a fountain */
-static void launch_burst(int fx, int hue, int count, int H) {
-    for (int j = 0; j < count; j++) {
-        int slot = find_free_particle();
-        if (slot < 0) return; /* no free slots */
-
-        part_active[slot] = 1;
-        part_falling[slot] = 0;
-
-        /* Position: at the fountain X, at ground level */
-        part_x[slot] = (float)fx + (float)random_range(-100, 101) / 200.0f;
-        part_y[slot] = 0.0f;
-
-        /* Velocity: upward with some variation */
-        /* Base velocity scales with matrix height so particles reach ~60-90% of height */
-        float base_vy = (float)H * 0.45f + (float)random_range(0, H * 30) / 100.0f;
-        part_vy[slot] = base_vy;
-
-        /* Slight horizontal spread */
-        part_vx[slot] = (float)random_range(-80, 81) / 100.0f;
-
-        /* Hue: slight variation around fountain's hue */
-        part_hue[slot] = (hue + random_range(-15, 16)) & 0xFF;
-
-        /* Peak tracking */
-        part_peak_y[slot] = 0;
+/* Launch a single wave (all columns simultaneously) */
+static void launch_wave(int w, int W, int H, int base_hue) {
+    wave_active[w] = 1;
+    wave_phase[w] = 0.0f;
+    wave_seq[w] = seq_counter++;
+    for (int x = 0; x < W; x++) {
+        wave_target[w][x] = (float)H * (0.3f + (float)random_range(0, 71) / 100.0f);
+        wave_hue[w][x] = (base_hue + random_range(-12, 13)) & 0xFF;
     }
 }
 
 EXPORT(update)
 void update(int tick_ms) {
-    int num_fountains = get_param_i32(0);
-    int intensity     = get_param_i32(1);
-    int bright        = get_param_i32(2);
+    int bright      = get_param_i32(0);   /* 1-255 */
+    int fade_speed  = get_param_i32(1);   /* 1-10  */
+    int num_waves   = get_param_i32(2);   /* 1-5   */
+    int delay_param = get_param_i32(3);   /* 2-20  */
 
     int W = get_width();
     int H = get_height();
     if (W > MAX_W) W = MAX_W;
-    if (H > MAX_H) H = MAX_H;
     if (W < 1) W = 1;
     if (H < 1) H = 1;
-    if (num_fountains > MAX_FOUNTAINS) num_fountains = MAX_FOUNTAINS;
-    if (num_fountains < 2) num_fountains = 2;
+    if (num_waves > MAX_WAVES) num_waves = MAX_WAVES;
+    if (num_waves < 1) num_waves = 1;
 
     rng_state ^= (uint32_t)tick_ms;
 
@@ -199,190 +135,105 @@ void update(int tick_ms) {
     prev_tick = tick_ms;
     float dt = (float)delta_ms / 1000.0f;
 
-    /* Setup fountain positions on first frame or if count changed */
-    if (!initialized) {
-        initialized = 1;
-        for (int i = 0; i < num_fountains; i++) {
-            /* Spread evenly with margin */
-            int margin = W / (num_fountains + 1);
-            if (margin < 1) margin = 1;
-            fount_x[i] = margin * (i + 1);
-            if (fount_x[i] >= W) fount_x[i] = W - 1;
-            fount_hue[i] = (i * 256 / num_fountains) & 0xFF;
-            fount_timer[i] = random_range(3, 15);
+    /* ---- Launch logic: find a free slot when timer fires ---- */
+    launch_timer -= delta_ms;
+    if (launch_timer <= 0) {
+        int slot = -1;
+        for (int w = 0; w < num_waves; w++) {
+            if (!wave_active[w]) { slot = w; break; }
         }
+        if (slot >= 0) {
+            launch_wave(slot, W, H, next_hue);
+            /* Next wave gets a noticeably different hue */
+            next_hue = (next_hue + random_range(35, 65)) & 0xFF;
+            int delay_base = delay_param * 100;
+            launch_timer = delay_base + random_range(-delay_base / 5, delay_base / 5 + 1);
+        }
+        /* If no slot free, retry next frame (launch_timer stays <= 0) */
     }
 
-    /* Advance global hue phase (slowly rotate all fountain hues) */
-    global_hue_phase = (tick_ms / 50) & 0xFF;
+    /* ---- Clear display ---- */
+    for (int x = 0; x < W; x++)
+        for (int y = 0; y < H; y++)
+            set_pixel(x, y, 0, 0, 0);
 
-    /* Gravity constant: pixels per second^2 */
-    float gravity = (float)H * 1.2f;
+    /* Animation speed */
+    float phase_speed = 0.45f;
 
-    /* ---- Fade framebuffer ---- */
-    int fade_amount = 18;
-    for (int i = 0; i < W * H; i++) {
-        fb_r[i] = qsub(fb_r[i], (uint8_t)fade_amount);
-        fb_g[i] = qsub(fb_g[i], (uint8_t)fade_amount);
-        fb_b[i] = qsub(fb_b[i], (uint8_t)fade_amount);
+    /* ---- Update phases ---- */
+    for (int w = 0; w < num_waves; w++) {
+        if (!wave_active[w]) continue;
+        wave_phase[w] += phase_speed * dt;
+        if (wave_phase[w] >= 1.0f)
+            wave_active[w] = 0;
     }
 
-    /* ---- Update fountain timers and launch bursts ---- */
-    for (int f = 0; f < num_fountains; f++) {
-        fount_timer[f]--;
-        if (fount_timer[f] <= 0) {
-            /* Drift hue for this fountain */
-            fount_hue[f] = (fount_hue[f] + random_range(5, 20)) & 0xFF;
-
-            /* Combine with global hue phase for slow overall drift */
-            int launch_hue = (fount_hue[f] + global_hue_phase) & 0xFF;
-
-            /* Launch a burst */
-            int burst_count = random_range(intensity, intensity + 3);
-            if (burst_count > 6) burst_count = 6;
-            launch_burst(fount_x[f], launch_hue, burst_count, H);
-
-            /* Next burst in 8-20 frames */
-            fount_timer[f] = random_range(8, 21);
-        }
+    /* ---- Build render order: oldest (lowest seq) first, newest last ---- */
+    int order[MAX_WAVES];
+    int count = 0;
+    for (int w = 0; w < num_waves; w++) {
+        if (wave_active[w]) order[count++] = w;
     }
-
-    /* ---- Update particles ---- */
-    for (int i = 0; i < MAX_PARTICLES; i++) {
-        if (!part_active[i]) continue;
-
-        /* Apply gravity (decelerates upward motion, then accelerates downward) */
-        part_vy[i] -= gravity * dt;
-
-        /* Move */
-        part_x[i] += part_vx[i] * dt;
-        part_y[i] += part_vy[i] * dt;
-
-        /* Track peak */
-        int cur_y_int = (int)part_y[i];
-        if (cur_y_int > part_peak_y[i]) {
-            part_peak_y[i] = cur_y_int;
-        }
-
-        /* Detect when particle starts falling */
-        if (part_vy[i] < 0.0f && !part_falling[i]) {
-            part_falling[i] = 1;
-        }
-
-        /* Kill particle when it falls below ground */
-        if (part_y[i] < -0.5f) {
-            part_active[i] = 0;
-            continue;
-        }
-
-        /* Kill if off-screen vertically */
-        if (part_y[i] > (float)(H + 2)) {
-            part_active[i] = 0;
-            continue;
-        }
-
-        /* Horizontal wrapping */
-        if (part_x[i] < 0.0f) part_x[i] += (float)W;
-        if (part_x[i] >= (float)W) part_x[i] -= (float)W;
-
-        /* Compute brightness based on fade state */
-        int particle_bright = bright;
-        if (part_falling[i] && part_peak_y[i] > 0) {
-            /* Fade as particle falls: brightness proportional to current height / peak height */
-            float ratio = part_y[i] / (float)part_peak_y[i];
-            if (ratio < 0.0f) ratio = 0.0f;
-            if (ratio > 1.0f) ratio = 1.0f;
-            /* Apply squared falloff for more visible fade */
-            particle_bright = (int)((float)bright * ratio * ratio);
-            if (particle_bright < 2) {
-                part_active[i] = 0;
-                continue;
+    for (int i = 0; i < count - 1; i++) {
+        for (int j = i + 1; j < count; j++) {
+            if (wave_seq[order[j]] < wave_seq[order[i]]) {
+                int tmp = order[i]; order[i] = order[j]; order[j] = tmp;
             }
         }
-
-        /* Rising particles: full saturation. At apex: slightly desaturated. */
-        int sat = 255;
-        if (!part_falling[i] && part_vy[i] < 2.0f) {
-            /* Near apex: reduce saturation for a brief white flash */
-            sat = 180;
-        }
-
-        /* Compute pixel position */
-        int px = (int)part_x[i];
-        int py = (int)part_y[i];
-        if (px < 0) px = 0;
-        if (px >= W) px = W - 1;
-        if (py < 0) py = 0;
-        if (py >= H) py = H - 1;
-
-        /* Convert to RGB */
-        int r, g, b;
-        hsv_to_rgb(part_hue[i], sat, particle_bright, &r, &g, &b);
-
-        /* Draw into framebuffer (max blend for overlapping particles) */
-        int idx = py * W + px;
-        if (idx >= 0 && idx < W * H) {
-            if (r > fb_r[idx]) fb_r[idx] = (uint8_t)r;
-            if (g > fb_g[idx]) fb_g[idx] = (uint8_t)g;
-            if (b > fb_b[idx]) fb_b[idx] = (uint8_t)b;
-        }
-
-        /* Also draw a dimmer pixel at adjacent Y for more visible streams */
-        int py2 = py - 1; /* trail below */
-        if (py2 >= 0 && py2 < H) {
-            int idx2 = py2 * W + px;
-            int tr = r * 2 / 5;
-            int tg = g * 2 / 5;
-            int tb = b * 2 / 5;
-            if (tr > fb_r[idx2]) fb_r[idx2] = (uint8_t)tr;
-            if (tg > fb_g[idx2]) fb_g[idx2] = (uint8_t)tg;
-            if (tb > fb_b[idx2]) fb_b[idx2] = (uint8_t)tb;
-        }
     }
 
-    /* ---- Draw fountain base glow ---- */
-    for (int f = 0; f < num_fountains; f++) {
-        int fx = fount_x[f];
-        int launch_hue = (fount_hue[f] + global_hue_phase) & 0xFF;
-        int r, g, b;
+    /* ---- Render waves in order (newest overwrites oldest) ---- */
+    for (int idx = 0; idx < count; idx++) {
+        int w = order[idx];
+        float t = wave_phase[w];
 
-        /* Bright center pixel at base */
-        hsv_to_rgb(launch_hue, 200, bright * 3 / 4, &r, &g, &b);
-        int idx = 0 * W + fx;  /* y=0 row */
-        if (fx >= 0 && fx < W && idx < W * H) {
-            fb_r[idx] = (uint8_t)r;
-            fb_g[idx] = (uint8_t)g;
-            fb_b[idx] = (uint8_t)b;
+        /* Asymmetric arc: remap t so peak is at T_PEAK of cycle.
+         * Rise [0, T_PEAK] -> parabola phase [0, 0.5]  (fast)
+         * Fall [T_PEAK, 1] -> parabola phase [0.5, 1.0] (slow) */
+        float arc_phase;
+        if (t < T_PEAK) {
+            arc_phase = 0.5f * t / T_PEAK;
+        } else {
+            arc_phase = 0.5f + 0.5f * (t - T_PEAK) / (1.0f - T_PEAK);
+        }
+        float y_factor = 4.0f * arc_phase * (1.0f - arc_phase);
+
+        /* Fade multiplier: full during rise, fades during fall */
+        float bmul = 1.0f;
+        if (t > T_PEAK) {
+            float fall_progress = (t - T_PEAK) / (1.0f - T_PEAK);  /* 0->1 */
+            float raw = 1.0f - fall_progress;                       /* 1->0 */
+            bmul = raw;
+            int extra = fade_speed / 3;
+            for (int i = 0; i < extra; i++) bmul *= raw;
         }
 
-        /* Dimmer glow on neighbors */
-        int glow_r = r / 3;
-        int glow_g = g / 3;
-        int glow_b = b / 3;
-        for (int dx = -1; dx <= 1; dx += 2) {
-            int nx = fx + dx;
-            if (nx >= 0 && nx < W) {
-                int nidx = 0 * W + nx;
-                if (glow_r > fb_r[nidx]) fb_r[nidx] = (uint8_t)glow_r;
-                if (glow_g > fb_g[nidx]) fb_g[nidx] = (uint8_t)glow_g;
-                if (glow_b > fb_b[nidx]) fb_b[nidx] = (uint8_t)glow_b;
+        /* Render this wave's columns */
+        for (int x = 0; x < W; x++) {
+            float cur_y = wave_target[w][x] * y_factor;
+            int head_y = (int)cur_y;
+            if (head_y >= H) head_y = H - 1;
+            if (head_y < 0) continue;
+
+            int hue = wave_hue[w][x];
+
+            for (int y = 0; y <= head_y; y++) {
+                /* Gradient: brighter near head, min 15% at base */
+                float grad;
+                if (head_y > 0)
+                    grad = 0.15f + 0.85f * (float)y / (float)head_y;
+                else
+                    grad = 1.0f;
+
+                int val = (int)((float)bright * bmul * grad);
+                if (val > 255) val = 255;
+                if (val < 1) continue;
+
+                int sat = (y == head_y) ? 140 : 220;
+                int r, g, b;
+                hsv_to_rgb(hue, sat, val, &r, &g, &b);
+                set_pixel(x, y, r, g, b);
             }
-        }
-        /* Also row y=1 */
-        int idx1 = 1 * W + fx;
-        if (fx >= 0 && fx < W && idx1 < W * H) {
-            int r1 = r / 2, g1 = g / 2, b1 = b / 2;
-            if (r1 > fb_r[idx1]) fb_r[idx1] = (uint8_t)r1;
-            if (g1 > fb_g[idx1]) fb_g[idx1] = (uint8_t)g1;
-            if (b1 > fb_b[idx1]) fb_b[idx1] = (uint8_t)b1;
-        }
-    }
-
-    /* ---- Render framebuffer to display ---- */
-    for (int x = 0; x < W; x++) {
-        for (int y = 0; y < H; y++) {
-            int idx = y * W + x;
-            set_pixel(x, y, fb_r[idx], fb_g[idx], fb_b[idx]);
         }
     }
 

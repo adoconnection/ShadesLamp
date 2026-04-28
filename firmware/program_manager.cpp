@@ -20,6 +20,7 @@ ProgramManager::ProgramManager(WasmEngine* engine, ParamStore* paramStore, LedDr
     , _paramsDirty(false)
     , _lastParamDirtyTime(0)
     , _pendingSwitchId(0xFF)
+    , _pendingDeleteId(0xFF)
 {
     _mutex = xSemaphoreCreateMutex();
 }
@@ -525,7 +526,18 @@ void ProgramManager::requestSwitch(uint8_t programId) {
     _pendingSwitchId = programId;
 }
 
+void ProgramManager::requestDelete(uint8_t programId) {
+    _pendingDeleteId = programId;
+}
+
 void ProgramManager::processPending() {
+    // Handle async program delete (must run on render task, not BLE core)
+    uint8_t deleteId = _pendingDeleteId;
+    if (deleteId != 0xFF) {
+        _pendingDeleteId = 0xFF;
+        deleteProgram(deleteId);
+    }
+
     // Handle async program switch
     uint8_t pendingId = _pendingSwitchId;
     if (pendingId != 0xFF) {

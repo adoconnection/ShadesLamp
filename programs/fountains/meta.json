@@ -1,9 +1,9 @@
 {
-  "name": "Color Fountains",
-  "desc": "Colorful fountain streams that launch upward and fade as they fall",
+  "name": "Fountains",
+  "desc": "Synchronized fountain columns rising to different heights and fading on return",
   "author": "ShadesLamp",
   "category": "Particles",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "cover": { "from": "#1a0533", "to": "#ff6b35", "angle": 0 },
   "pulse": "#ff6b35",
   "tags": ["fountain", "particles", "colorful"]
