@@ -1,0 +1,16 @@
+{
+  "name": "Whirl",
+  "desc": "Swirling flame vortex driven by Perlin noise field",
+  "author": "Gunner47",
+  "category": "Particles",
+  "version": "1.0.0",
+  "cover": { "from": "#1a0a00", "to": "#ff6600", "angle": 160 },
+  "pulse": "#ff6600",
+  "tags": ["whirl", "vortex", "fire", "particles"],
+  "i18n": {
+    "ru": {
+      "name": "Вихри",
+      "desc": "Вихри пламени на основе поля шума Перлина"
+    }
+  }
+}

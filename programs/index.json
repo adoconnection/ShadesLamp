@@ -49,6 +49,7 @@
     {"slug": "twinkling", "meta": "programs/twinkling/meta.json", "wasm": "programs/twinkling/main.wasm"},
     {"slug": "vortex", "meta": "programs/vortex/meta.json", "wasm": "programs/vortex/main.wasm"},
     {"slug": "warp", "meta": "programs/warp/meta.json", "wasm": "programs/warp/main.wasm"},
-    {"slug": "waves", "meta": "programs/waves/meta.json", "wasm": "programs/waves/main.wasm"}
+    {"slug": "waves", "meta": "programs/waves/meta.json", "wasm": "programs/waves/main.wasm"},
+    {"slug": "whirl", "meta": "programs/whirl/meta.json", "wasm": "programs/whirl/main.wasm"}
   ]
 }
