@@ -38,7 +38,13 @@ export const useProgramStore = create<ProgramState>((set) => ({
       ),
     })),
   addProgram: (program) =>
-    set((state) => ({ programs: [...state.programs, program] })),
+    set((state) => {
+      const exists = state.programs.some((p) => p.id === program.id);
+      if (exists) {
+        return { programs: state.programs.map((p) => p.id === program.id ? { ...p, ...program } : p) };
+      }
+      return { programs: [...state.programs, program] };
+    }),
   removeProgram: (programId) =>
     set((state) => ({
       programs: state.programs.filter((p) => p.id !== programId),
