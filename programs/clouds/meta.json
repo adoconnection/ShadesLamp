@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Clouds",
   "desc": "Soft drifting clouds",
-  "author": "built-in",
+  "author": "Gyver",
   "category": "Ambient",
   "cover": {"from": "#1B2838", "to": "#6B7280", "via": "#374151", "angle": 160},
   "pulse": "#6B7280",

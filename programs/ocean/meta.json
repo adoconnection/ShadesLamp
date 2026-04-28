@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Ocean",
   "desc": "Deep ocean waves",
-  "author": "built-in",
+  "author": "Gyver",
   "category": "Streams",
   "cover": {"from": "#0C4A6E", "to": "#06B6D4", "via": "#0369A1", "angle": 210},
   "pulse": "#06B6D4",

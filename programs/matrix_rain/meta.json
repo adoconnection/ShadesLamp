@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Matrix Rain",
   "desc": "Falling green matrix characters",
-  "author": "built-in",
+  "author": "Gyver",
   "category": "Streams",
   "cover": {"from": "#022C22", "to": "#10B981", "via": "#064E3B", "angle": 180},
   "pulse": "#10B981",

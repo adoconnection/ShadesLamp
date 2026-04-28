@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Flame",
   "desc": "Realistic fire simulation",
-  "author": "built-in",
+  "author": "Gyver",
   "category": "Fire",
   "cover": {"from": "#7F1D1D", "to": "#F59E0B", "via": "#DC2626", "angle": 175},
   "pulse": "#F59E0B",

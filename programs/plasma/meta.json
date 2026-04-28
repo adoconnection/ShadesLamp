@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Plasma",
   "desc": "Classic plasma effect with smooth sine blending",
-  "author": "built-in",
+  "author": "Gyver",
   "category": "Streams",
   "cover": {"from": "#7C3AED", "to": "#EC4899", "via": "#3B82F6", "angle": 120},
   "pulse": "#EC4899",

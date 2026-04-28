@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Rainbow",
   "desc": "Smooth HSV rainbow cycle",
-  "author": "built-in",
+  "author": "Gyver",
   "category": "Streams",
   "cover": {"from": "#FF6B6B", "to": "#FFD93D", "via": "#6BCB77", "angle": 95},
   "pulse": "#FFD93D",

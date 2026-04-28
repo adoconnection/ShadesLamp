@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Lava",
   "desc": "Molten lava flow",
-  "author": "built-in",
+  "author": "Gyver",
   "category": "Fire",
   "cover": {"from": "#7F1D1D", "to": "#FF6B35", "via": "#B91C1C", "angle": 190},
   "pulse": "#FF6B35",

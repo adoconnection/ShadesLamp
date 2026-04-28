@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Snow",
   "desc": "Gently falling snowflakes",
-  "author": "built-in",
+  "author": "Gyver",
   "category": "Particles",
   "cover": {"from": "#0C4A6E", "to": "#E0F2FE", "via": "#0EA5E9", "angle": 200},
   "pulse": "#E0F2FE",

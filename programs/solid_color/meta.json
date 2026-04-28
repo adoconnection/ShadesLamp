@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Solid Color",
   "desc": "Static solid color fill",
-  "author": "built-in",
+  "author": "Gyver",
   "category": "Ambient",
   "cover": {"from": "#1F2937", "to": "#FAFAF7", "via": "#6B7280", "angle": 135},
   "pulse": "#FAFAF7",
