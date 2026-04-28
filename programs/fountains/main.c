@@ -13,18 +13,24 @@ static const char META[] =
     "{\"name\":\"Color Fountains\","
     "\"desc\":\"Overlapping fountain waves with dynamic rise and fade\","
     "\"params\":["
-        "{\"id\":0,\"name\":\"Intensity\",\"type\":\"int\","
+        "{\"id\":0,\"name\":\"Brightness\",\"type\":\"int\","
          "\"min\":1,\"max\":255,\"default\":200,"
          "\"desc\":\"Brightness of the fountain columns\"},"
         "{\"id\":1,\"name\":\"Fade\",\"type\":\"int\","
-         "\"min\":1,\"max\":10,\"default\":4,"
+         "\"min\":1,\"max\":10,\"default\":10,"
          "\"desc\":\"Fade speed: 1=slow glow, 10=fast sharp fade\"},"
         "{\"id\":2,\"name\":\"Waves\",\"type\":\"int\","
-         "\"min\":1,\"max\":5,\"default\":3,"
+         "\"min\":1,\"max\":5,\"default\":4,"
          "\"desc\":\"Number of overlapping fountain waves\"},"
-        "{\"id\":3,\"name\":\"Delay\",\"type\":\"int\","
-         "\"min\":2,\"max\":20,\"default\":10,"
-         "\"desc\":\"Delay between waves (x100ms)\"}"
+        "{\"id\":3,\"name\":\"Wave Delay\",\"type\":\"int\","
+         "\"min\":50,\"max\":2000,\"default\":500,"
+         "\"desc\":\"Delay between individual waves within a group (ms)\"},"
+        "{\"id\":4,\"name\":\"Group Delay\",\"type\":\"int\","
+         "\"min\":500,\"max\":10000,\"default\":3000,"
+         "\"desc\":\"Delay between groups of waves (ms)\"},"
+        "{\"id\":5,\"name\":\"Randomness\",\"type\":\"int\","
+         "\"min\":0,\"max\":100,\"default\":20,"
+         "\"desc\":\"Random variation applied to wave and group delays (%)\"}"
     "]}";
 
 EXPORT(get_meta_ptr)
@@ -86,6 +92,7 @@ static int32_t prev_tick;
 static int32_t launch_timer;      /* countdown to next wave launch */
 static int     next_hue;          /* hue for the next wave */
 static int     seq_counter;       /* monotonically increasing launch counter */
+static int     waves_in_group;    /* how many waves launched in current group */
 
 /* Asymmetric arc: peak at 30% of cycle for explosive rise */
 #define T_PEAK 0.3f
@@ -99,6 +106,7 @@ void init(void) {
     launch_timer = 0;
     next_hue = 0;
     seq_counter = 0;
+    waves_in_group = 0;
 }
 
 /* Launch a single wave (all columns simultaneously) */
@@ -117,7 +125,9 @@ void update(int tick_ms) {
     int bright      = get_param_i32(0);   /* 1-255 */
     int fade_speed  = get_param_i32(1);   /* 1-10  */
     int num_waves   = get_param_i32(2);   /* 1-5   */
-    int delay_param = get_param_i32(3);   /* 2-20  */
+    int wave_delay  = get_param_i32(3);   /* 50-2000 ms */
+    int group_delay = get_param_i32(4);   /* 500-10000 ms */
+    int randomness  = get_param_i32(5);   /* 0-100 % */
 
     int W = get_width();
     int H = get_height();
@@ -146,8 +156,24 @@ void update(int tick_ms) {
             launch_wave(slot, W, H, next_hue);
             /* Next wave gets a noticeably different hue */
             next_hue = (next_hue + random_range(35, 65)) & 0xFF;
-            int delay_base = delay_param * 100;
-            launch_timer = delay_base + random_range(-delay_base / 5, delay_base / 5 + 1);
+            waves_in_group++;
+
+            /* Pick delay: wave delay within group, group delay after full group */
+            int base_delay;
+            if (waves_in_group >= num_waves) {
+                base_delay = group_delay;
+                waves_in_group = 0;
+            } else {
+                base_delay = wave_delay;
+            }
+
+            /* Apply randomness: actual = base +/- (base * randomness / 100) */
+            int variation = base_delay * randomness / 100;
+            int jitter = (variation > 0)
+                ? random_range(-variation, variation + 1)
+                : 0;
+            launch_timer = base_delay + jitter;
+            if (launch_timer < 1) launch_timer = 1;
         }
         /* If no slot free, retry next frame (launch_timer stays <= 0) */
     }

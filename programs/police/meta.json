@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Police",
   "desc": "Red-blue police lights flashing",
-  "author": "built-in",
+  "author": "Shades",
   "category": "Ambient",
   "cover": {"from": "#1E3A8A", "to": "#EF4444", "via": "#1E40AF", "angle": 90},
   "pulse": "#EF4444",

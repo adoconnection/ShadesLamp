@@ -1,7 +1,7 @@
 {
   "name": "Fountains",
   "desc": "Synchronized fountain columns rising to different heights and fading on return",
-  "author": "ShadesLamp",
+  "author": "Shades",
   "category": "Particles",
   "version": "2.0.0",
   "cover": { "from": "#1a0533", "to": "#ff6b35", "angle": 0 },

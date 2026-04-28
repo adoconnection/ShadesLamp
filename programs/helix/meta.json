@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Helix",
   "desc": "Double helix DNA-like rotation",
-  "author": "built-in",
+  "author": "Shades",
   "category": "Streams",
   "cover": {"from": "#134E4A", "to": "#2DD4BF", "via": "#0D9488", "angle": 150},
   "pulse": "#2DD4BF",

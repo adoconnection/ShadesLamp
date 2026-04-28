@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Hexagons",
   "desc": "Hexagonal grid patterns",
-  "author": "built-in",
+  "author": "Shades",
   "category": "Streams",
   "cover": {"from": "#1A1A2E", "to": "#F97316", "via": "#9333EA", "angle": 125},
   "pulse": "#F97316",

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Core",
   "desc": "Particles orbiting around the equator with tilted orbits",
-  "author": "built-in",
+  "author": "Shades",
   "category": "Ambient",
   "cover": {"from": "#FF4500", "to": "#FFD700", "angle": 180},
   "pulse": "#FF6B00",

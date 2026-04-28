@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Candle",
   "desc": "Warm flickering candle light",
-  "author": "built-in",
+  "author": "Shades",
   "category": "Fire",
   "cover": {"from": "#7F1D1D", "to": "#FBBF24", "via": "#DC2626", "angle": 175},
   "pulse": "#FBBF24",

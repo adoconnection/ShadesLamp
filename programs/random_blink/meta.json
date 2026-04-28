@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Random Blink",
   "desc": "Random pixel flashes",
-  "author": "built-in",
+  "author": "Shades",
   "category": "Ambient",
   "cover": {"from": "#0F2027", "to": "#7DF9FF", "via": "#2C5364", "angle": 160},
   "pulse": "#7DF9FF",

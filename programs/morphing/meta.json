@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Morphing",
   "desc": "Shape morphing transitions",
-  "author": "built-in",
+  "author": "Shades",
   "category": "Streams",
   "cover": {"from": "#1E3A5F", "to": "#FB7185", "via": "#BE185D", "angle": 155},
   "pulse": "#FB7185",

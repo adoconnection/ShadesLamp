@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Matrix Test",
   "desc": "Matrix LED test pattern",
-  "author": "built-in",
+  "author": "Shades",
   "category": "Effects",
   "cover": {"from": "#1F2937", "to": "#9CA3AF", "via": "#4B5563", "angle": 135},
   "pulse": "#9CA3AF",

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Electrons",
   "desc": "Orbiting electrons around a nucleus",
-  "author": "built-in",
+  "author": "Shades",
   "category": "Particles",
   "cover": {"from": "#0C4A6E", "to": "#60A5FA", "via": "#1D4ED8", "angle": 145},
   "pulse": "#60A5FA",

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Vortex",
   "desc": "Swirling vortex effect",
-  "author": "built-in",
+  "author": "Shades",
   "category": "Streams",
   "cover": {"from": "#0C0A09", "to": "#7C3AED", "via": "#312E81", "angle": 190},
   "pulse": "#7C3AED",

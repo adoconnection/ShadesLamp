@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "Breathing",
   "desc": "Gentle brightness pulsing",
-  "author": "built-in",
+  "author": "Shades",
   "category": "Ambient",
   "cover": {"from": "#1a1a2e", "to": "#4a00e0", "via": "#3f37c9", "angle": 180},
   "pulse": "#4a00e0",

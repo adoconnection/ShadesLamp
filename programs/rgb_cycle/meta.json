@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "name": "RGB Cycle",
   "desc": "Pure R-G-B color rotation",
-  "author": "built-in",
+  "author": "Shades",
   "category": "Ambient",
   "cover": {"from": "#FF3B5C", "to": "#3B82FF", "via": "#00DC82", "angle": 135},
   "pulse": "#FF3B5C",
