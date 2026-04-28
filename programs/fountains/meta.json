@@ -6,5 +6,11 @@
   "version": "2.0.0",
   "cover": { "from": "#1a0533", "to": "#ff6b35", "angle": 0 },
   "pulse": "#ff6b35",
-  "tags": ["fountain", "particles", "colorful"]
+  "tags": ["fountain", "particles", "colorful"],
+  "i18n": {
+    "ru": {
+      "name": "Фонтаны",
+      "desc": "Синхронные столбы фонтанов, поднимающиеся на разную высоту"
+    }
+  }
 }

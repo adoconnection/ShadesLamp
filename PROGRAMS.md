@@ -76,35 +76,33 @@
 
 ```json
 {
-  "name": "Aurora Drift",
-  "desc": "Northern lights with slow drift",
-  "author": "k.morov",
-  "category": "Ambient",
-  "version": "1.2.0",
+  "guid": "8fd6e7f8-0910-4213-a4b5-c6d7e8f9102b",
+  "name": "Flame Particle",
+  "desc": "Particle-based fire simulation",
+  "author": "Shades",
+  "category": "Fire",
+  "version": "1.0.0",
 
   "cover": {
-    "from": "#0B3D2E",
-    "to": "#7B2CBF",
-    "via": "#06B6D4",
-    "angle": 200
+    "from": "#451A03",
+    "to": "#FBBF24",
+    "via": "#B45309",
+    "angle": 170
   },
-  "pulse": "#06B6D4",
+  "coverSvg": "<svg ...>...</svg>",
+  "pulse": "#FBBF24",
 
-  "about": "Layered sine waves create natural-looking curtain effects.",
+  "about": "Particles rise from the bottom and fade out, simulating a realistic flame.",
 
-  "tags": ["aurora", "ambient", "sine"],
+  "tags": ["fire", "particles", "warm"],
 
   "i18n": {
     "ru": {
-      "name": "Северное сияние",
-      "desc": "Медленный дрейф полярного сияния",
-      "about": "Многослойные синусоиды создают эффект колышущихся занавесей.",
+      "name": "Огненные частицы",
+      "desc": "Симуляция огня на основе частиц",
       "params": {
-        "0": { "name": "Скорость", "desc": "Скорость дрейфа" },
-        "1": { "name": "Яркость", "desc": "Общая яркость" },
-        "2": { "name": "Сдвиг оттенка", "desc": "Смещение базового оттенка" },
-        "3": { "name": "Плотность", "desc": "Плотность лент" },
-        "4": { "name": "Палитра", "desc": "Цветовая палитра", "options": ["Северное сияние", "Солнечная вспышка", "Глубокий океан"] }
+        "0": { "name": "Скорость", "desc": "Скорость частиц" },
+        "1": { "name": "Яркость", "desc": "Общая яркость" }
       }
     }
   }
@@ -115,15 +113,17 @@
 
 | Поле | Тип | Обязат. | Описание |
 |------|-----|---------|----------|
+| `guid` | string | нет | Уникальный UUID программы |
 | `name` | string | да | Имя (default locale = en) |
 | `desc` | string | да | Краткое описание |
-| `author` | string | да | Автор. `"built-in"` для встроенных |
-| `category` | enum | да | `"Effects"` / `"Ambient"` / `"Visualizers"` / `"Games"` |
+| `author` | string | да | Автор: `"Shades"`, `"Gyver"`, `"Gunner47"`, или имя автора |
+| `category` | enum | да | `"Ambient"` / `"Fire"` / `"Particles"` / `"Streams"` / `"Effects"` / `"Visualizers"` / `"Games"` |
 | `version` | string | нет | Версия `"1.0.0"` |
 | `cover` | Cover | да | Градиент обложки |
+| `coverSvg` | string | нет | SVG-превью для маркетплейса (inline) |
 | `pulse` | string | да | Доминантный цвет (hex) |
 | `about` | string | нет | Развёрнутое описание |
-| `tags` | string[] | нет | Теги |
+| `tags` | string[] | нет | Теги для поиска |
 | `i18n` | object | нет | Локализации (см. ниже) |
 
 ### Cover

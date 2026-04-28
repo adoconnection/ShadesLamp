@@ -6,5 +6,11 @@
   "version": "1.0.0",
   "cover": { "from": "#0a0020", "to": "#ff4444", "angle": 0 },
   "pulse": "#ff4444",
-  "tags": ["fireworks", "particles", "explosion"]
+  "tags": ["fireworks", "particles", "explosion"],
+  "i18n": {
+    "ru": {
+      "name": "Фейерверк",
+      "desc": "Ракеты взлетают и взрываются цветными частицами"
+    }
+  }
 }
