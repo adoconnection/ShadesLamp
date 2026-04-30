@@ -17,6 +17,7 @@
     {"slug": "electrons", "meta": "programs/electrons/meta.json", "wasm": "programs/electrons/main.wasm"},
     {"slug": "fireflies", "meta": "programs/fireflies/meta.json", "wasm": "programs/fireflies/main.wasm"},
     {"slug": "fireworks", "meta": "programs/fireworks/meta.json", "wasm": "programs/fireworks/main.wasm"},
+    {"slug": "flowers", "meta": "programs/flowers/meta.json", "wasm": "programs/flowers/main.wasm"},
     {"slug": "flame", "meta": "programs/flame/meta.json", "wasm": "programs/flame/main.wasm"},
     {"slug": "flame_particle", "meta": "programs/flame_particle/meta.json", "wasm": "programs/flame_particle/main.wasm"},
     {"slug": "forest", "meta": "programs/forest/meta.json", "wasm": "programs/forest/main.wasm"},
