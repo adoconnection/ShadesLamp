@@ -96,6 +96,8 @@ public:
     uint32_t  uploadSize;
     uint32_t  uploadOffset;
     bool      uploadInProgress;
+    uint8_t   uploadType;         // 0=WASM, 1=META
+    uint8_t   uploadMetaProgId;   // program ID for META upload
     volatile bool pausedByUpload;
     volatile bool powerOn;
 

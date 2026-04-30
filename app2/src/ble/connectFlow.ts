@@ -132,9 +132,11 @@ export async function connectAndLoadDevice(
       }
 
       // No cache hit — fetch meta from device
+      let metaVersion: string | undefined;
       try {
         const raw = await getMeta(p.id);
         if (raw && raw.name) {
+          metaVersion = raw.version;
           meta = {
             name: raw.name,
             desc: raw.desc || '',
@@ -156,7 +158,7 @@ export async function connectAndLoadDevice(
 
       return {
         id: p.id, name: meta.name, desc: meta.desc, author: meta.author,
-        size: '', version: p.version, cover: meta.cover, coverSvg: meta.coverSvg,
+        size: '', version: p.version || metaVersion, cover: meta.cover, coverSvg: meta.coverSvg,
         pulse: meta.pulse, category: meta.category, params: [], slug: meta.slug,
       };
     }),

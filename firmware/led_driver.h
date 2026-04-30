@@ -4,9 +4,18 @@
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
 
+// Color order presets (index used in config/BLE protocol)
+#define LED_ORDER_GRB  0  // default for WS2812
+#define LED_ORDER_RGB  1
+#define LED_ORDER_BRG  2
+#define LED_ORDER_RBG  3
+#define LED_ORDER_GBR  4
+#define LED_ORDER_BGR  5
+#define LED_ORDER_COUNT 6
+
 class LedDriver {
 public:
-    LedDriver(uint8_t pin, uint16_t width, uint16_t height, bool zigzag = false);
+    LedDriver(uint8_t pin, uint16_t width, uint16_t height, bool zigzag = false, uint8_t colorOrder = LED_ORDER_GRB);
     ~LedDriver();
 
     void begin();
@@ -24,6 +33,7 @@ private:
     uint16_t _numPixels;
 
     bool     _zigzag;
+    uint8_t  _colorOrder;
     uint8_t* _framebuffer;          // RGB framebuffer in PSRAM
     Adafruit_NeoPixel* _strip;
     SemaphoreHandle_t  _mutex;

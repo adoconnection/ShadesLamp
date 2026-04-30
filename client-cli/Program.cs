@@ -44,6 +44,7 @@ const byte FLAG_ERROR = 0x02;
 
 const int UPLOAD_CHUNK_SIZE = 200;
 const int RESPONSE_TIMEOUT_MS = 5000;
+const int UPLOAD_FINISH_TIMEOUT_MS = 15000;
 const int CONNECT_TIMEOUT_MS = 10000;
 
 // ─── Parse CLI args ─────────────────────────────────────────────────────────
@@ -528,14 +529,14 @@ async Task<int> CmdUpload(string filePath)
         int percent = (int)((long)offset * 100 / fileData.Length);
         Console.Error.Write($"\r  [{chunkIndex}/{totalChunks}] {percent}%");
 
-        if (chunkIndex % 10 == 0)
-            await Task.Delay(20);
+        await Task.Delay(chunkIndex % 5 == 0 ? 30 : 10);
     }
 
     Console.Error.WriteLine();
 
-    // UPLOAD_FINISH
-    var finishResp = await SendCommand(CMD_UPLOAD_FINISH);
+    // UPLOAD_FINISH (longer timeout — device writes to flash)
+    Console.Error.Write("Finishing upload... ");
+    var finishResp = await SendCommand(CMD_UPLOAD_FINISH, timeout: UPLOAD_FINISH_TIMEOUT_MS);
 
     using var finishDoc = JsonDocument.Parse(finishResp);
     if (finishDoc.RootElement.TryGetProperty("ok", out var finishOk) && finishOk.GetBoolean())
@@ -691,8 +692,10 @@ async Task<int> CmdHwConfig()
     var width = root.GetProperty("width").GetInt32();
     var height = root.GetProperty("height").GetInt32();
     var zigzag = root.TryGetProperty("zigzag", out var zz) && zz.GetBoolean();
+    var colorOrder = root.TryGetProperty("colorOrder", out var co) ? co.GetInt32() : 0;
+    var colorOrderName = root.TryGetProperty("colorOrderName", out var con) ? con.GetString() : "GRB";
 
-    Console.WriteLine($"Pin: {pin}, Size: {width}x{height}, Zigzag: {(zigzag ? "on" : "off")}");
+    Console.WriteLine($"Pin: {pin}, Size: {width}x{height}, Zigzag: {(zigzag ? "on" : "off")}, Color order: {colorOrderName} ({colorOrder})");
     return 0;
 }
 
@@ -713,8 +716,11 @@ async Task<int> CmdSetHwConfig(List<string> cliArgs)
     int width = cur.GetProperty("width").GetInt32();
     int height = cur.GetProperty("height").GetInt32();
     bool zigzag = cur.TryGetProperty("zigzag", out var zzVal) && zzVal.GetBoolean();
+    int colorOrder = cur.TryGetProperty("colorOrder", out var coVal) ? coVal.GetInt32() : 0;
 
-    // Parse optional args: --pin N --width N --height N --zigzag --no-zigzag
+    string[] orderNames = ["GRB", "RGB", "BRG", "RBG", "GBR", "BGR"];
+
+    // Parse optional args: --pin N --width N --height N --zigzag --no-zigzag --color-order NAME
     bool anySet = false;
     for (int i = 1; i < cliArgs.Count; i++)
     {
@@ -743,21 +749,41 @@ async Task<int> CmdSetHwConfig(List<string> cliArgs)
             zigzag = false;
             anySet = true;
         }
+        else if (cliArgs[i] == "--color-order" && i + 1 < cliArgs.Count)
+        {
+            var orderArg = cliArgs[++i];
+            if (int.TryParse(orderArg, out int orderNum) && orderNum >= 0 && orderNum < orderNames.Length)
+            {
+                colorOrder = orderNum;
+            }
+            else
+            {
+                int idx = Array.IndexOf(orderNames, orderArg.ToUpper());
+                if (idx < 0)
+                {
+                    Console.Error.WriteLine($"Invalid color order '{orderArg}'. Valid: {string.Join(", ", orderNames)} (or 0-5)");
+                    return 1;
+                }
+                colorOrder = idx;
+            }
+            anySet = true;
+        }
     }
 
     if (!anySet)
     {
-        Console.Error.WriteLine("Usage: set-hw-config --pin <N> --width <N> --height <N> [--zigzag|--no-zigzag]");
+        Console.Error.WriteLine("Usage: set-hw-config --pin <N> --width <N> --height <N> [--zigzag|--no-zigzag] [--color-order GRB|RGB|BRG|RBG|GBR|BGR|0-5]");
         Console.Error.WriteLine("At least one parameter is required.");
         return 1;
     }
 
-    // Build payload: pin(1) + width(2 LE) + height(2 LE) + zigzag(1)
-    var payload = new byte[6];
+    // Build payload: pin(1) + width(2 LE) + height(2 LE) + zigzag(1) + colorOrder(1)
+    var payload = new byte[7];
     payload[0] = (byte)pin;
     BitConverter.GetBytes((ushort)width).CopyTo(payload, 1);
     BitConverter.GetBytes((ushort)height).CopyTo(payload, 3);
     payload[5] = (byte)(zigzag ? 1 : 0);
+    payload[6] = (byte)colorOrder;
 
     var resp = await SendCommand(CMD_SET_HW_CONFIG, payload);
     using var doc = JsonDocument.Parse(resp);
@@ -766,7 +792,8 @@ async Task<int> CmdSetHwConfig(List<string> cliArgs)
     if (root.TryGetProperty("ok", out var ok) && ok.GetBoolean())
     {
         string zigzagStr = zigzag ? ", zigzag" : "";
-        Console.WriteLine($"Hardware config updated (pin={pin}, {width}x{height}{zigzagStr}). Reboot device to apply.");
+        string orderStr = colorOrder < orderNames.Length ? orderNames[colorOrder] : "?";
+        Console.WriteLine($"Hardware config updated (pin={pin}, {width}x{height}{zigzagStr}, color order={orderStr}). Reboot device to apply.");
         return 0;
     }
 
@@ -797,22 +824,67 @@ async Task<int> CmdSetMeta(int programId, string filePath)
         return 1;
     }
 
-    var payload = new byte[1 + Encoding.UTF8.GetByteCount(json)];
-    payload[0] = (byte)programId;
-    Encoding.UTF8.GetBytes(json, 0, json.Length, payload, 1);
+    return await UploadMeta(programId, json);
+}
 
-    var resp = await SendCommand(CMD_SET_META, payload);
-    using var doc = JsonDocument.Parse(resp);
+async Task<int> UploadMeta(int programId, string json)
+{
+    var fileData = Encoding.UTF8.GetBytes(json);
+    Console.Error.Write($"Uploading meta for program {programId} ({fileData.Length} bytes)... ");
 
-    if (doc.RootElement.TryGetProperty("ok", out var ok) && ok.GetBoolean())
+    // UPLOAD_START with type=1 (META) + progId
+    var startPayload = new byte[6];
+    BitConverter.GetBytes((uint)fileData.Length).CopyTo(startPayload, 0);
+    startPayload[4] = 1; // type = META
+    startPayload[5] = (byte)programId;
+
+    var startResp = await SendCommand(CMD_UPLOAD_START, startPayload);
+    using (var doc = JsonDocument.Parse(startResp))
     {
-        Console.WriteLine($"Meta set for program {programId}");
-        return 0;
+        if (!doc.RootElement.TryGetProperty("ok", out var ok) || !ok.GetBoolean())
+        {
+            var err = doc.RootElement.TryGetProperty("err", out var e) ? e.GetString() : "Unknown";
+            Console.Error.WriteLine($"failed: {err}");
+            return 1;
+        }
     }
 
-    var err = doc.RootElement.TryGetProperty("err", out var e) ? e.GetString() : "Unknown";
-    Console.Error.WriteLine($"Set meta failed: {err}");
-    return 1;
+    // Send chunks via upload characteristic
+    int offset = 0;
+    while (offset < fileData.Length)
+    {
+        int chunkLen = Math.Min(UPLOAD_CHUNK_SIZE, fileData.Length - offset);
+        var writer = new DataWriter();
+        writer.WriteBytes(fileData.AsSpan(offset, chunkLen).ToArray());
+
+        var writeResult = await uploadChar!.WriteValueAsync(
+            writer.DetachBuffer(), GattWriteOption.WriteWithoutResponse);
+
+        if (writeResult != GattCommunicationStatus.Success)
+        {
+            Console.Error.WriteLine($"chunk write failed at offset {offset}");
+            return 1;
+        }
+
+        offset += chunkLen;
+        await Task.Delay(10);
+    }
+
+    // UPLOAD_FINISH
+    var finishResp = await SendCommand(CMD_UPLOAD_FINISH, timeout: UPLOAD_FINISH_TIMEOUT_MS);
+
+    using var finishDoc = JsonDocument.Parse(finishResp);
+    if (finishDoc.RootElement.TryGetProperty("ok", out var finishOk) && finishOk.GetBoolean())
+    {
+        Console.Error.WriteLine("OK");
+        return 0;
+    }
+    else
+    {
+        var err = finishDoc.RootElement.TryGetProperty("err", out var e) ? e.GetString() : "Unknown";
+        Console.Error.WriteLine($"failed: {err}");
+        return 1;
+    }
 }
 
 async Task<int> CmdPushMeta(List<string> cliArgs)
@@ -895,15 +967,10 @@ async Task<int> CmdPushMeta(List<string> cliArgs)
             continue;
         }
 
-        var payload = new byte[1 + Encoding.UTF8.GetByteCount(json)];
-        payload[0] = (byte)id;
-        Encoding.UTF8.GetBytes(json, 0, json.Length, payload, 1);
-
         try
         {
-            var resp = await SendCommand(CMD_SET_META, payload);
-            using var doc = JsonDocument.Parse(resp);
-            if (doc.RootElement.TryGetProperty("ok", out var ok) && ok.GetBoolean())
+            var result = await UploadMeta(id, json);
+            if (result == 0)
             {
                 Console.WriteLine($"  [{id}] {name}: OK");
                 success++;
@@ -941,7 +1008,7 @@ async Task<int> CmdReboot()
 
 // ─── BLE helpers ────────────────────────────────────────────────────────────
 
-async Task<string> SendCommand(byte commandCode, byte[]? payload = null)
+async Task<string> SendCommand(byte commandCode, byte[]? payload = null, int timeout = RESPONSE_TIMEOUT_MS)
 {
     if (commandChar == null) throw new InvalidOperationException("Not connected");
 
@@ -964,7 +1031,7 @@ async Task<string> SendCommand(byte commandCode, byte[]? payload = null)
         throw new IOException($"BLE write failed: {writeResult}");
     }
 
-    using var timeoutCts = new CancellationTokenSource(RESPONSE_TIMEOUT_MS);
+    using var timeoutCts = new CancellationTokenSource(timeout);
 
     try
     {
@@ -1042,6 +1109,7 @@ void PrintUsage()
     Console.Error.WriteLine("    --height <N>                      Matrix height (1-1024)");
     Console.Error.WriteLine("    --zigzag                          Serpentine/zigzag wiring");
     Console.Error.WriteLine("    --no-zigzag                       Linear wiring (default)");
+    Console.Error.WriteLine("    --color-order <ORDER>             GRB (default), RGB, BRG, RBG, GBR, BGR (or 0-5)");
     Console.Error.WriteLine("  get-meta <program-id>             Get program meta.json from device");
     Console.Error.WriteLine("  set-meta <program-id> <file>      Upload meta.json to device");
     Console.Error.WriteLine("  push-meta [programs-dir]          Push meta.json for all programs on device");

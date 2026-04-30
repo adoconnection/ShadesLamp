@@ -2,12 +2,25 @@
 
 #define TAG "[LED]"
 
-LedDriver::LedDriver(uint8_t pin, uint16_t width, uint16_t height, bool zigzag)
+// Map color order index to Adafruit NeoPixel type constant
+static neoPixelType colorOrderToNeoType(uint8_t order) {
+    switch (order) {
+        case LED_ORDER_RGB: return NEO_RGB + NEO_KHZ800;
+        case LED_ORDER_BRG: return NEO_BRG + NEO_KHZ800;
+        case LED_ORDER_RBG: return NEO_RBG + NEO_KHZ800;
+        case LED_ORDER_GBR: return NEO_GBR + NEO_KHZ800;
+        case LED_ORDER_BGR: return NEO_BGR + NEO_KHZ800;
+        default:            return NEO_GRB + NEO_KHZ800;
+    }
+}
+
+LedDriver::LedDriver(uint8_t pin, uint16_t width, uint16_t height, bool zigzag, uint8_t colorOrder)
     : _pin(pin)
     , _width(width)
     , _height(height)
     , _numPixels(width * height)
     , _zigzag(zigzag)
+    , _colorOrder(colorOrder < LED_ORDER_COUNT ? colorOrder : LED_ORDER_GRB)
     , _framebuffer(nullptr)
     , _strip(nullptr)
 {
@@ -35,14 +48,16 @@ void LedDriver::begin() {
     }
     memset(_framebuffer, 0, bufSize);
 
-    // Initialize NeoPixel strip
-    _strip = new Adafruit_NeoPixel(_numPixels, _pin, NEO_GRB + NEO_KHZ800);
+    // Initialize NeoPixel strip with configured color order
+    _strip = new Adafruit_NeoPixel(_numPixels, _pin, colorOrderToNeoType(_colorOrder));
     _strip->begin();
     _strip->clear();
     _strip->show();
 
-    Serial.printf("%s Initialized %ux%u (%u pixels) on GPIO %u\r\n",
-                  TAG, _width, _height, _numPixels, _pin);
+    static const char* ORDER_NAMES[] = {"GRB","RGB","BRG","RBG","GBR","BGR"};
+    Serial.printf("%s Initialized %ux%u (%u pixels) on GPIO %u, order=%s\r\n",
+                  TAG, _width, _height, _numPixels, _pin,
+                  _colorOrder < LED_ORDER_COUNT ? ORDER_NAMES[_colorOrder] : "?");
 }
 
 void LedDriver::setPixel(uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b) {

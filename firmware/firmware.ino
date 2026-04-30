@@ -86,7 +86,8 @@ void setup() {
     uint8_t ledPin = 48;
     uint16_t ledWidth = 1, ledHeight = 1;
     bool ledZigzag = false;
-    Storage::loadHardwareConfig(ledPin, ledWidth, ledHeight, ledZigzag);
+    uint8_t ledColorOrder = 0; // 0=GRB (default WS2812)
+    Storage::loadHardwareConfig(ledPin, ledWidth, ledHeight, ledZigzag, ledColorOrder);
 
     Serial.println();
     Serial.println("=================================");
@@ -101,7 +102,7 @@ void setup() {
     Serial.printf("[MAIN] Free PSRAM: %u bytes\r\n", ESP.getFreePsram());
 
     // Create and initialize LED driver with config values
-    ledDriver = new LedDriver(ledPin, ledWidth, ledHeight, ledZigzag);
+    ledDriver = new LedDriver(ledPin, ledWidth, ledHeight, ledZigzag, ledColorOrder);
     ledDriver->begin();
 
     // Create engine and manager with dynamic pointers

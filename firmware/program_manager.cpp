@@ -17,6 +17,7 @@ ProgramManager::ProgramManager(WasmEngine* engine, ParamStore* paramStore, LedDr
     , _ledWidth(1)
     , _ledHeight(1)
     , _ledZigzag(false)
+    , _ledColorOrder(0)
     , _paramsDirty(false)
     , _lastParamDirtyTime(0)
     , _pendingSwitchId(0xFF)
@@ -478,12 +479,14 @@ uint8_t ProgramManager::getLedPin() const { return _ledPin; }
 uint16_t ProgramManager::getLedWidth() const { return _ledWidth; }
 uint16_t ProgramManager::getLedHeight() const { return _ledHeight; }
 bool ProgramManager::getLedZigzag() const { return _ledZigzag; }
+uint8_t ProgramManager::getLedColorOrder() const { return _ledColorOrder; }
 
-void ProgramManager::setHardwareConfig(uint8_t pin, uint16_t width, uint16_t height, bool zigzag) {
+void ProgramManager::setHardwareConfig(uint8_t pin, uint16_t width, uint16_t height, bool zigzag, uint8_t colorOrder) {
     _ledPin = pin;
     _ledWidth = width;
     _ledHeight = height;
     _ledZigzag = zigzag;
+    _ledColorOrder = colorOrder;
     saveConfig();
 }
 
@@ -495,6 +498,7 @@ void ProgramManager::saveConfig() {
     doc["ledWidth"] = _ledWidth;
     doc["ledHeight"] = _ledHeight;
     doc["ledZigzag"] = _ledZigzag;
+    doc["ledColorOrder"] = _ledColorOrder;
 
     String output;
     serializeJson(doc, output);
@@ -583,6 +587,7 @@ void ProgramManager::loadConfig() {
     if (doc.containsKey("ledWidth"))  _ledWidth  = doc["ledWidth"].as<uint16_t>();
     if (doc.containsKey("ledHeight")) _ledHeight = doc["ledHeight"].as<uint16_t>();
     if (doc.containsKey("ledZigzag")) _ledZigzag = doc["ledZigzag"].as<bool>();
+    if (doc.containsKey("ledColorOrder")) _ledColorOrder = doc["ledColorOrder"].as<uint8_t>();
 
     if (doc.containsKey("active")) {
         _activeId = doc["active"].as<uint8_t>();

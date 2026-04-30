@@ -126,8 +126,14 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 uint32_t totalSize = 0;
                 memcpy(&totalSize, payload, 4); // little-endian
 
-                if (totalSize == 0 || totalSize > MAX_UPLOAD_SIZE) {
-                    Serial.printf("%s UPLOAD_START: invalid size %u\r\n", TAG, totalSize);
+                // Optional: type(1) + progId(1) after size
+                // type: 0=WASM (default), 1=META
+                uint8_t upType = (payloadLen >= 5) ? payload[4] : 0;
+                uint8_t metaProgId = (payloadLen >= 6) ? payload[5] : 0;
+
+                uint32_t maxSize = (upType == 1) ? 8192 : MAX_UPLOAD_SIZE;
+                if (totalSize == 0 || totalSize > maxSize) {
+                    Serial.printf("%s UPLOAD_START: invalid size %u (type=%u)\r\n", TAG, totalSize, upType);
                     g_bleService->sendResponse("{\"ok\":false,\"err\":\"invalid size\"}", true);
                     break;
                 }
@@ -138,10 +144,14 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                     g_bleService->uploadBuffer = nullptr;
                 }
 
-                // Allocate upload buffer in PSRAM
-                g_bleService->uploadBuffer = (uint8_t*)ps_malloc(totalSize);
-                if (!g_bleService->uploadBuffer) {
+                // Allocate upload buffer (PSRAM for WASM, regular for small meta)
+                if (upType == 1) {
                     g_bleService->uploadBuffer = (uint8_t*)malloc(totalSize);
+                } else {
+                    g_bleService->uploadBuffer = (uint8_t*)ps_malloc(totalSize);
+                    if (!g_bleService->uploadBuffer) {
+                        g_bleService->uploadBuffer = (uint8_t*)malloc(totalSize);
+                    }
                 }
                 if (!g_bleService->uploadBuffer) {
                     Serial.printf("%s UPLOAD_START: alloc failed for %u bytes\r\n", TAG, totalSize);
@@ -152,16 +162,20 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 g_bleService->uploadSize = totalSize;
                 g_bleService->uploadOffset = 0;
                 g_bleService->uploadInProgress = true;
+                g_bleService->uploadType = upType;
+                g_bleService->uploadMetaProgId = metaProgId;
 
-                // Pause rendering and clear LEDs for progress indicator
-                g_bleService->pausedByUpload = true;
-                LedDriver* led = g_bleService->getLedDriver();
-                if (led) {
-                    led->clear();
-                    led->show();
+                // Pause rendering and show progress only for WASM uploads
+                if (upType == 0) {
+                    g_bleService->pausedByUpload = true;
+                    LedDriver* led = g_bleService->getLedDriver();
+                    if (led) {
+                        led->clear();
+                        led->show();
+                    }
                 }
 
-                Serial.printf("%s UPLOAD_START: %u bytes\r\n", TAG, totalSize);
+                Serial.printf("%s UPLOAD_START: %u bytes, type=%u\r\n", TAG, totalSize, upType);
                 g_bleService->sendResponse("{\"ok\":true}");
                 break;
             }
@@ -172,48 +186,67 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                     break;
                 }
 
-                Serial.printf("%s UPLOAD_FINISH: received %u/%u bytes\r\n", TAG,
-                              g_bleService->uploadOffset, g_bleService->uploadSize);
+                uint8_t upType = g_bleService->uploadType;
+                Serial.printf("%s UPLOAD_FINISH: received %u/%u bytes (type=%u)\r\n", TAG,
+                              g_bleService->uploadOffset, g_bleService->uploadSize, upType);
 
                 if (g_bleService->uploadOffset != g_bleService->uploadSize) {
                     Serial.printf("%s UPLOAD_FINISH: incomplete upload\r\n", TAG);
                     free(g_bleService->uploadBuffer);
                     g_bleService->uploadBuffer = nullptr;
                     g_bleService->uploadInProgress = false;
-                    g_bleService->pausedByUpload = false;  // Resume rendering
+                    g_bleService->pausedByUpload = false;
                     g_bleService->sendResponse("{\"ok\":false,\"err\":\"incomplete upload\"}", true);
                     break;
                 }
 
-                // Flash all green briefly to indicate success before processing
-                {
-                    LedDriver* led = g_bleService->getLedDriver();
-                    if (led) {
-                        uint16_t w = led->getWidth();
-                        uint16_t h = led->getHeight();
-                        for (uint16_t y = 0; y < h; y++)
-                            for (uint16_t x = 0; x < w; x++)
-                                led->setPixel(x, y, 0, 255, 0);
-                        led->show();
+                if (upType == 1) {
+                    // ── META upload ──
+                    uint8_t progId = g_bleService->uploadMetaProgId;
+                    String json((const char*)g_bleService->uploadBuffer, g_bleService->uploadSize);
+
+                    free(g_bleService->uploadBuffer);
+                    g_bleService->uploadBuffer = nullptr;
+                    g_bleService->uploadInProgress = false;
+
+                    bool ok = pm->setProgramMeta(progId, json);
+                    if (ok) {
+                        Serial.printf("%s META_FINISH[%u] OK (%u bytes)\r\n", TAG, progId, json.length());
+                        g_bleService->sendResponse("{\"ok\":true}");
+                    } else {
+                        g_bleService->sendResponse("{\"ok\":false,\"err\":\"set_meta failed\"}", true);
                     }
-                }
-
-                // Try to upload the program
-                int8_t newId = pm->uploadProgram(g_bleService->uploadBuffer, g_bleService->uploadSize);
-
-                free(g_bleService->uploadBuffer);
-                g_bleService->uploadBuffer = nullptr;
-                g_bleService->uploadInProgress = false;
-                g_bleService->pausedByUpload = false;  // Resume rendering
-
-                if (newId < 0) {
-                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"invalid WASM\"}", true);
                 } else {
-                    char resp[64];
-                    snprintf(resp, sizeof(resp), "{\"ok\":true,\"id\":%d}", newId);
-                    Serial.printf("%s UPLOAD_FINISH: saved as ID %d\r\n", TAG, newId);
-                    g_bleService->sendResponse(String(resp));
-                    g_bleService->queueEvent(EVT_PROGRAM_ADDED, (uint8_t)newId);
+                    // ── WASM upload ──
+                    // Flash all green briefly to indicate success before processing
+                    {
+                        LedDriver* led = g_bleService->getLedDriver();
+                        if (led) {
+                            uint16_t w = led->getWidth();
+                            uint16_t h = led->getHeight();
+                            for (uint16_t y = 0; y < h; y++)
+                                for (uint16_t x = 0; x < w; x++)
+                                    led->setPixel(x, y, 0, 255, 0);
+                            led->show();
+                        }
+                    }
+
+                    int8_t newId = pm->uploadProgram(g_bleService->uploadBuffer, g_bleService->uploadSize);
+
+                    free(g_bleService->uploadBuffer);
+                    g_bleService->uploadBuffer = nullptr;
+                    g_bleService->uploadInProgress = false;
+                    g_bleService->pausedByUpload = false;
+
+                    if (newId < 0) {
+                        g_bleService->sendResponse("{\"ok\":false,\"err\":\"invalid WASM\"}", true);
+                    } else {
+                        char resp[64];
+                        snprintf(resp, sizeof(resp), "{\"ok\":true,\"id\":%d}", newId);
+                        Serial.printf("%s UPLOAD_FINISH: saved as ID %d\r\n", TAG, newId);
+                        g_bleService->sendResponse(String(resp));
+                        g_bleService->queueEvent(EVT_PROGRAM_ADDED, (uint8_t)newId);
+                    }
                 }
                 break;
             }
@@ -224,16 +257,11 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                     break;
                 }
                 uint8_t progId = payload[0];
-                bool ok = pm->deleteProgram(progId);
-
-                if (ok) {
-                    Serial.printf("%s CMD DELETE prog=%u OK\r\n", TAG, progId);
-                    g_bleService->sendResponse("{\"ok\":true}");
-                    g_bleService->queueEvent(EVT_PROGRAM_DELETED, progId);
-                } else {
-                    Serial.printf("%s CMD DELETE prog=%u FAIL\r\n", TAG, progId);
-                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"delete failed\"}", true);
-                }
+                // Defer to render task to avoid race with WASM tick() on Core 1
+                Serial.printf("%s CMD DELETE prog=%u (deferred)\r\n", TAG, progId);
+                pm->requestDelete(progId);
+                g_bleService->sendResponse("{\"ok\":true}");
+                g_bleService->queueEvent(EVT_PROGRAM_DELETED, progId);
                 break;
             }
 
@@ -267,11 +295,15 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 snprintf(serial, sizeof(serial), "%04X%08X",
                     (uint16_t)(mac >> 32), (uint32_t)mac);
 
-                char resp[192];
+                static const char* ORDER_NAMES[] = {"GRB","RGB","BRG","RBG","GBR","BGR"};
+                uint8_t order = pm->getLedColorOrder();
+                const char* orderName = (order < 6) ? ORDER_NAMES[order] : "GRB";
+
+                char resp[224];
                 snprintf(resp, sizeof(resp),
-                    "{\"ok\":true,\"pin\":%u,\"width\":%u,\"height\":%u,\"zigzag\":%s,\"serial\":\"%s\"}",
+                    "{\"ok\":true,\"pin\":%u,\"width\":%u,\"height\":%u,\"zigzag\":%s,\"colorOrder\":%u,\"colorOrderName\":\"%s\",\"serial\":\"%s\"}",
                     pm->getLedPin(), pm->getLedWidth(), pm->getLedHeight(),
-                    pm->getLedZigzag() ? "true" : "false", serial);
+                    pm->getLedZigzag() ? "true" : "false", order, orderName, serial);
                 Serial.printf("%s CMD GET_HW_CONFIG: %s\r\n", TAG, resp);
                 g_bleService->sendResponse(String(resp));
                 break;
@@ -279,7 +311,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
 
             case CMD_SET_HW_CONFIG: {
                 if (payloadLen < 6) {
-                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"need 6 bytes: pin(1)+width(2)+height(2)+zigzag(1)\"}", true);
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"need 6+ bytes: pin(1)+width(2)+height(2)+zigzag(1)+[colorOrder(1)]\"}", true);
                     break;
                 }
                 uint8_t pin = payload[0];
@@ -287,14 +319,16 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 memcpy(&w, payload + 1, 2);
                 memcpy(&h, payload + 3, 2);
                 bool zigzag = payload[5] != 0;
+                uint8_t colorOrder = (payloadLen >= 7) ? payload[6] : pm->getLedColorOrder();
 
                 if (pin > 48 || w == 0 || w > 1024 || h == 0 || h > 1024) {
                     g_bleService->sendResponse("{\"ok\":false,\"err\":\"invalid values\"}", true);
                     break;
                 }
+                if (colorOrder >= 6) colorOrder = 0;
 
-                Serial.printf("%s CMD SET_HW_CONFIG: pin=%u, %ux%u, zigzag=%d\r\n", TAG, pin, w, h, zigzag);
-                pm->setHardwareConfig(pin, w, h, zigzag);
+                Serial.printf("%s CMD SET_HW_CONFIG: pin=%u, %ux%u, zigzag=%d, order=%u\r\n", TAG, pin, w, h, zigzag, colorOrder);
+                pm->setHardwareConfig(pin, w, h, zigzag, colorOrder);
                 g_bleService->sendResponse("{\"ok\":true,\"reboot\":true}");
                 break;
             }
@@ -494,6 +528,8 @@ BleService::BleService(ProgramManager* pm, LedDriver* led)
     , uploadSize(0)
     , uploadOffset(0)
     , uploadInProgress(false)
+    , uploadType(0)
+    , uploadMetaProgId(0)
 {
     _mutex = xSemaphoreCreateMutex();
     g_bleService = this;

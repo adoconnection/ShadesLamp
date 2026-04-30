@@ -103,7 +103,8 @@ public:
     uint16_t getLedWidth() const;
     uint16_t getLedHeight() const;
     bool     getLedZigzag() const;
-    void setHardwareConfig(uint8_t pin, uint16_t width, uint16_t height, bool zigzag);
+    uint8_t  getLedColorOrder() const;
+    void setHardwareConfig(uint8_t pin, uint16_t width, uint16_t height, bool zigzag, uint8_t colorOrder);
 
 private:
     int findProgramIndex(uint8_t id) const;
@@ -124,6 +125,7 @@ private:
     uint16_t _ledWidth;
     uint16_t _ledHeight;
     bool     _ledZigzag;
+    uint8_t  _ledColorOrder;
 
     std::vector<uint8_t> _order;  // custom display order (program IDs)
 

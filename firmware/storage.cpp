@@ -192,19 +192,20 @@ String loadConfig() {
     return content;
 }
 
-void loadHardwareConfig(uint8_t& pin, uint16_t& width, uint16_t& height, bool& zigzag) {
+void loadHardwareConfig(uint8_t& pin, uint16_t& width, uint16_t& height, bool& zigzag, uint8_t& colorOrder) {
     String configStr = loadConfig();
     if (configStr.length() == 0) return;
 
     JsonDocument doc;
     if (deserializeJson(doc, configStr)) return;
 
-    if (doc.containsKey("ledPin"))    pin    = doc["ledPin"].as<uint8_t>();
-    if (doc.containsKey("ledWidth"))  width  = doc["ledWidth"].as<uint16_t>();
-    if (doc.containsKey("ledHeight")) height = doc["ledHeight"].as<uint16_t>();
-    if (doc.containsKey("ledZigzag")) zigzag = doc["ledZigzag"].as<bool>();
+    if (doc.containsKey("ledPin"))        pin        = doc["ledPin"].as<uint8_t>();
+    if (doc.containsKey("ledWidth"))      width      = doc["ledWidth"].as<uint16_t>();
+    if (doc.containsKey("ledHeight"))     height     = doc["ledHeight"].as<uint16_t>();
+    if (doc.containsKey("ledZigzag"))     zigzag     = doc["ledZigzag"].as<bool>();
+    if (doc.containsKey("ledColorOrder")) colorOrder = doc["ledColorOrder"].as<uint8_t>();
 
-    Serial.printf("%s HW config: pin=%u, %ux%u, zigzag=%d\r\n", TAG, pin, width, height, zigzag);
+    Serial.printf("%s HW config: pin=%u, %ux%u, zigzag=%d, order=%u\r\n", TAG, pin, width, height, zigzag, colorOrder);
 }
 
 bool saveParamValues(uint8_t id, const char* json) {
