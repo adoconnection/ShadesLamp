@@ -113,14 +113,10 @@ export async function connectAndLoadDevice(
   setActiveId(activeId);
   setPowerOn(powerOn);
 
-  // Restore marketplace installed state from device programs
+  // Replace marketplace installed state from device programs (atomic — drops
+  // slugs of programs that are no longer on the device, e.g. removed via CLI)
   const slugs = programs.map((p) => p.slug).filter(Boolean) as string[];
-  if (slugs.length > 0) {
-    const marketStore = useMarketStore.getState();
-    for (const slug of slugs) {
-      marketStore.markInstalled(slug);
-    }
-  }
+  useMarketStore.getState().setInstalledSlugs(slugs);
 
   const storageUsedKB = Math.round(storageInfo.used / 1024);
   const storageTotalKB = Math.round(storageInfo.total / 1024);
@@ -204,9 +200,6 @@ export async function refreshPrograms(): Promise<void> {
   setPrograms(programs);
   setActiveId(activeId);
 
-  const marketStore = useMarketStore.getState();
   const slugs = programs.map((p) => p.slug).filter(Boolean) as string[];
-  for (const slug of slugs) {
-    marketStore.markInstalled(slug);
-  }
+  useMarketStore.getState().setInstalledSlugs(slugs);
 }
