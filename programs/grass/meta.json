@@ -1,0 +1,17 @@
+{
+  "guid": "b3d6e9f2-4c7a-4d1e-9b2f-5e8a1c4f7d3b",
+  "name": "Grass",
+  "desc": "Field of grass blades swaying in the wind with gusts",
+  "author": "Shades",
+  "category": "Nature",
+  "version": "1.0.0",
+  "cover": { "from": "#1f6b1f", "to": "#a8e063", "angle": 90 },
+  "pulse": "#7ed957",
+  "tags": ["grass", "nature", "wind", "field", "meadow", "sway"],
+  "i18n": {
+    "ru": {
+      "name": "Трава",
+      "desc": "Поле травы, колышущееся на ветру с порывами"
+    }
+  }
+}
