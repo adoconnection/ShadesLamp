@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-04-30",
+  "updated": "2026-05-01",
   "featured": ["flame_particle", "spirals", "tricolor"],
   "programs": [
     {"slug": "aurora", "meta": "programs/aurora/meta.json", "wasm": "programs/aurora/main.wasm"},
@@ -14,6 +14,7 @@
     {"slug": "core", "meta": "programs/core/meta.json", "wasm": "programs/core/main.wasm"},
     {"slug": "cube", "meta": "programs/cube/meta.json", "wasm": "programs/cube/main.wasm"},
     {"slug": "dna", "meta": "programs/dna/meta.json", "wasm": "programs/dna/main.wasm"},
+    {"slug": "earth", "meta": "programs/earth/meta.json", "wasm": "programs/earth/main.wasm"},
     {"slug": "electrons", "meta": "programs/electrons/meta.json", "wasm": "programs/electrons/main.wasm"},
     {"slug": "fireflies", "meta": "programs/fireflies/meta.json", "wasm": "programs/fireflies/main.wasm"},
     {"slug": "fireworks", "meta": "programs/fireworks/meta.json", "wasm": "programs/fireworks/main.wasm"},

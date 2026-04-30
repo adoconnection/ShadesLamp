@@ -1,0 +1,18 @@
+{
+  "guid": "9b3f1c20-7d4e-4a5b-9c1f-2e3a4b5c6d7e",
+  "version": "1.0.0",
+  "name": "Earth",
+  "desc": "Stylized world map slowly rotating across the display",
+  "author": "Gunner47",
+  "category": "Patterns",
+  "cover": {"from": "#0B3D91", "to": "#2E8B57", "via": "#1E3A5F", "angle": 200},
+  "coverSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 200\"><defs><radialGradient id=\"globe\" cx=\"40%\" cy=\"40%\" r=\"60%\"><stop offset=\"0%\" stop-color=\"#3B82F6\"/><stop offset=\"60%\" stop-color=\"#1E40AF\"/><stop offset=\"100%\" stop-color=\"#0B1D3A\"/></radialGradient><radialGradient id=\"hl\" cx=\"30%\" cy=\"25%\" r=\"40%\"><stop offset=\"0%\" stop-color=\"#fff\" stop-opacity=\".25\"/><stop offset=\"100%\" stop-color=\"#fff\" stop-opacity=\"0\"/></radialGradient></defs><rect width=\"200\" height=\"200\" fill=\"#050A18\"/><circle cx=\"100\" cy=\"100\" r=\"82\" fill=\"url(#globe)\"/><g fill=\"#16A34A\"><path d=\"M55,75 q10,-8 22,-2 q12,4 18,16 q-4,12 -16,14 q-14,2 -22,-6 q-8,-8 -2,-22 z\"/><path d=\"M120,55 q14,-2 22,8 q6,12 -2,22 q-10,8 -22,4 q-14,-4 -10,-20 q4,-10 12,-14 z\"/><path d=\"M70,125 q8,-2 16,4 q10,8 8,18 q-4,10 -16,8 q-14,-2 -16,-14 q-2,-12 8,-16 z\"/><path d=\"M135,115 q8,4 14,12 q4,12 -8,18 q-14,4 -22,-6 q-6,-12 4,-20 q6,-6 12,-4 z\"/><path d=\"M105,140 q8,2 8,12 q0,8 -10,8 q-10,0 -10,-10 q0,-10 12,-10 z\"/></g><circle cx=\"100\" cy=\"100\" r=\"82\" fill=\"url(#hl)\"/><circle cx=\"100\" cy=\"100\" r=\"82\" fill=\"none\" stroke=\"#3B82F6\" stroke-width=\".5\" opacity=\".4\"/></svg>",
+  "pulse": "#3B82F6",
+  "tags": ["earth", "map", "world", "globe", "scroll"],
+  "i18n": {
+    "ru": {
+      "name": "Земля",
+      "desc": "Стилизованная карта мира, медленно вращающаяся по дисплею"
+    }
+  }
+}
