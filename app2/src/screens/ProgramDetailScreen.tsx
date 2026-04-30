@@ -40,7 +40,11 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
     setLoadingParams(true);
     Promise.all([getParams(programId), getParamValues(programId)])
       .then(([paramsSchema, paramValues]) => {
-        const params: Param[] = (paramsSchema as any[]).map((p: any) => ({
+        if (!Array.isArray(paramsSchema)) {
+          console.warn('[ProgramDetail] paramsSchema is not array:', paramsSchema);
+          return;
+        }
+        const params: Param[] = paramsSchema.map((p: any) => ({
           id: p.id,
           name: p.name || `Param ${p.id}`,
           type: p.type || 'int',
@@ -53,7 +57,7 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
         }));
         setProgramParams(programId, params);
       })
-      .catch((err) => console.warn('Failed to load params:', err))
+      .catch((err) => console.warn('[ProgramDetail] Failed to load params:', err))
       .finally(() => setLoadingParams(false));
   }, [programId, program, connectionState, setProgramParams]);
 
