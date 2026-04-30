@@ -1,17 +1,17 @@
 {
   "guid": "186f7081-98a9-4ba8-a9b0-c1d2e3f4a9b4",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Tricolor",
-  "desc": "Three-color flag wave",
+  "desc": "Waving flag with country selection",
   "author": "Shades",
   "category": "Ambient",
   "cover": {"from": "#FFFFFF", "to": "#1E40AF", "via": "#EF4444", "angle": 90},
   "pulse": "#1E40AF",
-  "tags": ["flag", "tricolor", "wave"],
+  "tags": ["flag", "tricolor", "wave", "russia", "belarus"],
   "i18n": {
     "ru": {
       "name": "Триколор",
-      "desc": "Волна трёхцветного флага"
+      "desc": "Развевающийся флаг с выбором страны"
     }
   }
 }

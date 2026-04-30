@@ -1,22 +1,25 @@
 #include "api.h"
 
 /*
- * Tricolor — Russian flag waving in the wind.
- * Three horizontal stripes (white, blue, red), each ~25% of height,
- * with gaps between them. Each stripe waves independently.
+ * Tricolor — Flag waving in the wind.
+ * Supports multiple flags via select parameter.
  */
 
 static const char META[] =
     "{\"name\":\"Tricolor\","
-    "\"desc\":\"Waving Russian flag (white, blue, red stripes)\","
+    "\"desc\":\"Waving flag (select country)\","
     "\"params\":["
-        "{\"id\":0,\"name\":\"Speed\",\"type\":\"int\","
+        "{\"id\":0,\"name\":\"Flag\",\"type\":\"select\","
+         "\"options\":[\"Russia\",\"Belarus\"],"
+         "\"default\":0,"
+         "\"desc\":\"Flag to display\"},"
+        "{\"id\":1,\"name\":\"Speed\",\"type\":\"int\","
          "\"min\":1,\"max\":100,\"default\":35,"
          "\"desc\":\"Wave speed\"},"
-        "{\"id\":1,\"name\":\"Amplitude\",\"type\":\"int\","
+        "{\"id\":2,\"name\":\"Amplitude\",\"type\":\"int\","
          "\"min\":1,\"max\":50,\"default\":20,"
          "\"desc\":\"Wave amplitude (% of stripe height)\"},"
-        "{\"id\":2,\"name\":\"Brightness\",\"type\":\"int\","
+        "{\"id\":3,\"name\":\"Brightness\",\"type\":\"int\","
          "\"min\":1,\"max\":255,\"default\":200,"
          "\"desc\":\"Overall brightness\"}"
     "]}";
@@ -68,9 +71,10 @@ static int clamp255(int v) {
 
 EXPORT(update)
 void update(int tick_ms) {
-    int speed  = get_param_i32(0);
-    int amp_p  = get_param_i32(1);
-    int bright = get_param_i32(2);
+    int flag   = get_param_i32(0);
+    int speed  = get_param_i32(1);
+    int amp_p  = get_param_i32(2);
+    int bright = get_param_i32(3);
 
     int W = get_width();
     int H = get_height();
@@ -82,31 +86,63 @@ void update(int tick_ms) {
     /* Time as a continuous phase */
     float t = (float)tick_ms * (float)speed * 0.00003f;
 
-    /* Stripe layout: each stripe is ~25% of height, with ~12.5% gaps
-     *   stripe 0 (white): centered at 20% of H
-     *   stripe 1 (blue):  centered at 50% of H
-     *   stripe 2 (red):   centered at 80% of H
+    /* Stripe configuration per flag
+     * Y=0 is the BOTTOM of the physical display
      */
-    /* Per-stripe heights: white slightly taller to look equal visually */
-    float stripe_heights[3] = {
-        (float)H * 0.30f,   /* white */
-        (float)H * 0.25f,   /* blue */
-        (float)H * 0.25f    /* red */
-    };
+    int num_stripes;
+    float stripe_heights[3];
+    float centers[3];
+    int colors[3][3];
 
-    /* Stripe centers (Y=0 is bottom of physical display) */
-    float centers[3] = {
-        (float)H * 0.80f,   /* white — top */
-        (float)H * 0.50f,   /* blue  — middle */
-        (float)H * 0.20f    /* red   — bottom */
-    };
+    if (flag == 1) {
+        /* Belarus: red (top 2/3), green (bottom 1/3) */
+        num_stripes = 3;
 
-    /* Stripe colors (RGB) */
-    int colors[3][3] = {
-        {bright, bright, bright},                              /* white */
-        {0, clamp255(bright * 57 / 255), bright},             /* blue */
-        {bright, clamp255(bright * 15 / 255), clamp255(bright * 15 / 255)}  /* red */
-    };
+        stripe_heights[0] = (float)H * 0.30f;  /* green — bottom */
+        stripe_heights[1] = (float)H * 0.28f;  /* red — middle */
+        stripe_heights[2] = (float)H * 0.28f;  /* red — top */
+
+        centers[0] = (float)H * 0.17f;  /* green */
+        centers[1] = (float)H * 0.52f;  /* red */
+        centers[2] = (float)H * 0.82f;  /* red */
+
+        /* Green (#007C30 scaled by brightness) */
+        colors[0][0] = 0;
+        colors[0][1] = clamp255(bright * 124 / 255);
+        colors[0][2] = clamp255(bright * 48 / 255);
+        /* Red (#CC0930 scaled by brightness) */
+        colors[1][0] = bright;
+        colors[1][1] = clamp255(bright * 9 / 255);
+        colors[1][2] = clamp255(bright * 15 / 255);
+        /* Red (same) */
+        colors[2][0] = bright;
+        colors[2][1] = clamp255(bright * 9 / 255);
+        colors[2][2] = clamp255(bright * 15 / 255);
+    } else {
+        /* Russia: white (top), blue (middle), red (bottom) — default */
+        num_stripes = 3;
+
+        stripe_heights[0] = (float)H * 0.25f;  /* red */
+        stripe_heights[1] = (float)H * 0.25f;  /* blue */
+        stripe_heights[2] = (float)H * 0.30f;  /* white */
+
+        centers[0] = (float)H * 0.20f;  /* red — bottom */
+        centers[1] = (float)H * 0.50f;  /* blue — middle */
+        centers[2] = (float)H * 0.80f;  /* white — top */
+
+        /* Red */
+        colors[0][0] = bright;
+        colors[0][1] = clamp255(bright * 15 / 255);
+        colors[0][2] = clamp255(bright * 15 / 255);
+        /* Blue */
+        colors[1][0] = 0;
+        colors[1][1] = clamp255(bright * 57 / 255);
+        colors[1][2] = bright;
+        /* White */
+        colors[2][0] = bright;
+        colors[2][1] = bright;
+        colors[2][2] = bright;
+    }
 
     /* Maximum wave displacement in pixels */
     float max_disp = (float)H * (float)amp_p / 100.0f * 0.5f;
@@ -119,10 +155,10 @@ void update(int tick_ms) {
     }
 
     /* Draw each stripe */
-    for (int s = 0; s < 3; s++) {
+    for (int s = 0; s < num_stripes; s++) {
         /* Each stripe has its own wave frequency and phase offset */
-        float freq = 1.5f + (float)s * 0.4f;      /* slightly different freq per stripe */
-        float phase_off = (float)s * 2.1f;          /* phase offset between stripes */
+        float freq = 1.5f + (float)s * 0.4f;
+        float phase_off = (float)s * 2.1f;
 
         for (int x = 0; x < W; x++) {
             /* Wave displacement for this column and stripe */
