@@ -25,7 +25,11 @@ static const char META[] =
         "{\"id\":5,\"name\":\"Direction\",\"type\":\"select\","
          "\"default\":0,"
          "\"options\":[\"West to East\",\"East to West\"],"
-         "\"desc\":\"Rotation direction\"}"
+         "\"desc\":\"Rotation direction\"},"
+        "{\"id\":6,\"name\":\"Fit\",\"type\":\"select\","
+         "\"default\":0,"
+         "\"options\":[\"Stretch\",\"Native\"],"
+         "\"desc\":\"Stretch map to display, or 1:1 native pixels (window over the map)\"}"
     "]}";
 
 EXPORT(get_meta_ptr)
@@ -224,6 +228,7 @@ void update(int tick_ms) {
     int land_bright = get_param_i32(3);  /* 0..255 */
     int sea_bright  = get_param_i32(4);  /* 0..255 */
     int direction   = get_param_i32(5);  /* 0=W→E, 1=E→W */
+    int fit_mode    = get_param_i32(6);  /* 0=Stretch, 1=Native (1:1, window over map) */
 
     int W = get_width();
     int H = get_height();
@@ -260,8 +265,17 @@ void update(int tick_ms) {
 
     for (int x = 0; x < W; x++) {
         /* Map screen X → source X with sub-pixel precision so scrolling looks
-         * smooth even when the scroll step is fractional. */
-        int32_t src_x_q8 = ((int32_t)x * map_w_q8) / W + scroll_q8;
+         * smooth even when the scroll step is fractional.
+         *  - Stretch (mode 0): fit MAP_W into W → entire planet visible at once.
+         *  - Native  (mode 1): 1 screen px = 1 map px, screen is a window onto
+         *    a cylindrical map. With W < MAP_W the window crosses col 63→0 as
+         *    it scrolls (the seam runs through the Pacific date line). */
+        int32_t src_x_q8;
+        if (fit_mode == 1) {
+            src_x_q8 = ((int32_t)x << 8) + scroll_q8;
+        } else {
+            src_x_q8 = ((int32_t)x * map_w_q8) / W + scroll_q8;
+        }
         while (src_x_q8 >= map_w_q8) src_x_q8 -= map_w_q8;
         while (src_x_q8 < 0) src_x_q8 += map_w_q8;
         int sx_lo = (src_x_q8 >> 8) % MAP_W;
