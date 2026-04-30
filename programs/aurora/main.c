@@ -74,13 +74,13 @@ static void hsv2rgb(int hue, int sat, int val, int *r, int *g, int *b) {
     }
 }
 
-/* ---- Frame buffer for trail fade (16-bit fixed-point: value << 8) ---- */
+/* ---- Frame buffer for trail fade (8-bit, subtractive) ---- */
 #define MAX_W 64
 #define MAX_H 64
 static float col_phase[MAX_W];
-static unsigned short prev_r[MAX_W][MAX_H];
-static unsigned short prev_g[MAX_W][MAX_H];
-static unsigned short prev_b[MAX_W][MAX_H];
+static uint8_t prev_r[MAX_W][MAX_H];
+static uint8_t prev_g[MAX_W][MAX_H];
+static uint8_t prev_b[MAX_W][MAX_H];
 
 EXPORT(init)
 void init(void) {
@@ -117,15 +117,12 @@ void update(int tick_ms) {
     /* Global breathing: entire aurora swells and fades smoothly */
     float global_pulse = fsin(t * 0.35f) * 0.25f + 0.75f;
 
-    /* Trail fade factor (0..255). Applied per frame to 16-bit fixed-point
-     * prev values, so even tiny brightness levels decay smoothly through
-     * many gradations instead of snapping to 0.
-     * glow_param 0..100 → fade 189..255 (~74%..99.6% retained per frame).
-     * The low end is half the previous half-life — pixels at glow=0 fade
-     * roughly twice as fast as in v1.3.0. */
-    int fade = 189 + (glow_param * 66) / 100;
-    if (fade < 0) fade = 0;
-    if (fade > 255) fade = 255;
+    /* Linear subtractive fade: subtract `step` from each prev channel per
+     * frame (clamped to 0). Uniform decay across the entire 0..255 range,
+     * no multiplications, no quantization stepping near black.
+     * glow_param 0..100 → step 25..4 (≈10..64 frames to fully fade). */
+    int step = 25 - (glow_param * 21) / 100;
+    if (step < 1) step = 1;
 
     for (int x = 0; x < W; x++) {
         float fx = (float)x;
@@ -188,27 +185,25 @@ void update(int tick_ms) {
             int target_r, target_g, target_b;
             hsv2rgb(col_hue, sat, val, &target_r, &target_g, &target_b);
 
-            /* Trail fade in 16-bit fixed-point: target promoted to value<<8,
-             * prev decays by (fade/256) per frame, output = max(target, prev).
-             * 16-bit precision lets even single-bit-bright pixels decay
-             * through many sub-steps instead of snapping to black. */
-            int target_r16 = target_r << 8;
-            int target_g16 = target_g << 8;
-            int target_b16 = target_b << 8;
+            /* Subtractive trail fade: prev decays by `step` per frame,
+             * output = max(target, prev_after_decay). Pixel brightens
+             * instantly to its target, then walks back down linearly. */
+            int faded_r = prev_r[x][y] - step;
+            int faded_g = prev_g[x][y] - step;
+            int faded_b = prev_b[x][y] - step;
+            if (faded_r < 0) faded_r = 0;
+            if (faded_g < 0) faded_g = 0;
+            if (faded_b < 0) faded_b = 0;
 
-            int faded_r = (prev_r[x][y] * fade) >> 8;
-            int faded_g = (prev_g[x][y] * fade) >> 8;
-            int faded_b = (prev_b[x][y] * fade) >> 8;
+            int out_r = (target_r > faded_r) ? target_r : faded_r;
+            int out_g = (target_g > faded_g) ? target_g : faded_g;
+            int out_b = (target_b > faded_b) ? target_b : faded_b;
 
-            int out_r = (target_r16 > faded_r) ? target_r16 : faded_r;
-            int out_g = (target_g16 > faded_g) ? target_g16 : faded_g;
-            int out_b = (target_b16 > faded_b) ? target_b16 : faded_b;
+            prev_r[x][y] = (uint8_t)out_r;
+            prev_g[x][y] = (uint8_t)out_g;
+            prev_b[x][y] = (uint8_t)out_b;
 
-            prev_r[x][y] = (unsigned short)out_r;
-            prev_g[x][y] = (unsigned short)out_g;
-            prev_b[x][y] = (unsigned short)out_b;
-
-            set_pixel(x, y, out_r >> 8, out_g >> 8, out_b >> 8);
+            set_pixel(x, y, out_r, out_g, out_b);
         }
     }
 
