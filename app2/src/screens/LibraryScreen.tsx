@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
@@ -17,6 +17,7 @@ import { useProgramStore } from '../store/useProgramStore';
 import { useFavoritesStore } from '../store/useFavoritesStore';
 import { useBleStore } from '../store/useBleStore';
 import { setActiveProgram, setPower, setOrder } from '../ble/commands';
+import { refreshPrograms } from '../ble/connectFlow';
 import BleStatusPill from '../components/BleStatusPill';
 import ProgramRow from '../components/ProgramRow';
 import ActionTile from '../components/ActionTile';
@@ -33,6 +34,33 @@ export default function LibraryScreen({ navigation }: Props) {
   const { programs, activeId, setActiveId, reorderPrograms } = useProgramStore();
   const { favorites } = useFavoritesStore();
   const { connectionState, deviceInfo, powerOn, setPowerOn } = useBleStore();
+  const [category, setCategory] = useState('All');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    if (connectionState !== 'connected') return;
+    setRefreshing(true);
+    try {
+      await refreshPrograms();
+    } catch (err) {
+      console.warn('Refresh failed:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [connectionState]);
+
+  const categories = useMemo(() => {
+    const cats = [...new Set(programs.map((p) => p.category))].sort();
+    return ['All', ...cats];
+  }, [programs]);
+
+  const sortedAndFiltered = useMemo(() => {
+    const sorted = programs.slice().sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+    );
+    if (category === 'All') return sorted;
+    return sorted.filter((p) => p.category === category);
+  }, [programs, category]);
 
   const activeProgram = programs.find((p) => p.id === activeId);
 
@@ -67,6 +95,8 @@ export default function LibraryScreen({ navigation }: Props) {
     }
   }, [connectionState, reorderPrograms]);
 
+  const canDrag = category === 'All';
+
   const renderItem = useCallback(({ item: p, drag, isActive: isDragging }: RenderItemParams<Program>) => (
     <ScaleDecorator>
       <View style={styles.listItem}>
@@ -76,12 +106,12 @@ export default function LibraryScreen({ navigation }: Props) {
           isFavorite={favorites.includes(p.id)}
           onTap={() => handleActivate(p.id)}
           onOpen={() => navigation.navigate('ProgramDetail', { programId: p.id })}
-          onLongPress={drag}
+          onLongPress={canDrag ? drag : undefined}
           isDragging={isDragging}
         />
       </View>
     </ScaleDecorator>
-  ), [activeId, favorites, handleActivate, navigation]);
+  ), [activeId, favorites, handleActivate, navigation, canDrag]);
 
   const keyExtractor = useCallback((p: Program) => String(p.id), []);
 
@@ -201,12 +231,30 @@ export default function LibraryScreen({ navigation }: Props) {
         <Text style={styles.sectionTitle}>Installed</Text>
         <Text style={styles.sectionCount}>{programs.length} / 128</Text>
       </View>
+
+      {/* Category tabs */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
+        {categories.map((cat) => (
+          <Pressable
+            key={cat}
+            onPress={() => setCategory(cat)}
+            style={[
+              styles.tab,
+              { backgroundColor: category === cat ? colors.text : 'rgba(255,255,255,0.06)' },
+            ]}
+          >
+            <Text style={[styles.tabText, { color: category === cat ? '#0A0A08' : colors.text }]}>
+              {cat}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
     </>
   );
 
   return (
     <DraggableFlatList
-      data={programs}
+      data={sortedAndFiltered}
       keyExtractor={keyExtractor}
       renderItem={renderItem}
       onDragEnd={handleDragEnd}
@@ -214,6 +262,8 @@ export default function LibraryScreen({ navigation }: Props) {
       contentContainerStyle={{ paddingBottom: 80 }}
       containerStyle={styles.container}
       activationDistance={15}
+      refreshing={refreshing}
+      onRefresh={connectionState === 'connected' ? handleRefresh : undefined}
     />
   );
 }
@@ -420,6 +470,22 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 12,
     color: 'rgba(250,250,247,0.5)',
+  },
+  tabs: {
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  tab: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: -0.1,
   },
   listItem: {
     paddingHorizontal: 12,

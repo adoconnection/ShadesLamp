@@ -56,3 +56,8 @@ export async function setCachedMeta(guid: string, version: string, meta: CachedM
   cache[cacheKey(guid, version)] = meta;
   await saveCache(cache);
 }
+
+export async function invalidateCache(): Promise<void> {
+  memoryCache = {};
+  await AsyncStorage.removeItem(CACHE_KEY);
+}

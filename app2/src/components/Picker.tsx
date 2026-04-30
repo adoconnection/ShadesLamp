@@ -11,18 +11,19 @@ interface PickerProps {
   color?: string;
   onChange: (index: number) => void;
   label: string;
+  disabled?: boolean;
 }
 
-export default function Picker({ options, value, color = colors.text, onChange, label }: PickerProps) {
+export default function Picker({ options, value, color = colors.text, onChange, label, disabled }: PickerProps) {
   const [open, setOpen] = useState(false);
 
   if (options.length <= 4) {
-    return <Segmented options={options} value={value} color={color} onChange={onChange} />;
+    return <Segmented options={options} value={value} color={color} onChange={onChange} disabled={disabled} />;
   }
 
   return (
     <>
-      <Pressable onPress={() => setOpen(true)} style={styles.button}>
+      <Pressable onPress={() => !disabled && setOpen(true)} disabled={disabled} style={styles.button}>
         <View style={styles.buttonLeft}>
           <View style={[styles.dot, { backgroundColor: color }]} />
           <Text style={styles.buttonText}>{options[value]}</Text>

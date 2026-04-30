@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -7,11 +7,11 @@ import { RootStackParamList } from '../types/navigation';
 import { useProgramStore } from '../store/useProgramStore';
 import { useFavoritesStore } from '../store/useFavoritesStore';
 import { useBleStore } from '../store/useBleStore';
-import { getParams, getParamValues, setParam, setActiveProgram, deleteProgram as bleDeleteProgram } from '../ble/commands';
+import { getParams, getParamValues, setParam, setActiveProgram } from '../ble/commands';
 import { Param } from '../types/program';
 import NavButton from '../components/NavButton';
 import ParamControl from '../components/ParamControl';
-import { BackIcon, MoreIcon, StarFillIcon, StarOutlineIcon, TrashIcon } from '../components/Icon';
+import { BackIcon, StarFillIcon, StarOutlineIcon } from '../components/Icon';
 import { gradientColors } from '../utils/color';
 import { padId } from '../utils/format';
 import { fonts } from '../theme/typography';
@@ -22,7 +22,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'ProgramDetail'>;
 export default function ProgramDetailScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { programId } = route.params;
-  const { programs, activeId, setActiveId, updateParamValue, setProgramParams, removeProgram } = useProgramStore();
+  const { programs, activeId, setActiveId, updateParamValue, setProgramParams } = useProgramStore();
   const { favorites, toggleFavorite } = useFavoritesStore();
   const { connectionState } = useBleStore();
   const [loadingParams, setLoadingParams] = useState(false);
@@ -87,37 +87,12 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
     setActiveId(programId);
   }, [programId, connectionState, setActiveId]);
 
-  const handleDelete = () => {
-    if (!program) return;
-    Alert.alert(
-      'Remove program',
-      `Are you sure you want to remove "${program.name}" from the device?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: async () => {
-            if (connectionState === 'connected') {
-              try {
-                await bleDeleteProgram(programId);
-              } catch (err) {
-                console.warn('BLE delete error:', err);
-              }
-            }
-            removeProgram(programId);
-            navigation.goBack();
-          },
-        },
-      ],
-    );
-  };
-
   if (!program) return null;
 
   const isActive = activeId === programId;
   const isFavorite = favorites.includes(programId);
   const accent = program.pulse;
+  const disabled = connectionState !== 'connected';
 
   return (
     <ScrollView style={styles.container} bounces={false}>
@@ -137,15 +112,12 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
 
         <View style={[styles.nav, { paddingTop: insets.top + 8 }]}>
           <NavButton icon={<BackIcon />} onPress={() => navigation.goBack()} />
-          <View style={styles.navRight}>
-            <NavButton
-              icon={isFavorite ? <StarFillIcon color="#0A0A08" /> : <StarOutlineIcon />}
-              onPress={() => toggleFavorite(programId)}
-              active={isFavorite}
-              accent="#FCD34D"
-            />
-            <NavButton icon={<MoreIcon />} />
-          </View>
+          <NavButton
+            icon={isFavorite ? <StarFillIcon color="#0A0A08" /> : <StarOutlineIcon />}
+            onPress={() => toggleFavorite(programId)}
+            active={isFavorite}
+            accent="#FCD34D"
+          />
         </View>
 
         <View style={styles.heroInfo}>
@@ -157,14 +129,23 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
         </View>
       </View>
 
+      {/* Disconnected banner */}
+      {disabled && (
+        <View style={styles.disconnectedBanner}>
+          <Text style={styles.disconnectedText}>Lamp disconnected</Text>
+        </View>
+      )}
+
       {/* Activate button */}
       <View style={styles.activateWrap}>
         <Pressable
-          onPress={() => !isActive && handleActivate()}
+          onPress={() => !isActive && !disabled && handleActivate()}
+          disabled={disabled && !isActive}
           style={[
             styles.activateBtn,
             {
               backgroundColor: isActive ? 'rgba(255,255,255,0.06)' : accent,
+              opacity: disabled && !isActive ? 0.4 : 1,
             },
           ]}
         >
@@ -201,6 +182,7 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
             param={p}
             accent={accent}
             onChange={(v) => handleParamChange(p.id, v, p.type === 'float')}
+            disabled={disabled}
           />
         ))}
         {!loadingParams && program.params.length === 0 && (
@@ -225,16 +207,6 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
           )}
         </View>
       </View>
-
-      {/* Delete */}
-      {program.author !== 'built-in' && (
-        <View style={styles.dangerZone}>
-          <Pressable onPress={handleDelete} style={styles.deleteBtn}>
-            <TrashIcon color={colors.red} />
-            <Text style={styles.deleteText}>Remove from device</Text>
-          </Pressable>
-        </View>
-      )}
 
       <View style={{ height: 40 }} />
     </ScrollView>
@@ -279,10 +251,6 @@ const styles = StyleSheet.create({
   nav: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-  },
-  navRight: {
-    flexDirection: 'row',
-    gap: 10,
   },
   heroInfo: {
     marginTop: 50,
@@ -401,21 +369,20 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     color: 'rgba(250,250,247,0.7)',
   },
-  dangerZone: {
-    paddingHorizontal: 20,
-  },
-  deleteBtn: {
-    backgroundColor: 'rgba(239,68,68,0.1)',
-    borderRadius: 16,
-    padding: 14,
-    flexDirection: 'row',
+  disconnectedBanner: {
+    marginHorizontal: 20,
+    marginBottom: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(248,113,113,0.08)',
+    borderColor: 'rgba(248,113,113,0.2)',
+    borderWidth: 0.5,
+    borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
   },
-  deleteText: {
-    color: colors.red,
-    fontSize: 14,
-    fontWeight: '600',
+  disconnectedText: {
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    color: '#F87171',
   },
 });

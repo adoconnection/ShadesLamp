@@ -10,9 +10,10 @@ interface ToggleProps {
   value: boolean;
   color?: string;
   onChange: (v: boolean) => void;
+  disabled?: boolean;
 }
 
-export default function Toggle({ value, color = '#FAFAF7', onChange }: ToggleProps) {
+export default function Toggle({ value, color = '#FAFAF7', onChange, disabled }: ToggleProps) {
   const thumbStyle = useAnimatedStyle(() => ({
     left: withTiming(value ? 23 : 3, {
       duration: 200,
@@ -27,7 +28,7 @@ export default function Toggle({ value, color = '#FAFAF7', onChange }: TogglePro
   }));
 
   return (
-    <Pressable onPress={() => onChange(!value)}>
+    <Pressable onPress={() => onChange(!value)} disabled={disabled}>
       <Animated.View style={[styles.track, trackStyle]}>
         <Animated.View
           style={[

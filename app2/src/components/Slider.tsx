@@ -17,6 +17,7 @@ interface SliderProps {
   color?: string;
   onChange: (v: number) => void;
   formatValue?: (v: number) => string;
+  disabled?: boolean;
 }
 
 export default function Slider({
@@ -27,6 +28,7 @@ export default function Slider({
   color = colors.text,
   onChange,
   formatValue,
+  disabled,
 }: SliderProps) {
   const trackWidth = useSharedValue(0);
   const ratio = (value - min) / (max - min);
@@ -62,6 +64,7 @@ export default function Slider({
   return (
     <GestureDetector gesture={composed}>
       <Animated.View
+        pointerEvents={disabled ? 'none' : 'auto'}
         style={styles.track}
         onLayout={(e) => {
           trackWidth.value = e.nativeEvent.layout.width;

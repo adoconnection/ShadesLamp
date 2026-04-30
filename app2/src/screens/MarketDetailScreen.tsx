@@ -9,7 +9,7 @@ import { useBleStore } from '../store/useBleStore';
 import { useProgramStore } from '../store/useProgramStore';
 import { uploadWasm, setMeta, setActiveProgram, deleteProgram as bleDeleteProgram } from '../ble/commands';
 import NavButton from '../components/NavButton';
-import { BackIcon, DownloadIcon, CheckIcon, TrashIcon } from '../components/Icon';
+import { BackIcon, DownloadIcon, CheckIcon, TrashIcon, SettingsIcon } from '../components/Icon';
 import { gradientColors } from '../utils/color';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
@@ -205,27 +205,38 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
                 </Pressable>
               )}
             </View>
-            <Pressable
-              onPress={async () => {
-                if (connected && installedId != null) {
-                  try {
-                    await bleDeleteProgram(installedId);
-                    removeProgram(installedId);
-                    unmarkInstalled(itemId);
-                    setInstalledId(null);
-                    setPhase('idle');
-                    setProgress(0);
-                  } catch (e: any) {
-                    setErrorMsg(e.message || 'Delete failed');
-                    setPhase('error');
+            <View style={styles.doneActions}>
+              {installedId != null && (
+                <Pressable
+                  onPress={() => navigation.navigate('ProgramDetail', { programId: installedId })}
+                  style={styles.settingsBtn}
+                >
+                  <SettingsIcon size={16} color="#0A0A08" />
+                  <Text style={styles.settingsText}>Settings</Text>
+                </Pressable>
+              )}
+              <Pressable
+                onPress={async () => {
+                  if (connected && installedId != null) {
+                    try {
+                      await bleDeleteProgram(installedId);
+                      removeProgram(installedId);
+                      unmarkInstalled(itemId);
+                      setInstalledId(null);
+                      setPhase('idle');
+                      setProgress(0);
+                    } catch (e: any) {
+                      setErrorMsg(e.message || 'Delete failed');
+                      setPhase('error');
+                    }
                   }
-                }
-              }}
-              style={styles.deleteBtn}
-            >
-              <TrashIcon color={colors.red} />
-              <Text style={styles.deleteText}>Remove from device</Text>
-            </Pressable>
+                }}
+                style={styles.deleteBtn}
+              >
+                <TrashIcon color={colors.red} />
+                <Text style={styles.deleteText}>Remove</Text>
+              </Pressable>
+            </View>
           </View>
         )}
 
@@ -318,6 +329,9 @@ const styles = StyleSheet.create({
   sectionTitle: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 6, fontSize: 17, fontWeight: '700', color: colors.text, letterSpacing: -0.3 },
   aboutText: { paddingHorizontal: 20, paddingBottom: 16, fontSize: 14, color: 'rgba(250,250,247,0.7)', lineHeight: 22 },
   techCard: { marginHorizontal: 20, backgroundColor: 'rgba(255,255,255,0.04)', borderColor: 'rgba(255,255,255,0.06)', borderWidth: 0.5, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 6 },
-  deleteBtn: { backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  doneActions: { flexDirection: 'row', gap: 10 },
+  settingsBtn: { flex: 1, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  settingsText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  deleteBtn: { flex: 1, backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   deleteText: { color: colors.red, fontSize: 14, fontWeight: '600' },
 });

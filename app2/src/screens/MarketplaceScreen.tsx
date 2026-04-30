@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicator, Alert, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
@@ -26,7 +26,17 @@ export default function MarketplaceScreen({ navigation }: Props) {
   const [category, setCategory] = useState('All');
   const [search, setSearch] = useState('');
   const [installingSlug, setInstallingSlug] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const connected = connectionState === 'connected';
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetchCatalog();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchCatalog]);
 
   const categories = useMemo(() => {
     const cats = [...new Set(catalog.map((item) => item.category))].sort();
@@ -100,7 +110,17 @@ export default function MarketplaceScreen({ navigation }: Props) {
   const featuredItems = catalog.filter((item) => featured.includes(item.slug));
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60 }}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: 60 }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          tintColor={colors.text}
+        />
+      }
+    >
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <View style={styles.headerRow}>

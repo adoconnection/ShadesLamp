@@ -6,15 +6,17 @@ interface SegmentedProps {
   value: number;
   color?: string;
   onChange: (index: number) => void;
+  disabled?: boolean;
 }
 
-export default function Segmented({ options, value, color = '#FAFAF7', onChange }: SegmentedProps) {
+export default function Segmented({ options, value, color = '#FAFAF7', onChange, disabled }: SegmentedProps) {
   return (
     <View style={styles.container}>
       {options.map((opt, i) => (
         <Pressable
           key={i}
           onPress={() => onChange(i)}
+          disabled={disabled}
           style={[
             styles.button,
             {

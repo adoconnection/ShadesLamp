@@ -4,7 +4,7 @@ import { connectToDevice, setOnDisconnected, setOnActiveChanged, setOnEvent } fr
 import { getPrograms, getActiveProgram, getHwConfig, getDeviceName, getMeta, getStorage, getPower } from './commands';
 import { EVT } from './constants';
 import { Program, ProgramListItem } from '../types/program';
-import { getCachedMeta, setCachedMeta, CachedMeta } from '../store/useMetaCache';
+import { getCachedMeta, setCachedMeta, invalidateCache, CachedMeta } from '../store/useMetaCache';
 import { useBleStore } from '../store/useBleStore';
 import { useProgramStore } from '../store/useProgramStore';
 import { useMarketStore } from '../store/useMarketStore';
@@ -107,62 +107,7 @@ export async function connectAndLoadDevice(
     getPower().catch(() => true),
   ]);
 
-  // Resolve meta for each program (cache by guid:version)
-  const items = programList as ProgramListItem[];
-  const defaultMeta: CachedMeta = {
-    name: '', desc: '', author: 'built-in', category: 'Effects',
-    cover: { from: '#555555', to: '#999999', angle: 135 }, pulse: '#888888',
-  };
-
-  const programs: Program[] = await Promise.all(
-    items.map(async (p) => {
-      let meta: CachedMeta = { ...defaultMeta, name: p.name || `Program ${p.id}` };
-
-      // Try cache first (by guid:version)
-      if (p.guid && p.version) {
-        const cached = await getCachedMeta(p.guid, p.version);
-        if (cached) {
-          meta = cached;
-          return {
-            id: p.id, name: meta.name, desc: meta.desc, author: meta.author,
-            size: '', version: p.version, cover: meta.cover, coverSvg: meta.coverSvg,
-            pulse: meta.pulse, category: meta.category, params: [], slug: meta.slug,
-          };
-        }
-      }
-
-      // No cache hit — fetch meta from device
-      let metaVersion: string | undefined;
-      try {
-        const raw = await getMeta(p.id);
-        if (raw && raw.name) {
-          metaVersion = raw.version;
-          meta = {
-            name: raw.name,
-            desc: raw.desc || '',
-            author: raw.author || 'built-in',
-            category: raw.category || 'Effects',
-            cover: raw.cover || defaultMeta.cover,
-            coverSvg: raw.coverSvg,
-            pulse: raw.pulse || '#888888',
-            tags: raw.tags,
-            slug: raw.slug,
-          };
-          if (p.guid && p.version) {
-            await setCachedMeta(p.guid, p.version, meta);
-          }
-        }
-      } catch {
-        // Use defaults
-      }
-
-      return {
-        id: p.id, name: meta.name, desc: meta.desc, author: meta.author,
-        size: '', version: p.version || metaVersion, cover: meta.cover, coverSvg: meta.coverSvg,
-        pulse: meta.pulse, category: meta.category, params: [], slug: meta.slug,
-      };
-    }),
-  );
+  const programs = await resolveProgramsMeta(programList as ProgramListItem[]);
 
   setPrograms(programs);
   setActiveId(activeId);
@@ -194,4 +139,74 @@ export async function connectAndLoadDevice(
   await saveLastDevice(deviceId);
 
   return device;
+}
+
+const defaultMeta: CachedMeta = {
+  name: '', desc: '', author: 'built-in', category: 'Effects',
+  cover: { from: '#555555', to: '#999999', angle: 135 }, pulse: '#888888',
+};
+
+async function resolveProgramsMeta(items: ProgramListItem[]): Promise<Program[]> {
+  return Promise.all(
+    items.map(async (p) => {
+      let meta: CachedMeta = { ...defaultMeta, name: p.name || `Program ${p.id}` };
+
+      if (p.guid && p.version) {
+        const cached = await getCachedMeta(p.guid, p.version);
+        if (cached) {
+          meta = cached;
+          return {
+            id: p.id, name: meta.name, desc: meta.desc, author: meta.author,
+            size: '', version: p.version, cover: meta.cover, coverSvg: meta.coverSvg,
+            pulse: meta.pulse, category: meta.category, params: [], slug: meta.slug,
+          };
+        }
+      }
+
+      let metaVersion: string | undefined;
+      try {
+        const raw = await getMeta(p.id);
+        if (raw && raw.name) {
+          metaVersion = raw.version;
+          meta = {
+            name: raw.name,
+            desc: raw.desc || '',
+            author: raw.author || 'built-in',
+            category: raw.category || 'Effects',
+            cover: raw.cover || defaultMeta.cover,
+            coverSvg: raw.coverSvg,
+            pulse: raw.pulse || '#888888',
+            tags: raw.tags,
+            slug: raw.slug,
+          };
+          if (p.guid && p.version) {
+            await setCachedMeta(p.guid, p.version, meta);
+          }
+        }
+      } catch {
+        // Use defaults
+      }
+
+      return {
+        id: p.id, name: meta.name, desc: meta.desc, author: meta.author,
+        size: '', version: p.version || metaVersion, cover: meta.cover, coverSvg: meta.coverSvg,
+        pulse: meta.pulse, category: meta.category, params: [], slug: meta.slug,
+      };
+    }),
+  );
+}
+
+export async function refreshPrograms(): Promise<void> {
+  const { setPrograms, setActiveId } = useProgramStore.getState();
+  await invalidateCache();
+  const [programList, activeId] = await Promise.all([getPrograms(), getActiveProgram()]);
+  const programs = await resolveProgramsMeta(programList as ProgramListItem[]);
+  setPrograms(programs);
+  setActiveId(activeId);
+
+  const marketStore = useMarketStore.getState();
+  const slugs = programs.map((p) => p.slug).filter(Boolean) as string[];
+  for (const slug of slugs) {
+    marketStore.markInstalled(slug);
+  }
 }

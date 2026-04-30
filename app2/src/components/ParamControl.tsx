@@ -11,11 +11,12 @@ interface ParamControlProps {
   param: Param;
   accent: string;
   onChange: (value: number) => void;
+  disabled?: boolean;
 }
 
-export default function ParamControl({ param, accent, onChange }: ParamControlProps) {
+export default function ParamControl({ param, accent, onChange, disabled }: ParamControlProps) {
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, disabled && { opacity: 0.4 }]}>
       <View style={styles.header}>
         <View>
           <Text style={styles.name}>{param.name}</Text>
@@ -37,6 +38,7 @@ export default function ParamControl({ param, accent, onChange }: ParamControlPr
           step={1}
           color={accent}
           onChange={onChange}
+          disabled={disabled}
         />
       )}
 
@@ -49,6 +51,7 @@ export default function ParamControl({ param, accent, onChange }: ParamControlPr
           color={accent}
           onChange={onChange}
           formatValue={(v) => v.toFixed(2)}
+          disabled={disabled}
         />
       )}
 
@@ -61,6 +64,7 @@ export default function ParamControl({ param, accent, onChange }: ParamControlPr
             value={!!param.value}
             color={accent}
             onChange={(v) => onChange(v ? 1 : 0)}
+            disabled={disabled}
           />
         </View>
       )}
@@ -72,6 +76,7 @@ export default function ParamControl({ param, accent, onChange }: ParamControlPr
           color={accent}
           label={param.name}
           onChange={onChange}
+          disabled={disabled}
         />
       )}
     </View>
