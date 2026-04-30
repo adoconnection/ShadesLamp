@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-04-27",
+  "updated": "2026-04-30",
   "featured": ["flame_particle", "spirals", "tricolor"],
   "programs": [
     {"slug": "aurora", "meta": "programs/aurora/meta.json", "wasm": "programs/aurora/main.wasm"},
