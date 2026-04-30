@@ -1,17 +1,18 @@
 {
   "guid": "075e6f70-8798-4a97-a8b9-c0d1e2f398a3",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Starfall",
-  "desc": "Shooting stars with trails",
+  "desc": "Bright stars streaking down the sky with glowing trails",
   "author": "Gunner47",
   "category": "Particles",
   "cover": {"from": "#0F172A", "to": "#FBBF24", "via": "#1E3A5F", "angle": 170},
+  "coverSvg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 200\"><defs><linearGradient id=\"sky\" x1=\"0%\" y1=\"0%\" x2=\"0%\" y2=\"100%\"><stop offset=\"0%\" stop-color=\"#0B1024\"/><stop offset=\"60%\" stop-color=\"#1E3A5F\"/><stop offset=\"100%\" stop-color=\"#0F172A\"/></linearGradient><linearGradient id=\"trail1\" x1=\"30%\" y1=\"10%\" x2=\"70%\" y2=\"90%\"><stop offset=\"0%\" stop-color=\"#FFFFFF\" stop-opacity=\"0\"/><stop offset=\"60%\" stop-color=\"#FBBF24\" stop-opacity=\".7\"/><stop offset=\"100%\" stop-color=\"#FFFFFF\" stop-opacity=\"1\"/></linearGradient><linearGradient id=\"trail2\" x1=\"60%\" y1=\"5%\" x2=\"40%\" y2=\"60%\"><stop offset=\"0%\" stop-color=\"#67E8F9\" stop-opacity=\"0\"/><stop offset=\"100%\" stop-color=\"#FFFFFF\" stop-opacity=\"1\"/></linearGradient><filter id=\"glow\"><feGaussianBlur stdDeviation=\"2\"/></filter></defs><rect width=\"200\" height=\"200\" fill=\"url(#sky)\"/><circle cx=\"30\" cy=\"40\" r=\"1\" fill=\"#fff\" opacity=\".5\"/><circle cx=\"60\" cy=\"25\" r=\".8\" fill=\"#fff\" opacity=\".4\"/><circle cx=\"110\" cy=\"50\" r=\"1\" fill=\"#fff\" opacity=\".5\"/><circle cx=\"160\" cy=\"30\" r=\".9\" fill=\"#fff\" opacity=\".4\"/><circle cx=\"175\" cy=\"75\" r=\".7\" fill=\"#fff\" opacity=\".3\"/><circle cx=\"45\" cy=\"95\" r=\".8\" fill=\"#fff\" opacity=\".4\"/><path d=\"M70,20 L110,150\" stroke=\"url(#trail1)\" stroke-width=\"2\" fill=\"none\" stroke-linecap=\"round\" filter=\"url(#glow)\"/><circle cx=\"110\" cy=\"150\" r=\"4\" fill=\"#fff\" filter=\"url(#glow)\"/><circle cx=\"110\" cy=\"150\" r=\"2\" fill=\"#FFFBEB\"/><path d=\"M150,10 L130,80\" stroke=\"url(#trail2)\" stroke-width=\"1.5\" fill=\"none\" stroke-linecap=\"round\" filter=\"url(#glow)\" opacity=\".8\"/><circle cx=\"130\" cy=\"80\" r=\"3\" fill=\"#fff\" filter=\"url(#glow)\" opacity=\".8\"/><circle cx=\"130\" cy=\"80\" r=\"1.5\" fill=\"#E0F2FE\"/></svg>",
   "pulse": "#FBBF24",
-  "tags": ["stars", "trails", "falling"],
+  "tags": ["stars", "trails", "falling", "night"],
   "i18n": {
     "ru": {
       "name": "Звездопад",
-      "desc": "Падающие звёзды со шлейфами"
+      "desc": "Падающие звёзды со светящимися шлейфами"
     }
   }
 }
