@@ -19,7 +19,7 @@ static const char META[] =
          "\"min\":1,\"max\":10,\"default\":5,"
          "\"desc\":\"Number of simultaneous flowers\"},"
         "{\"id\":2,\"name\":\"Size\",\"type\":\"int\","
-         "\"min\":1,\"max\":3,\"default\":2,"
+         "\"min\":1,\"max\":5,\"default\":2,"
          "\"desc\":\"Flower head size\"},"
         "{\"id\":3,\"name\":\"Speed\",\"type\":\"int\","
          "\"min\":1,\"max\":100,\"default\":40,"
@@ -213,29 +213,63 @@ static void render_tulip(int i, int W, int H, int size, float bloom_f) {
     if (val < 10) val = 10;
     hsv_to_rgb(fl_hue[i], 230, val, &r, &g, &b);
 
+    int darker, r2, g2, b2, r3, g3, b3;
+
     if (size == 1) {
-        /* 1 pixel on top */
         safe_pixel(x, top, r, g, b, W, H);
     } else if (size == 2) {
-        /* Cup shape: center top + 2 sides one below */
+        /* Cup: center top + 2 sides below */
         safe_pixel(x, top, r, g, b, W, H);
-        int darker = (int)(150.0f * bloom_f);
-        if (darker < 10) darker = 10;
-        int r2, g2, b2;
+        darker = (int)(150.0f * bloom_f); if (darker < 10) darker = 10;
         hsv_to_rgb(fl_hue[i], 230, darker, &r2, &g2, &b2);
         safe_pixel(x - 1, top - 1, r2, g2, b2, W, H);
         safe_pixel(x + 1, top - 1, r2, g2, b2, W, H);
-    } else {
-        /* size 3: 3 on top + 2 sides below */
+    } else if (size == 3) {
+        /* 3 top + 2 sides below */
         safe_pixel(x, top, r, g, b, W, H);
         safe_pixel(x - 1, top, r, g, b, W, H);
         safe_pixel(x + 1, top, r, g, b, W, H);
-        int darker = (int)(140.0f * bloom_f);
-        if (darker < 10) darker = 10;
-        int r2, g2, b2;
+        darker = (int)(140.0f * bloom_f); if (darker < 10) darker = 10;
         hsv_to_rgb(fl_hue[i], 230, darker, &r2, &g2, &b2);
         safe_pixel(x - 1, top - 1, r2, g2, b2, W, H);
         safe_pixel(x + 1, top - 1, r2, g2, b2, W, H);
+    } else if (size == 4) {
+        /* Wide cup: 3 top + 2 mid + 4 outer sides */
+        safe_pixel(x, top, r, g, b, W, H);
+        safe_pixel(x - 1, top, r, g, b, W, H);
+        safe_pixel(x + 1, top, r, g, b, W, H);
+        darker = (int)(160.0f * bloom_f); if (darker < 10) darker = 10;
+        hsv_to_rgb(fl_hue[i], 230, darker, &r2, &g2, &b2);
+        safe_pixel(x - 1, top - 1, r2, g2, b2, W, H);
+        safe_pixel(x + 1, top - 1, r2, g2, b2, W, H);
+        safe_pixel(x, top - 1, r2, g2, b2, W, H);
+        int dim2 = (int)(110.0f * bloom_f); if (dim2 < 10) dim2 = 10;
+        hsv_to_rgb(fl_hue[i], 220, dim2, &r3, &g3, &b3);
+        safe_pixel(x - 2, top - 1, r3, g3, b3, W, H);
+        safe_pixel(x + 2, top - 1, r3, g3, b3, W, H);
+        safe_pixel(x - 2, top, r3, g3, b3, W, H);
+        safe_pixel(x + 2, top, r3, g3, b3, W, H);
+    } else {
+        /* size 5: huge tulip — 5 top + filled body */
+        safe_pixel(x, top, r, g, b, W, H);
+        safe_pixel(x - 1, top, r, g, b, W, H);
+        safe_pixel(x + 1, top, r, g, b, W, H);
+        safe_pixel(x - 2, top, r, g, b, W, H);
+        safe_pixel(x + 2, top, r, g, b, W, H);
+        darker = (int)(160.0f * bloom_f); if (darker < 10) darker = 10;
+        hsv_to_rgb(fl_hue[i], 230, darker, &r2, &g2, &b2);
+        safe_pixel(x - 2, top - 1, r2, g2, b2, W, H);
+        safe_pixel(x - 1, top - 1, r2, g2, b2, W, H);
+        safe_pixel(x, top - 1, r2, g2, b2, W, H);
+        safe_pixel(x + 1, top - 1, r2, g2, b2, W, H);
+        safe_pixel(x + 2, top - 1, r2, g2, b2, W, H);
+        int dim2 = (int)(120.0f * bloom_f); if (dim2 < 10) dim2 = 10;
+        hsv_to_rgb(fl_hue[i], 220, dim2, &r3, &g3, &b3);
+        safe_pixel(x - 1, top - 2, r3, g3, b3, W, H);
+        safe_pixel(x, top - 2, r3, g3, b3, W, H);
+        safe_pixel(x + 1, top - 2, r3, g3, b3, W, H);
+        safe_pixel(x - 2, top - 2, r3, g3, b3, W, H);
+        safe_pixel(x + 2, top - 2, r3, g3, b3, W, H);
     }
 }
 
@@ -257,30 +291,57 @@ static void render_daisy(int i, int W, int H, int size, float bloom_f) {
     int pr, pg, pb;
     hsv_to_rgb(0, 0, val_white, &pr, &pg, &pb);
 
+    /* Ring 1: cross */
     if (size >= 1) {
-        /* Cross: 4 cardinal petals */
         safe_pixel(x, top + 1, pr, pg, pb, W, H);
         safe_pixel(x, top - 1, pr, pg, pb, W, H);
         safe_pixel(x - 1, top, pr, pg, pb, W, H);
         safe_pixel(x + 1, top, pr, pg, pb, W, H);
     }
+    /* Ring 2: diagonals */
     if (size >= 2) {
-        /* Diagonals */
         safe_pixel(x - 1, top + 1, pr, pg, pb, W, H);
         safe_pixel(x + 1, top + 1, pr, pg, pb, W, H);
         safe_pixel(x - 1, top - 1, pr, pg, pb, W, H);
         safe_pixel(x + 1, top - 1, pr, pg, pb, W, H);
     }
+    /* Ring 3: outer cross at dist 2 */
     if (size >= 3) {
-        /* Second ring of petals */
-        int dimmer = (int)(160.0f * bloom_f);
-        if (dimmer < 10) dimmer = 10;
+        int dimmer = (int)(160.0f * bloom_f); if (dimmer < 10) dimmer = 10;
         int dr, dg, db;
         hsv_to_rgb(0, 0, dimmer, &dr, &dg, &db);
         safe_pixel(x, top + 2, dr, dg, db, W, H);
         safe_pixel(x, top - 2, dr, dg, db, W, H);
         safe_pixel(x - 2, top, dr, dg, db, W, H);
         safe_pixel(x + 2, top, dr, dg, db, W, H);
+    }
+    /* Ring 4: outer diagonals at dist 2 */
+    if (size >= 4) {
+        int dim2 = (int)(130.0f * bloom_f); if (dim2 < 10) dim2 = 10;
+        int d2r, d2g, d2b;
+        hsv_to_rgb(0, 0, dim2, &d2r, &d2g, &d2b);
+        safe_pixel(x - 2, top + 1, d2r, d2g, d2b, W, H);
+        safe_pixel(x + 2, top + 1, d2r, d2g, d2b, W, H);
+        safe_pixel(x - 2, top - 1, d2r, d2g, d2b, W, H);
+        safe_pixel(x + 2, top - 1, d2r, d2g, d2b, W, H);
+        safe_pixel(x - 1, top + 2, d2r, d2g, d2b, W, H);
+        safe_pixel(x + 1, top + 2, d2r, d2g, d2b, W, H);
+        safe_pixel(x - 1, top - 2, d2r, d2g, d2b, W, H);
+        safe_pixel(x + 1, top - 2, d2r, d2g, d2b, W, H);
+    }
+    /* Ring 5: outer cross at dist 3 + fill */
+    if (size >= 5) {
+        int dim3 = (int)(100.0f * bloom_f); if (dim3 < 10) dim3 = 10;
+        int d3r, d3g, d3b;
+        hsv_to_rgb(0, 0, dim3, &d3r, &d3g, &d3b);
+        safe_pixel(x, top + 3, d3r, d3g, d3b, W, H);
+        safe_pixel(x, top - 3, d3r, d3g, d3b, W, H);
+        safe_pixel(x - 3, top, d3r, d3g, d3b, W, H);
+        safe_pixel(x + 3, top, d3r, d3g, d3b, W, H);
+        safe_pixel(x - 2, top + 2, d3r, d3g, d3b, W, H);
+        safe_pixel(x + 2, top + 2, d3r, d3g, d3b, W, H);
+        safe_pixel(x - 2, top - 2, d3r, d3g, d3b, W, H);
+        safe_pixel(x + 2, top - 2, d3r, d3g, d3b, W, H);
     }
 }
 
@@ -293,6 +354,8 @@ static void render_rose(int i, int W, int H, int size, float bloom_f) {
     int r, g, b;
     hsv_to_rgb(fl_hue[i], 240, val, &r, &g, &b);
 
+    int mr, mg, mb, er, eg, eb;
+
     if (size == 1) {
         safe_pixel(x, top, r, g, b, W, H);
     } else if (size == 2) {
@@ -301,27 +364,100 @@ static void render_rose(int i, int W, int H, int size, float bloom_f) {
         safe_pixel(x + 1, top, r, g, b, W, H);
         safe_pixel(x, top - 1, r, g, b, W, H);
         safe_pixel(x + 1, top - 1, r, g, b, W, H);
-    } else {
-        /* 3x3 with gradient: bright center, dimmer edges */
+    } else if (size == 3) {
+        /* 3x3 gradient: bright center → dimmer edges */
         safe_pixel(x, top, r, g, b, W, H);
-        /* Middle ring */
-        int mid_v = (int)(170.0f * bloom_f);
-        if (mid_v < 10) mid_v = 10;
-        int mr, mg, mb;
+        int mid_v = (int)(170.0f * bloom_f); if (mid_v < 10) mid_v = 10;
         hsv_to_rgb(fl_hue[i], 240, mid_v, &mr, &mg, &mb);
         safe_pixel(x - 1, top, mr, mg, mb, W, H);
         safe_pixel(x + 1, top, mr, mg, mb, W, H);
         safe_pixel(x, top + 1, mr, mg, mb, W, H);
         safe_pixel(x, top - 1, mr, mg, mb, W, H);
-        /* Corner ring */
-        int edge_v = (int)(120.0f * bloom_f);
-        if (edge_v < 10) edge_v = 10;
-        int er, eg, eb;
+        int edge_v = (int)(120.0f * bloom_f); if (edge_v < 10) edge_v = 10;
         hsv_to_rgb(fl_hue[i], 220, edge_v, &er, &eg, &eb);
         safe_pixel(x - 1, top + 1, er, eg, eb, W, H);
         safe_pixel(x + 1, top + 1, er, eg, eb, W, H);
         safe_pixel(x - 1, top - 1, er, eg, eb, W, H);
         safe_pixel(x + 1, top - 1, er, eg, eb, W, H);
+    } else if (size == 4) {
+        /* ~5x5 filled circle with 3-layer gradient */
+        safe_pixel(x, top, r, g, b, W, H);
+        int mid_v = (int)(175.0f * bloom_f); if (mid_v < 10) mid_v = 10;
+        hsv_to_rgb(fl_hue[i], 240, mid_v, &mr, &mg, &mb);
+        safe_pixel(x - 1, top, mr, mg, mb, W, H);
+        safe_pixel(x + 1, top, mr, mg, mb, W, H);
+        safe_pixel(x, top + 1, mr, mg, mb, W, H);
+        safe_pixel(x, top - 1, mr, mg, mb, W, H);
+        int edge_v = (int)(130.0f * bloom_f); if (edge_v < 10) edge_v = 10;
+        hsv_to_rgb(fl_hue[i], 230, edge_v, &er, &eg, &eb);
+        safe_pixel(x - 1, top + 1, er, eg, eb, W, H);
+        safe_pixel(x + 1, top + 1, er, eg, eb, W, H);
+        safe_pixel(x - 1, top - 1, er, eg, eb, W, H);
+        safe_pixel(x + 1, top - 1, er, eg, eb, W, H);
+        int out_v = (int)(90.0f * bloom_f); if (out_v < 10) out_v = 10;
+        int or2, og, ob;
+        hsv_to_rgb(fl_hue[i], 210, out_v, &or2, &og, &ob);
+        safe_pixel(x - 2, top, or2, og, ob, W, H);
+        safe_pixel(x + 2, top, or2, og, ob, W, H);
+        safe_pixel(x, top + 2, or2, og, ob, W, H);
+        safe_pixel(x, top - 2, or2, og, ob, W, H);
+        safe_pixel(x - 2, top + 1, or2, og, ob, W, H);
+        safe_pixel(x + 2, top + 1, or2, og, ob, W, H);
+        safe_pixel(x - 2, top - 1, or2, og, ob, W, H);
+        safe_pixel(x + 2, top - 1, or2, og, ob, W, H);
+        safe_pixel(x - 1, top + 2, or2, og, ob, W, H);
+        safe_pixel(x + 1, top + 2, or2, og, ob, W, H);
+        safe_pixel(x - 1, top - 2, or2, og, ob, W, H);
+        safe_pixel(x + 1, top - 2, or2, og, ob, W, H);
+    } else {
+        /* size 5: ~7x7 huge rose with 4-layer gradient */
+        safe_pixel(x, top, r, g, b, W, H);
+        int mid_v = (int)(180.0f * bloom_f); if (mid_v < 10) mid_v = 10;
+        hsv_to_rgb(fl_hue[i], 240, mid_v, &mr, &mg, &mb);
+        safe_pixel(x - 1, top, mr, mg, mb, W, H);
+        safe_pixel(x + 1, top, mr, mg, mb, W, H);
+        safe_pixel(x, top + 1, mr, mg, mb, W, H);
+        safe_pixel(x, top - 1, mr, mg, mb, W, H);
+        int edge_v = (int)(140.0f * bloom_f); if (edge_v < 10) edge_v = 10;
+        hsv_to_rgb(fl_hue[i], 230, edge_v, &er, &eg, &eb);
+        safe_pixel(x - 1, top + 1, er, eg, eb, W, H);
+        safe_pixel(x + 1, top + 1, er, eg, eb, W, H);
+        safe_pixel(x - 1, top - 1, er, eg, eb, W, H);
+        safe_pixel(x + 1, top - 1, er, eg, eb, W, H);
+        int out_v = (int)(100.0f * bloom_f); if (out_v < 10) out_v = 10;
+        int or2, og, ob;
+        hsv_to_rgb(fl_hue[i], 220, out_v, &or2, &og, &ob);
+        safe_pixel(x - 2, top, or2, og, ob, W, H);
+        safe_pixel(x + 2, top, or2, og, ob, W, H);
+        safe_pixel(x, top + 2, or2, og, ob, W, H);
+        safe_pixel(x, top - 2, or2, og, ob, W, H);
+        safe_pixel(x - 2, top + 1, or2, og, ob, W, H);
+        safe_pixel(x + 2, top + 1, or2, og, ob, W, H);
+        safe_pixel(x - 2, top - 1, or2, og, ob, W, H);
+        safe_pixel(x + 2, top - 1, or2, og, ob, W, H);
+        safe_pixel(x - 1, top + 2, or2, og, ob, W, H);
+        safe_pixel(x + 1, top + 2, or2, og, ob, W, H);
+        safe_pixel(x - 1, top - 2, or2, og, ob, W, H);
+        safe_pixel(x + 1, top - 2, or2, og, ob, W, H);
+        int far_v = (int)(65.0f * bloom_f); if (far_v < 10) far_v = 10;
+        int fr, fg, fb;
+        hsv_to_rgb(fl_hue[i], 200, far_v, &fr, &fg, &fb);
+        safe_pixel(x - 3, top, fr, fg, fb, W, H);
+        safe_pixel(x + 3, top, fr, fg, fb, W, H);
+        safe_pixel(x, top + 3, fr, fg, fb, W, H);
+        safe_pixel(x, top - 3, fr, fg, fb, W, H);
+        safe_pixel(x - 3, top + 1, fr, fg, fb, W, H);
+        safe_pixel(x + 3, top + 1, fr, fg, fb, W, H);
+        safe_pixel(x - 3, top - 1, fr, fg, fb, W, H);
+        safe_pixel(x + 3, top - 1, fr, fg, fb, W, H);
+        safe_pixel(x - 1, top + 3, fr, fg, fb, W, H);
+        safe_pixel(x + 1, top + 3, fr, fg, fb, W, H);
+        safe_pixel(x - 1, top - 3, fr, fg, fb, W, H);
+        safe_pixel(x + 1, top - 3, fr, fg, fb, W, H);
+        safe_pixel(x - 2, top + 2, fr, fg, fb, W, H);
+        safe_pixel(x + 2, top + 2, fr, fg, fb, W, H);
+        safe_pixel(x - 2, top - 2, fr, fg, fb, W, H);
+        safe_pixel(x + 2, top - 2, fr, fg, fb, W, H);
     }
 }
 
@@ -360,7 +496,7 @@ void update(int tick_ms) {
     if (count > MAX_FLOWERS) count = MAX_FLOWERS;
     if (count < 1) count = 1;
     if (size < 1) size = 1;
-    if (size > 3) size = 3;
+    if (size > 5) size = 5;
 
     rng_state ^= (uint32_t)tick_ms;
 
