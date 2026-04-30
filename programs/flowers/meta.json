@@ -1,0 +1,17 @@
+{
+  "guid": "a1c3e5f7-2b4d-4a6c-8e0f-1a3b5c7d9e2f",
+  "name": "Flowers",
+  "desc": "Flowers sprout from the bottom, grow stems, bloom and gently wilt",
+  "author": "Shades",
+  "category": "Nature",
+  "version": "1.0.0",
+  "cover": { "from": "#1a4d1a", "to": "#ff69b4", "angle": 0 },
+  "pulse": "#ff69b4",
+  "tags": ["flowers", "nature", "bloom", "garden", "growing"],
+  "i18n": {
+    "ru": {
+      "name": "Цветы",
+      "desc": "Цветы прорастают снизу, растут стебли, распускаются бутоны и плавно увядают"
+    }
+  }
+}
