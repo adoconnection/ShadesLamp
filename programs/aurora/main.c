@@ -120,8 +120,10 @@ void update(int tick_ms) {
     /* Trail fade factor (0..255). Applied per frame to 16-bit fixed-point
      * prev values, so even tiny brightness levels decay smoothly through
      * many gradations instead of snapping to 0.
-     * glow_param 0..100 → fade 220..255 (~86%..99.6% retained per frame). */
-    int fade = 220 + (glow_param * 35) / 100;
+     * glow_param 0..100 → fade 189..255 (~74%..99.6% retained per frame).
+     * The low end is half the previous half-life — pixels at glow=0 fade
+     * roughly twice as fast as in v1.3.0. */
+    int fade = 189 + (glow_param * 66) / 100;
     if (fade < 0) fade = 0;
     if (fade > 255) fade = 255;
 
