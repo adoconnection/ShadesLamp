@@ -1,7 +1,7 @@
 {
   "version": 1,
   "updated": "2026-06-26",
-  "featured": ["flame_particle", "spirals", "tricolor"],
+  "featured": ["flame_particle", "spirals", "tricolor", "fireworks", "fountains", "sinusoid"],
   "programs": [
     {"slug": "aurora", "meta": "programs/aurora/meta.json", "wasm": "programs/aurora/main.wasm"},
     {"slug": "bouncing_balls", "meta": "programs/bouncing_balls/meta.json", "wasm": "programs/bouncing_balls/main.wasm"},
