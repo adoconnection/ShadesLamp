@@ -15,8 +15,8 @@ static const char META[] =
          "\"min\":1,\"max\":6,\"default\":2,"
          "\"desc\":\"Line thickness in pixels\"},"
         "{\"id\":3,\"name\":\"Period\",\"type\":\"int\","
-         "\"min\":1,\"max\":100,\"default\":100,"
-         "\"desc\":\"Wave length: higher = one long wave around the lamp\"},"
+         "\"min\":1,\"max\":100,\"default\":16,"
+         "\"desc\":\"Wavelength in pixels; beyond screen width it glides up/down\"},"
         "{\"id\":4,\"name\":\"Amplitude\",\"type\":\"int\","
          "\"min\":10,\"max\":90,\"default\":60,"
          "\"desc\":\"Wave height (% of display)\"},"
@@ -134,11 +134,13 @@ void update(int tick_ms) {
     if (W > MAX_W) W = MAX_W;
     if (count < 1) count = 1;
     if (count > MAX_WAVES) count = MAX_WAVES;
-    /* Period -> base number of integer cycles around the lamp (kept integer so
-       the wave joins seamlessly). High period = one long wave, low = many short. */
+    /* Period is the wavelength in columns. While it fits the ring we show an
+       integer number of cycles (seamless). When it is longer than the screen we
+       can't draw <1 spatial cycle without a seam, so the excess turns into a slow
+       temporal "carrier" that glides the whole trace up and down (see below). */
     if (period < 1) period = 1;
     if (period > 100) period = 100;
-    int base_cycles = (100 + period / 2) / period;  /* period 100 -> 1 cycle, period 1 -> many */
+    int base_cycles = (W + period / 2) / period;    /* round(W / period) */
     if (base_cycles < 1) base_cycles = 1;
     if (base_cycles > 8) base_cycles = 8;
 
@@ -164,6 +166,21 @@ void update(int tick_ms) {
     float amp_base = (float)amp_p * 0.01f * amp_max;
     int hue_drift = (int)(t_acc / 220) & 255;
 
+    /* Carrier: when the wavelength is longer than the screen, the part that
+       doesn't fit becomes a slow vertical glide of the whole trace over time.
+       Longer period -> slower, larger glide; the wave shrinks to leave headroom. */
+    float carrier_off = 0.0f;
+    float amp_scale = 1.0f;
+    if (period > W) {
+        float overshoot = (float)period / (float)W;     /* > 1 */
+        float cf = (overshoot - 1.0f) / 3.0f;           /* ramps 0..1 over period W..4W */
+        if (cf > 1.0f) cf = 1.0f;
+        amp_scale = 1.0f - 0.45f * cf;                  /* make room for the glide */
+        uint32_t cdiv = (uint32_t)(40.0f * overshoot);  /* slower carrier for longer period */
+        if (cdiv < 1u) cdiv = 1u;
+        carrier_off = amp_max * 0.5f * cf * fsin((int)(t_acc / cdiv));
+    }
+
     /* ---- 1. Compute each wave's curve + color ---- */
     for (int w = 0; w < count; w++) {
         int   wfreq = base_cycles + w;                  /* integer => seamless wrap */
@@ -185,7 +202,7 @@ void update(int tick_ms) {
                     ny = rn * noise_amp;
                 }
             }
-            wave_y[w][x] = center + amp * fsin(angle) + ny;
+            wave_y[w][x] = center + carrier_off + amp * amp_scale * fsin(angle) + ny;
         }
 
         int hue;
