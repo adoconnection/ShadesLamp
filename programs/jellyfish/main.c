@@ -82,7 +82,7 @@ static int sparkle_life[MAX_SPARKLE];
 
 static void spawn_jellyfish(int i) {
     jf_x[i] = (float)rand_range(0, cur_w);
-    jf_y[i] = (float)(cur_h + rand_range(2, 8));  /* start below bottom */
+    jf_y[i] = -(float)rand_range(2, 8);  /* start below the bottom (Y=0) */
     jf_size[i] = rand_range(3, 7);  /* bell width 3-6 */
     jf_phase[i] = (float)rand_range(0, 628) / 100.0f;
     jf_drift[i] = (float)rand_range(0, 628) / 100.0f;
@@ -203,7 +203,7 @@ void update(int tick_ms) {
         float rise_speed = (1.5f + (float)jf_size[j] * 0.3f) * spd;
         /* Slower during "contraction", faster during "expansion" (like real jellyfish) */
         float swim_boost = 1.0f + 0.5f * pulse;
-        jf_y[j] -= rise_speed * swim_boost * dt;
+        jf_y[j] += rise_speed * swim_boost * dt;
 
         /* Horizontal drift: gentle sine wave */
         float drift_amount = fsin(jf_drift[j]) * 0.8f * spd;
@@ -213,8 +213,8 @@ void update(int tick_ms) {
         while (jf_x[j] < 0.0f) jf_x[j] += (float)cur_w;
         while (jf_x[j] >= (float)cur_w) jf_x[j] -= (float)cur_w;
 
-        /* Respawn if exited top */
-        if (jf_y[j] < -(float)jf_size[j] - 6) {
+        /* Respawn once it has fully floated past the top */
+        if (jf_y[j] > (float)cur_h + (float)jf_size[j] + 8.0f) {
             spawn_jellyfish(j);
         }
 
@@ -230,17 +230,14 @@ void update(int tick_ms) {
         /* Pulsing brightness */
         int pulse_bright = (int)((float)bright * (0.6f + 0.4f * pulse01));
 
-        /* -- Bell/dome: draw an approximate semicircle -- */
-        /* For each row of the bell (from top of bell to bottom) */
-        for (int dy = -bell_h; dy <= 0; dy++) {
-            int py = cy + dy;
+        /* -- Bell/dome: draw an approximate semicircle (Y=0 is the bottom,
+              so the dome rises ABOVE the rim toward higher Y) -- */
+        for (int dh = 0; dh <= bell_h; dh++) {
+            int py = cy + dh;
             if (py < 0 || py >= cur_h) continue;
 
-            /* Width at this row: semicircle profile */
-            /* At dy=0 (bottom of bell): full width. At dy=-bell_h (top): 0 */
-            float t_frac = 1.0f - (float)(-dy) / (float)bell_h;  /* 0 at top, 1 at bottom */
-            /* Semicircle: width = bell_w * sqrt(1 - (1-t)^2) roughly */
-            float norm = 1.0f - t_frac;
+            /* Width at this row: full at the rim (dh=0), 0 at the dome top */
+            float norm = (float)dh / (float)bell_h;  /* 0 at rim, 1 at top */
             float half_span = (float)bell_w * (1.0f - norm * norm);
             /* Apply pulse: slightly contract/expand */
             half_span *= (0.85f + 0.15f * pulse01);
@@ -256,8 +253,8 @@ void update(int tick_ms) {
                 float edge_dim = 1.0f - dist * dist;
                 if (edge_dim < 0.0f) edge_dim = 0.0f;
 
-                /* Vertical brightness: brighter at top of bell */
-                float vert_bright = 0.5f + 0.5f * (1.0f - t_frac);
+                /* Vertical brightness: brighter toward the top of the dome */
+                float vert_bright = 0.5f + 0.5f * norm;
 
                 int val = (int)((float)pulse_bright * edge_dim * vert_bright);
                 if (val < 1) continue;
@@ -311,7 +308,7 @@ void update(int tick_ms) {
             float tent_phase = jf_phase[j] * 0.8f + (float)ti * 1.3f;
 
             for (int seg = 1; seg <= tent_len; seg++) {
-                int ty = cy + seg;
+                int ty = cy - seg;   /* tentacles hang downward (toward Y=0) */
                 if (ty < 0 || ty >= cur_h) continue;
 
                 /* Horizontal wave for tentacle */
@@ -335,7 +332,7 @@ void update(int tick_ms) {
 
         /* -- Inner glow: a bright spot near the center of the bell -- */
         {
-            int glow_y = cy - bell_h / 2;
+            int glow_y = cy + bell_h / 2;
             if (glow_y >= 0 && glow_y < cur_h) {
                 int glow_val = (int)((float)pulse_bright * (0.7f + 0.3f * pulse01));
                 if (glow_val > 255) glow_val = 255;
