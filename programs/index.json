@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-06-25T22:46:07Z",
+  "updated": "2026-06-25T22:56:21Z",
   "featured": ["flame_particle", "spirals", "tricolor", "fireworks", "fountains", "sinusoid"],
   "programs": [
     {"slug": "aurora", "meta": "programs/aurora/meta.json", "wasm": "programs/aurora/main.wasm"},

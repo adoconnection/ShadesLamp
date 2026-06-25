@@ -173,6 +173,11 @@ void update(int tick_ms) {
     int fade_n = vis < 3 ? vis : 3;              /* the tail 3 fade */
     int full_n = vis - fade_n;
 
+    /* progress through the current period (0..1) — used to fade the tail
+     * smoothly over the period instead of dropping a candle abruptly */
+    float pp = (float)(tick_ms - period_start) / (float)period_ms;
+    if (pp < 0.0f) pp = 0.0f; if (pp > 0.999f) pp = 0.999f;
+
     /* palette */
     int upR, upG, upB, dnR, dnG, dnB;
     switch (palette) {
@@ -186,8 +191,7 @@ void update(int tick_ms) {
         for (int y = 0; y < H; y++)
             set_pixel(x, y, 0, 0, 0);
 
-    int gap = (width >= 3) ? 1 : 0;       /* leave a 1px gap between wide candles */
-    int bodyW = width - gap; if (bodyW < 1) bodyW = 1;
+    int bodyW = width;                    /* candles fill their full width (no gap) */
 
     for (int s = 0; s < nslots; s++) {
         if (!s_used[s]) continue;
@@ -195,12 +199,15 @@ void update(int tick_ms) {
         /* age: 0 = head (newest), grows toward the tail */
         int age = (head_slot - s + nslots) % nslots;
         if (age >= vis) continue;          /* beyond the visible tail -> dark */
+        /* continuous age = age + period progress, so the oldest candle fades
+         * smoothly to zero over its last period instead of vanishing at once */
+        float ca = (float)age + pp;
         float bf;
-        if (age == 0 || age < full_n) bf = 1.0f;   /* head + leading candles full */
-        else {                                     /* last few step down to zero */
-            int k = age - full_n;
-            bf = 1.0f - (float)(k + 1) / (float)(fade_n + 1);
-        }
+        if (age == 0)                 bf = 1.0f;   /* forming head: always full */
+        else if (ca <= (float)full_n) bf = 1.0f;   /* leading candles full */
+        else if (ca >= (float)vis)    bf = 0.0f;
+        else bf = 1.0f - (ca - (float)full_n) / (float)fade_n;
+        if (bf <= 0.01f) continue;
 
         int x0 = s * width;
         int cxw = x0 + bodyW / 2;          /* wick column (centre) */
@@ -228,15 +235,13 @@ void update(int tick_ms) {
                 set_pixel(x, y, (int)(bR*scale), (int)(bG*scale), (int)(bB*scale));
         }
 
-        /* the forming (head) candle shows white high/low markers that move
-         * as trades push the price to new extremes */
-        if (s == head_slot) {
-            int wv = bright;
-            for (int dx = 0; dx < bodyW; dx++) {
-                int x = x0 + dx; if (x >= W) break;
-                set_pixel(x, hi_y, wv, wv, wv);
-                set_pixel(x, lo_y, wv, wv, wv);
-            }
+        /* white high/low markers on every candle: on the head they move as
+         * trades hit new extremes; on older candles they fade with the tail */
+        int wv = (int)((float)bright * bf);
+        if (wv > 0) for (int dx = 0; dx < bodyW; dx++) {
+            int x = x0 + dx; if (x >= W) break;
+            set_pixel(x, hi_y, wv, wv, wv);
+            set_pixel(x, lo_y, wv, wv, wv);
         }
     }
 
