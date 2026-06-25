@@ -15,7 +15,7 @@ static const char META[] =
          "\"min\":1,\"max\":6,\"default\":2,"
          "\"desc\":\"Line thickness in pixels\"},"
         "{\"id\":3,\"name\":\"Period\",\"type\":\"int\","
-         "\"min\":1,\"max\":18,\"default\":18,"
+         "\"min\":1,\"max\":100,\"default\":100,"
          "\"desc\":\"Wave length: higher = one long wave around the lamp\"},"
         "{\"id\":4,\"name\":\"Amplitude\",\"type\":\"int\","
          "\"min\":10,\"max\":90,\"default\":60,"
@@ -137,8 +137,8 @@ void update(int tick_ms) {
     /* Period -> base number of integer cycles around the lamp (kept integer so
        the wave joins seamlessly). High period = one long wave, low = many short. */
     if (period < 1) period = 1;
-    if (period > 18) period = 18;
-    int base_cycles = (18 + period / 2) / period;   /* period 18 -> 1 cycle, period 1 -> many */
+    if (period > 100) period = 100;
+    int base_cycles = (100 + period / 2) / period;  /* period 100 -> 1 cycle, period 1 -> many */
     if (base_cycles < 1) base_cycles = 1;
     if (base_cycles > 8) base_cycles = 8;
 
