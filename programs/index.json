@@ -49,6 +49,7 @@
     {"slug": "solid_color", "meta": "programs/solid_color/meta.json", "wasm": "programs/solid_color/main.wasm"},
     {"slug": "spirals", "meta": "programs/spirals/meta.json", "wasm": "programs/spirals/main.wasm"},
     {"slug": "starfall", "meta": "programs/starfall/meta.json", "wasm": "programs/starfall/main.wasm"},
+    {"slug": "trading", "meta": "programs/trading/meta.json", "wasm": "programs/trading/main.wasm"},
     {"slug": "tricolor", "meta": "programs/tricolor/meta.json", "wasm": "programs/tricolor/main.wasm"},
     {"slug": "tv", "meta": "programs/tv/meta.json", "wasm": "programs/tv/main.wasm"},
     {"slug": "twinkling", "meta": "programs/twinkling/meta.json", "wasm": "programs/twinkling/main.wasm"},
