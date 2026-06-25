@@ -13,7 +13,13 @@ static const char META[] =
          "\"desc\":\"Rotation speed\"},"
         "{\"id\":2,\"name\":\"Brightness\",\"type\":\"int\","
          "\"min\":1,\"max\":255,\"default\":200,"
-         "\"desc\":\"Overall brightness\"}"
+         "\"desc\":\"Overall brightness\"},"
+        "{\"id\":3,\"name\":\"Spread\",\"type\":\"int\","
+         "\"min\":1,\"max\":10,\"default\":5,"
+         "\"desc\":\"Spread of the spiral pattern\"},"
+        "{\"id\":4,\"name\":\"Particle\",\"type\":\"int\","
+         "\"min\":1,\"max\":5,\"default\":1,"
+         "\"desc\":\"Size of each particle\"}"
     "]}";
 
 EXPORT(get_meta_ptr)
@@ -109,11 +115,29 @@ static void fb_add(int x, int y, int r, int g, int b, int W, int H) {
     fb_b[x][y] = (uint8_t)nb;
 }
 
+/* Draw a soft round particle of the given radius, full brightness at the
+   center and fading toward the edge. psize=1 reproduces the original cross. */
+static void draw_particle(int cx, int cy, int r, int g, int b,
+                          int psize, int W, int H) {
+    int rad2 = psize * psize;
+    for (int dy = -psize; dy <= psize; dy++) {
+        for (int dx = -psize; dx <= psize; dx++) {
+            int d2 = dx * dx + dy * dy;
+            if (d2 > rad2) continue;
+            int fall = 255 - (d2 * 255) / (rad2 + 1);   /* center..edge */
+            fb_add(cx + dx, cy + dy, r * fall / 255, g * fall / 255,
+                   b * fall / 255, W, H);
+        }
+    }
+}
+
 EXPORT(update)
 void update(int tick_ms) {
     int count  = get_param_i32(0);
     int speed  = get_param_i32(1);
     int bright = get_param_i32(2);
+    int spread = get_param_i32(3);
+    int psize  = get_param_i32(4);
     int W = get_width();
     int H = get_height();
 
@@ -123,6 +147,10 @@ void update(int tick_ms) {
     if (H < 1) H = 1;
     if (count < 1) count = 1;
     if (count > 6) count = 6;
+    if (spread < 1) spread = 1;
+    if (spread > 10) spread = 10;
+    if (psize < 1) psize = 1;
+    if (psize > 5) psize = 5;
 
     tick_acc += (uint32_t)tick_ms;
 
@@ -153,10 +181,11 @@ void update(int tick_ms) {
     /* Spirograph parameters */
     int cx = W / 2;
     int cy = H / 2;
-    int radius_x1 = W / 4;
-    int radius_y1 = H / 4;
-    int radius_x2 = W / 4 - 1;
-    int radius_y2 = H / 4 - 1;
+    /* Spread scales the orbit radii (spread=5 == the original W/4 layout). */
+    int radius_x1 = W * spread / 20;
+    int radius_y1 = H * spread / 20;
+    int radius_x2 = radius_x1 - 1;
+    int radius_y2 = radius_y1 - 1;
     if (radius_x1 < 1) radius_x1 = 1;
     if (radius_y1 < 1) radius_y1 = 1;
     if (radius_x2 < 1) radius_x2 = 1;
@@ -181,12 +210,8 @@ void update(int tick_ms) {
         int r, g, b;
         hsv_to_rgb(h, 255, bright, &r, &g, &b);
 
-        /* Draw the point with a small cross for visibility */
-        fb_add(x2, y2, r, g, b, W, H);
-        fb_add(x2 + 1, y2, r / 2, g / 2, b / 2, W, H);
-        fb_add(x2 - 1, y2, r / 2, g / 2, b / 2, W, H);
-        fb_add(x2, y2 + 1, r / 2, g / 2, b / 2, W, H);
-        fb_add(x2, y2 - 1, r / 2, g / 2, b / 2, W, H);
+        /* Draw the particle at the requested size */
+        draw_particle(x2, y2, r, g, b, psize, W, H);
     }
 
     /* Output framebuffer */

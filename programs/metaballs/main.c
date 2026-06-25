@@ -1,17 +1,36 @@
 #include "api.h"
 
-/* ---- Metadata JSON ---- */
+/*
+ * Metaballs — organic morphing blobs via isosurface math.
+ *
+ * Colours are blended in RGB (not hue-averaged), so overlapping blobs mix
+ * like light: a red blob over a blue one reads purple, and deep overlaps
+ * bloom toward a white-hot core. A curated palette picks pleasing colour
+ * combinations, the Hue knob rotates the whole palette, and Size scales the
+ * blobs live.
+ */
+
 static const char META[] =
     "{\"name\":\"Metaballs\","
-    "\"desc\":\"Organic morphing blobs using isosurface math\","
+    "\"desc\":\"Organic morphing blobs with light-mixing colours\","
     "\"params\":["
-        "{\"id\":0,\"name\":\"Count\",\"type\":\"int\","
-         "\"min\":2,\"max\":6,\"default\":3,"
+        "{\"id\":0,\"name\":\"Palette\",\"type\":\"select\","
+         "\"default\":4,"
+         "\"options\":[\"Rainbow\",\"Lava\",\"Ocean\",\"Toxic\",\"Plasma\",\"Sunset\",\"Aurora\",\"Ice\"],"
+         "\"desc\":\"Colour combination\"},"
+        "{\"id\":1,\"name\":\"Hue\",\"type\":\"int\","
+         "\"min\":0,\"max\":255,\"default\":0,"
+         "\"desc\":\"Rotate the whole palette\"},"
+        "{\"id\":2,\"name\":\"Size\",\"type\":\"int\","
+         "\"min\":2,\"max\":14,\"default\":6,"
+         "\"desc\":\"Blob size\"},"
+        "{\"id\":3,\"name\":\"Count\",\"type\":\"int\","
+         "\"min\":2,\"max\":6,\"default\":4,"
          "\"desc\":\"Number of metaballs\"},"
-        "{\"id\":1,\"name\":\"Speed\",\"type\":\"int\","
+        "{\"id\":4,\"name\":\"Speed\",\"type\":\"int\","
          "\"min\":1,\"max\":10,\"default\":4,"
          "\"desc\":\"Movement speed\"},"
-        "{\"id\":2,\"name\":\"Brightness\",\"type\":\"int\","
+        "{\"id\":5,\"name\":\"Brightness\",\"type\":\"int\","
          "\"min\":1,\"max\":255,\"default\":200,"
          "\"desc\":\"Overall brightness\"}"
     "]}";
@@ -59,15 +78,10 @@ static const signed char sin_table[256] = {
     -49, -46, -43, -40, -37, -34, -31, -28, -25, -22, -19, -16, -12,  -9,  -6,  -3
 };
 
-static int isin(int angle) {
-    return (int)sin_table[angle & 255];
-}
+static int isin(int angle) { return (int)sin_table[angle & 255]; }
+static int icos(int angle) { return (int)sin_table[(angle + 64) & 255]; }
 
-static int icos(int angle) {
-    return (int)sin_table[(angle + 64) & 255];
-}
-
-/* ---- HSV to RGB ---- */
+/* ---- HSV to RGB (h,s,v in 0..255) ---- */
 static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
     h = h & 255;
     if (s == 0) { *r = *g = *b = v; return; }
@@ -86,16 +100,29 @@ static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
     }
 }
 
+/* ---- Palettes: {base hue, hue spread across the blobs, saturation} ----
+ * Blobs get distinct hues spread within [base, base+spread]; the Hue knob
+ * adds a global offset to base so the whole scheme rotates together. */
+#define NUM_PAL 8
+static const int PAL_BASE[NUM_PAL]   = {  0,   0, 140,  70, 200, 240, 100, 150};
+static const int PAL_SPREAD[NUM_PAL] = {255,  45,  60,  50,  60,  64, 110,  50};
+static const int PAL_SAT[NUM_PAL]    = {255, 255, 255, 255, 255, 255, 255, 150};
+
 /* ---- Blob state ---- */
 #define MAX_BLOBS 6
 
-/* Blob positions and velocities stored as fixed-point * 256 */
+/* Positions and velocities in fixed-point (* 256) */
 static int blob_x[MAX_BLOBS];
 static int blob_y[MAX_BLOBS];
 static int blob_vx[MAX_BLOBS];
 static int blob_vy[MAX_BLOBS];
-static int blob_hue[MAX_BLOBS];
-static int blob_radius_sq[MAX_BLOBS]; /* radius squared * 256 for influence calc */
+static int blob_size_pct[MAX_BLOBS]; /* per-blob size variety, ~70..130 (%) */
+
+/* Per-frame derived colour (RGB at full value) for each blob */
+static int blob_r[MAX_BLOBS];
+static int blob_g[MAX_BLOBS];
+static int blob_b[MAX_BLOBS];
+static int blob_rsq[MAX_BLOBS];      /* r^2 * 65536 for the influence calc */
 
 static int matrix_w, matrix_h;
 static uint32_t frame;
@@ -107,8 +134,8 @@ void init(void) {
     if (matrix_w < 1) matrix_w = 1;
     if (matrix_h < 1) matrix_h = 1;
     frame = 0;
+    rng_state = 73541;
 
-    /* Initialize blobs spread across matrix */
     for (int i = 0; i < MAX_BLOBS; i++) {
         blob_x[i] = random_range(0, matrix_w * 256);
         blob_y[i] = random_range(0, matrix_h * 256);
@@ -118,18 +145,18 @@ void init(void) {
         if (blob_vx[i] < 0 && blob_vx[i] > -40) blob_vx[i] = -40;
         if (blob_vy[i] >= 0 && blob_vy[i] < 40) blob_vy[i] = 40;
         if (blob_vy[i] < 0 && blob_vy[i] > -40) blob_vy[i] = -40;
-        blob_hue[i] = (i * 256) / MAX_BLOBS;
-        /* Radius of influence: ~3-5 pixels, stored as r^2 * 65536 */
-        int rad = random_range(3, 6);
-        blob_radius_sq[i] = rad * rad * 65536;
+        blob_size_pct[i] = random_range(70, 131);
     }
 }
 
 EXPORT(update)
 void update(int tick_ms) {
-    int count  = get_param_i32(0);
-    int speed  = get_param_i32(1);
-    int bright = get_param_i32(2);
+    int pal    = get_param_i32(0);
+    int hue    = get_param_i32(1);
+    int size   = get_param_i32(2);
+    int count  = get_param_i32(3);
+    int speed  = get_param_i32(4);
+    int bright = get_param_i32(5);
 
     int W = get_width();
     int H = get_height();
@@ -137,11 +164,18 @@ void update(int tick_ms) {
     if (H < 1) H = 1;
     if (count < 2) count = 2;
     if (count > MAX_BLOBS) count = MAX_BLOBS;
+    if (pal < 0) pal = 0;
+    if (pal >= NUM_PAL) pal = NUM_PAL - 1;
+    if (size < 1) size = 1;
 
     rng_state ^= (uint32_t)tick_ms;
     frame++;
 
-    /* Move blobs */
+    int base   = PAL_BASE[pal];
+    int spread = PAL_SPREAD[pal];
+    int sat    = PAL_SAT[pal];
+
+    /* Move blobs and derive their colour + radius for this frame */
     int speed_mult = speed * 3;
     for (int i = 0; i < count; i++) {
         blob_x[i] += (blob_vx[i] * speed_mult) / 10;
@@ -161,66 +195,85 @@ void update(int tick_ms) {
             blob_vy[i] = -blob_vy[i];
         }
 
-        /* Add slight wobble using sin table */
+        /* Slight wobble */
         blob_vx[i] += isin((int)(frame * 3 + i * 60)) / 32;
         blob_vy[i] += icos((int)(frame * 5 + i * 45)) / 32;
-
-        /* Clamp velocity */
         if (blob_vx[i] > 300) blob_vx[i] = 300;
         if (blob_vx[i] < -300) blob_vx[i] = -300;
         if (blob_vy[i] > 300) blob_vy[i] = 300;
         if (blob_vy[i] < -300) blob_vy[i] = -300;
+
+        /* Hue spread across the blobs within the palette range, + Hue knob */
+        int pos = (count > 1) ? (i * spread) / (count - 1) : spread / 2;
+        int h = base + hue + pos;
+        hsv_to_rgb(h, sat, 255, &blob_r[i], &blob_g[i], &blob_b[i]);
+
+        /* Effective radius (pixels): Size * per-blob variety. Kept integer so
+         * r^2 * 65536 stays well within int32 (max ~18 -> ~21M). */
+        int rad = (size * blob_size_pct[i]) / 100;
+        if (rad < 1) rad = 1;
+        if (rad > 18) rad = 18;
+        blob_rsq[i] = rad * rad * 65536;
     }
 
-    /* Render metaballs */
+    int half_w = W * 128;
+
+    /* Render */
     for (int py = 0; py < H; py++) {
         for (int px = 0; px < W; px++) {
-            int total = 0;
-            int hue_sum = 0;
-            int weight_sum = 0;
+            int px256 = px * 256 + 128;
+            int py256 = py * 256 + 128;
+
+            int raw_total = 0;       /* uncapped field strength */
+            long rsum = 0, gsum = 0, bsum = 0;
+            int wsum = 0;
 
             for (int i = 0; i < count; i++) {
-                /* Pixel position in fixed-point */
-                int px256 = px * 256 + 128;
-                int py256 = py * 256 + 128;
-
-                /* Distance with cylinder wrap (horizontal) */
                 int dxx = blob_x[i] - px256;
-                /* Wrap around horizontally */
-                int half_w = W * 128;
                 if (dxx > half_w) dxx -= W * 256;
                 if (dxx < -half_w) dxx += W * 256;
-
                 int dyy = blob_y[i] - py256;
 
-                /* dist_sq in fixed-point (divided by 256 to avoid overflow) */
                 int dx_r = dxx / 16;
                 int dy_r = dyy / 16;
                 int dist_sq = dx_r * dx_r + dy_r * dy_r;
-
                 if (dist_sq < 1) dist_sq = 1;
 
-                /* Influence: radius_sq / dist_sq (result is intensity 0..many) */
-                /* blob_radius_sq[i] is r^2 * 65536, dist_sq is in (pix/16)^2 = pix^2*256 */
-                int influence = blob_radius_sq[i] / dist_sq;
+                int influence = blob_rsq[i] / dist_sq;   /* 256 * (r/d)^2 */
                 if (influence > 255) influence = 255;
 
-                total += influence;
-                hue_sum += blob_hue[i] * influence;
-                weight_sum += influence;
+                raw_total += influence;
+                rsum += (long)influence * blob_r[i];
+                gsum += (long)influence * blob_g[i];
+                bsum += (long)influence * blob_b[i];
+                wsum += influence;
             }
 
-            if (total > 255) total = 255;
-
-            /* Threshold - only draw where influence is significant */
-            if (total > 20) {
-                int hue = (weight_sum > 0) ? (hue_sum / weight_sum) : 0;
-                int sat = 255;
+            if (raw_total > 24) {
+                int total = raw_total > 255 ? 255 : raw_total;
                 int val = total * bright / 255;
-                if (val > 255) val = 255;
 
-                int r, g, b;
-                hsv_to_rgb(hue, sat, val, &r, &g, &b);
+                /* Base colour = RGB-blend of all blobs (light mixing) */
+                int cr = wsum ? (int)(rsum / wsum) : 0;
+                int cg = wsum ? (int)(gsum / wsum) : 0;
+                int cb = wsum ? (int)(bsum / wsum) : 0;
+
+                int r = cr * val / 255;
+                int g = cg * val / 255;
+                int b = cb * val / 255;
+
+                /* Hot core: strong overlaps bloom toward white */
+                int over = raw_total - 255;
+                if (over > 0) {
+                    int wgt = over > 200 ? 200 : over;
+                    r += (255 - r) * wgt / 255;
+                    g += (255 - g) * wgt / 255;
+                    b += (255 - b) * wgt / 255;
+                }
+
+                if (r > 255) r = 255;
+                if (g > 255) g = 255;
+                if (b > 255) b = 255;
                 set_pixel(px, py, r, g, b);
             } else {
                 set_pixel(px, py, 0, 0, 0);

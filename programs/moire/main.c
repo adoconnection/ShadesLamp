@@ -24,7 +24,10 @@ static const char META[] =
          "\"desc\":\"Base pattern type\"},"
         "{\"id\":3,\"name\":\"Separation\",\"type\":\"int\","
          "\"min\":1,\"max\":30,\"default\":10,"
-         "\"desc\":\"Distance between pattern centers\"}"
+         "\"desc\":\"Distance between pattern centers\"},"
+        "{\"id\":4,\"name\":\"Density\",\"type\":\"int\","
+         "\"min\":1,\"max\":20,\"default\":6,"
+         "\"desc\":\"Fringe density (pattern tightness)\"}"
     "]}";
 
 EXPORT(get_meta_ptr)
@@ -89,31 +92,22 @@ void init(void) {
     /* Purely per-frame computation, nothing to initialize */
 }
 
-/*
- * Pattern functions: given a point (px, py) relative to a center,
- * return a wave value in the range -1.0 to 1.0.
- *
- * - Circles: concentric rings based on distance from center
- * - Lines:   parallel stripes based on a rotated axis
- * - Grid:    combination of horizontal and vertical stripes
- */
-
-static float pattern_circles(float dx, float dy, float freq) {
-    float dist = fsqrt(dx * dx + dy * dy);
-    return fsin(dist * freq);
+/* shortest signed horizontal delta on a cylinder of width W (wraps seamlessly) */
+static float wrap_dx(float dx, float W) {
+    while (dx >  W * 0.5f) dx -= W;
+    while (dx < -W * 0.5f) dx += W;
+    return dx;
 }
 
-static float pattern_lines(float dx, float dy, float freq, float angle) {
-    /* Project point onto the axis defined by angle */
-    float proj = dx * fcos(angle) + dy * fsin(angle);
-    return fsin(proj * freq);
-}
-
-static float pattern_grid(float dx, float dy, float freq) {
-    /* Superposition of horizontal and vertical waves */
-    float h = fsin(dx * freq);
-    float v = fsin(dy * freq);
-    return (h + v) * 0.5f;
+/* spatial phase of one source at (x,y); geometry depends on pattern type.
+ * The moire fringe is the *difference* of two sources' phases (the envelope),
+ * the visible ripple is their *sum* (the carrier). */
+static float source_phase(int pattern, float dx, float dy, float freq, float angle) {
+    if (pattern == 1) {                       /* Lines: rotated axis projection */
+        return (dx * fcos(angle) + dy * fsin(angle)) * freq;
+    }
+    float dist = fsqrt(dx * dx + dy * dy);    /* Circles: radial distance */
+    return dist * freq;
 }
 
 EXPORT(update)
@@ -122,6 +116,7 @@ void update(int tick_ms) {
     int bright     = get_param_i32(1);
     int pattern    = get_param_i32(2);
     int separation = get_param_i32(3);
+    int density    = get_param_i32(4);
 
     int W = get_width();
     int H = get_height();
@@ -133,88 +128,70 @@ void update(int tick_ms) {
     if (pattern > 2) pattern = 2;
     if (separation < 1) separation = 1;
     if (separation > 30) separation = 30;
+    if (density < 1) density = 9;        /* guard saves predating this param */
+    if (density > 20) density = 20;
 
     /* Time phase */
-    float t = (float)tick_ms * (float)speed * 0.00003f;
+    float t  = (float)tick_ms * (float)speed * 0.00009f;
+    float rp = t * 2.0f;                  /* travelling-wave carrier (the ripples) */
 
-    /* Display center */
     float cx = (float)W * 0.5f;
     float cy = (float)H * 0.5f;
 
-    /* Two pattern centers orbit slowly around the display center */
+    /* Two sources sit on opposite sides of centre and slowly orbit, so the
+     * interference fringes drift. Same freq -> clean two-source moire. */
     float sep = (float)separation * 0.5f;
-    /* Center A orbits clockwise */
-    float ax = cx + fcos(t * 0.7f) * sep;
-    float ay = cy + fsin(t * 0.7f) * sep;
-    /* Center B orbits counter-clockwise at a different rate */
-    float bx = cx + fcos(-t * 0.5f + PI) * sep;
-    float by = cy + fsin(-t * 0.5f + PI) * sep;
+    float ox = fcos(t * 0.5f) * sep;
+    float oy = fsin(t * 0.5f) * sep * (float)H / (float)W; /* keep offset on-screen */
+    float ax = cx + ox, ay = cy + oy;
+    float bx = cx - ox, by = cy - oy;
 
-    /* Wave spatial frequency: controls how tight the pattern rings/lines are */
-    float freq = 1.2f;
+    /* fringe density: higher -> tighter rings/lines */
+    float freq = 0.30f + (float)density * 0.16f;
 
-    /* Slow rotation angle for line-based patterns */
-    float angle_a = t * 0.3f;
-    float angle_b = -t * 0.2f + PI * 0.5f;
+    /* per-source rotation for line/grid patterns (slightly different -> moire) */
+    float angle_a = t * 0.25f;
+    float angle_b = t * 0.25f + 0.45f;
+
+    float base_hue = t * 12.0f;
 
     for (int x = 0; x < W; x++) {
         for (int y = 0; y < H; y++) {
-            float px = (float)x;
-            float py = (float)y;
-
-            /* Displacement from each center */
-            float da_x = px - ax;
-            float da_y = py - ay;
-            float db_x = px - bx;
-            float db_y = py - by;
-
-            /* Evaluate both patterns */
-            float val_a, val_b;
-
-            switch (pattern) {
-                case 0: /* Circles */
-                    val_a = pattern_circles(da_x, da_y, freq);
-                    val_b = pattern_circles(db_x, db_y, freq * 1.05f);
-                    break;
-                case 1: /* Lines */
-                    val_a = pattern_lines(da_x, da_y, freq, angle_a);
-                    val_b = pattern_lines(db_x, db_y, freq, angle_b);
-                    break;
-                case 2: /* Grid */
-                    val_a = pattern_grid(da_x, da_y, freq);
-                    val_b = pattern_grid(db_x, db_y, freq * 0.95f);
-                    break;
-                default:
-                    val_a = 0.0f;
-                    val_b = 0.0f;
-                    break;
+            float env, car;
+            if (pattern == 2) {
+                /* Grid: two perpendicular line-moires (rotational grid moire).
+                 * A small angle difference between the two grids is what
+                 * actually produces the interference. */
+                float dx = wrap_dx((float)x - cx, (float)W);
+                float dy = (float)y - cy;
+                float ca = fcos(angle_a), sa = fsin(angle_a);
+                float cb = fcos(angle_b), sb = fsin(angle_b);
+                float pa1 = ( dx*ca + dy*sa) * freq, pb1 = ( dx*cb + dy*sb) * freq;
+                float pa2 = (-dx*sa + dy*ca) * freq, pb2 = (-dx*sb + dy*cb) * freq;
+                env = fcos((pa1 - pb1) * 0.5f) * fcos((pa2 - pb2) * 0.5f);
+                car = 0.5f * fsin((pa1 + pb1) * 0.5f - rp)
+                    + 0.5f * fsin((pa2 + pb2) * 0.5f - rp);
+            } else {                             /* Circles (offset sources) / Lines */
+                float da_x = wrap_dx((float)x - ax, (float)W);
+                float da_y = (float)y - ay;
+                float db_x = wrap_dx((float)x - bx, (float)W);
+                float db_y = (float)y - by;
+                float pa = source_phase(pattern, da_x, da_y, freq, angle_a);
+                float pb = source_phase(pattern, db_x, db_y, freq, angle_b);
+                env = fcos((pa - pb) * 0.5f);    /* standing moire fringe */
+                car = fsin((pa + pb) * 0.5f - rp); /* travelling ripple */
             }
 
-            /* Moire interference: multiply the two patterns */
-            /* Product of two sine waves creates sum/difference frequencies */
-            float interference = val_a * val_b;
-            /* interference is in -1..1 range, normalize to 0..1 */
-            float norm = interference * 0.5f + 0.5f;
-
-            /* Add the absolute difference for extra detail */
-            float diff = fabs_f(val_a - val_b) * 0.5f;
-
-            /* Combine interference and difference for rich pattern */
-            float combined = norm * 0.6f + diff * 0.4f;
-            if (combined < 0.0f) combined = 0.0f;
-            if (combined > 1.0f) combined = 1.0f;
-
-            /* Color: map combined value to hue with time-based shift */
-            /* The interference creates natural zones of constructive/destructive overlap */
-            int hue = (int)(combined * 180.0f + t * 15.0f) & 0xFF;
-            int sat = 200 + (int)(combined * 55.0f);
-            if (sat > 255) sat = 255;
-
-            /* Brightness modulation: brighter where patterns constructively interfere */
-            float bright_mod = 0.3f + 0.7f * combined;
-            int val = (int)((float)bright * bright_mod);
+            /* clean fringe brightness from the envelope; ripple = gentle shimmer */
+            float fringe = env * env;            /* 0..1, dark nodal lines */
+            float shimmer = 0.72f + 0.28f * (car * 0.5f + 0.5f);
+            int val = (int)((float)bright * (0.06f + 0.94f * fringe) * shimmer);
             if (val < 0) val = 0;
             if (val > 255) val = 255;
+
+            /* hue follows the fringe sign + slow time drift */
+            int hue = (int)(base_hue + env * 44.0f + car * 8.0f) & 0xFF;
+            int sat = 235;
 
             int r, g, b;
             hsv2rgb(hue, sat, val, &r, &g, &b);

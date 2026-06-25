@@ -6,7 +6,7 @@ static const char META[] =
     "\"desc\":\"Double helix wrapped around the lamp, rotating at a steady pace\","
     "\"params\":["
         "{\"id\":0,\"name\":\"Speed\",\"type\":\"int\","
-         "\"min\":1,\"max\":10,\"default\":5,"
+         "\"min\":1,\"max\":50,\"default\":5,"
          "\"desc\":\"Rotation speed of the helix\"},"
         "{\"id\":1,\"name\":\"Hue\",\"type\":\"int\","
          "\"min\":0,\"max\":255,\"default\":0,"
@@ -51,8 +51,6 @@ static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
 #define PITCH_ROWS   16     /* rows per full revolution around the cylinder */
 #define RUNG_STEP    4      /* draw a base-pair rung every N rows */
 
-static uint32_t tick_acc;
-
 /* Clean per-frame framebuffer (no persistent trails) */
 static uint8_t fb_r[MAX_W][MAX_H];
 static uint8_t fb_g[MAX_W][MAX_H];
@@ -60,16 +58,22 @@ static uint8_t fb_b[MAX_W][MAX_H];
 
 EXPORT(init)
 void init(void) {
-    tick_acc = 0;
 }
 
-/* Lighten (max) blend with horizontal cylinder wrap. */
+/* Saturating add. */
+static uint8_t qadd8(uint8_t a, int b) {
+    int s = (int)a + b;
+    return s > 255 ? 255 : (uint8_t)s;
+}
+
+/* Additive blend with horizontal cylinder wrap. Where two crossing lines
+   overlap, their colors sum into a brighter "wall" node. */
 static void put(int x, int y, int r, int g, int b, int W, int H) {
     x = ((x % W) + W) % W;
     if (y < 0 || y >= H) return;
-    if (r > fb_r[x][y]) fb_r[x][y] = (uint8_t)r;
-    if (g > fb_g[x][y]) fb_g[x][y] = (uint8_t)g;
-    if (b > fb_b[x][y]) fb_b[x][y] = (uint8_t)b;
+    fb_r[x][y] = qadd8(fb_r[x][y], r);
+    fb_g[x][y] = qadd8(fb_g[x][y], g);
+    fb_b[x][y] = qadd8(fb_b[x][y], b);
 }
 
 /* Anti-aliased strand ribbon centered at x_fp (Q8) on row y, wrapping in X.
@@ -104,7 +108,9 @@ void update(int tick_ms) {
     if (W < 2) W = 2;
     if (H < 1) H = 1;
 
-    tick_acc += (uint32_t)tick_ms;
+    /* tick_ms is ABSOLUTE elapsed time (millis()), not a per-frame delta — use
+       it directly as the time base; do NOT accumulate it. */
+    if (tick_ms < 0) tick_ms = 0;
 
     /* Clear framebuffer */
     for (int x = 0; x < W; x++)
@@ -112,11 +118,14 @@ void update(int tick_ms) {
             fb_r[x][y] = 0; fb_g[x][y] = 0; fb_b[x][y] = 0;
         }
 
-    /* Gentle rotation around the cylinder, scaled by speed (Q16, 65536 = one
-       full revolution). ~speed/2 units per ms => speed=5 is a calm ~26s/turn. */
-    uint32_t ang = ((uint32_t)tick_acc * (uint32_t)speed) / 2u;
     uint32_t row_ang = 65536u / PITCH_ROWS;        /* twist added per row */
-    uint32_t halfW_fp = (uint32_t)(W * 256) / 2u;  /* half circumference (Q8) */
+    uint32_t yoff_q8 = 0;                           /* no vertical motion */
+
+    /* Rotation = sliding the whole pattern along X (around the cylinder), exactly
+       like the Earth map scroll. The lattice shifts rigidly and wraps, so it
+       reads as a steady spin with no internal shearing. */
+    uint32_t Wfp = (uint32_t)(W * 256);
+    int xoff = (int)(((uint32_t)tick_ms * (uint32_t)speed / 12u) % Wfp);
 
     /* Fixed base hue (rainbow gradient runs along the height) */
     int base_hue = 0;
@@ -125,65 +134,36 @@ void update(int tick_ms) {
     int core_fp2 = 105;                            /* back strand: thinner (looks farther) */
 
     for (int y = 0; y < H; y++) {
-        uint32_t t1 = (ang + (uint32_t)y * row_ang) & 0xFFFFu;
-        uint32_t t2 = (t1 + 0x8000u) & 0xFFFFu;    /* opposite strand: +half turn */
+        uint32_t vy_q8 = ((uint32_t)y << 8) + yoff_q8;
 
-        int x1_fp = (int)((t1 * (uint32_t)W) >> 8);  /* 0 .. W*256 */
-        int x2_fp = (int)((t2 * (uint32_t)W) >> 8);
+        /* Group A spirals one way, group B the opposite way. Each group has a
+           bright near strand and a dim anti-phase far strand (see-through). */
+        uint32_t tA  = ((vy_q8 * row_ang) >> 8) & 0xFFFFu;
+        uint32_t tA2 = (tA + 0x8000u) & 0xFFFFu;
+        uint32_t tB  = (0x10000u - tA) & 0xFFFFu;          /* mirrored slope */
+        uint32_t tB2 = (tB + 0x8000u) & 0xFFFFu;
 
-        /* Colors */
-        int h1, h2, hr;
-        if (hue == 0) {
-            h1 = base_hue + y * 2;
-            h2 = h1 + 22;
-        } else {
-            h1 = hue;
-            h2 = hue + 22;
-        }
-        hr = (h1 + h2) / 2 + 6;
+        int xA1 = (int)((tA  * (uint32_t)W) >> 8) + xoff;
+        int xA2 = (int)((tA2 * (uint32_t)W) >> 8) + xoff;
+        int xB1 = (int)((tB  * (uint32_t)W) >> 8) + xoff;
+        int xB2 = (int)((tB2 * (uint32_t)W) >> 8) + xoff;
 
-        /* Front strand full brightness; the anti-phase strand is the far side
-           of the helix, drawn ~2x dimmer to fake the lamp being see-through. */
-        int r1, g1, b1, r2, g2, b2;
-        hsv_to_rgb(h1, 255, bright, &r1, &g1, &b1);
-        hsv_to_rgb(h2, 255, bright * 45 / 100, &r2, &g2, &b2);
+        /* Complementary hues so the crossings sum to bright white "wall" nodes. */
+        int hA = (hue == 0) ? base_hue + y * 2 : hue;
+        int hB = hA + 128;
+        int dim = bright * 45 / 100;
 
-        /* Base-pair rung: connects the two strands across the cylinder. It is
-           brightest near the two backbones and fades toward the middle, so it
-           reads as a link between the strands rather than a solid bar. */
-        if ((y % RUNG_STEP) == 0) {
-            int rv = bright * 70 / 256;
-            if (rv > 4) {
-                int lo = x1_fp;
-                int hi = x1_fp + (int)halfW_fp;    /* go from strand1 to strand2 (+X) */
-                int mid = (lo + hi) / 2;
-                int half = (hi - lo) / 2;
-                if (half < 1) half = 1;
-                int q0 = lo >> 8;
-                int q1 = (hi + 255) >> 8;
-                for (int px = q0; px <= q1; px++) {
-                    int da = px * 256 - lo;
-                    int db = hi - px * 256;
-                    int m = da < db ? da : db;     /* soft 0.5px ends */
-                    int cov;
-                    if (m >= 128) cov = 255;
-                    else if (m <= -128) continue;
-                    else cov = (m + 128) * 255 / 256;
-                    /* end-weighted: 100% at the strands, ~40% in the middle */
-                    int dmid = px * 256 - mid; if (dmid < 0) dmid = -dmid;
-                    int w = 100 + 155 * dmid / half;
-                    if (w > 255) w = 255;
-                    int v = rv * w / 255;
-                    int rr, rg, rb;
-                    hsv_to_rgb(hr, 160, v, &rr, &rg, &rb);
-                    put(px, y, rr * cov / 255, rg * cov / 255, rb * cov / 255, W, H);
-                }
-            }
-        }
+        int rA, gA, bA, rA2, gA2, bA2, rB, gB, bB, rB2, gB2, bB2;
+        hsv_to_rgb(hA, 255, bright, &rA,  &gA,  &bA);
+        hsv_to_rgb(hA, 255, dim,    &rA2, &gA2, &bA2);
+        hsv_to_rgb(hB, 255, bright, &rB,  &gB,  &bB);
+        hsv_to_rgb(hB, 255, dim,    &rB2, &gB2, &bB2);
 
-        /* Draw the dim far strand first, the bright near strand on top. */
-        draw_strand(x2_fp, y, r2, g2, b2, core_fp2, W, H);
-        draw_strand(x1_fp, y, r1, g1, b1, core_fp,  W, H);
+        /* Dim far strands first, bright near strands on top. */
+        draw_strand(xA2, y, rA2, gA2, bA2, core_fp2, W, H);
+        draw_strand(xB2, y, rB2, gB2, bB2, core_fp2, W, H);
+        draw_strand(xA1, y, rA,  gA,  bA,  core_fp,  W, H);
+        draw_strand(xB1, y, rB,  gB,  bB,  core_fp,  W, H);
     }
 
     /* Output */

@@ -37,7 +37,10 @@ static const char META[] =
          "\"desc\":\"Number of sparks per impact\"},"
         "{\"id\":8,\"name\":\"Blast Tail\",\"type\":\"int\","
          "\"min\":0,\"max\":6,\"default\":2,"
-         "\"desc\":\"Spark tail length\"}"
+         "\"desc\":\"Spark tail length\"},"
+        "{\"id\":9,\"name\":\"Sparks\",\"type\":\"select\","
+         "\"options\":[\"Gravity\",\"Float\",\"Rise\"],\"default\":0,"
+         "\"desc\":\"Spark behaviour after impact\"}"
     "]}";
 
 EXPORT(get_meta_ptr)
@@ -197,7 +200,7 @@ static void explode(int i, int H, float bvel, int nparts) {
 
         p_vx[pi] = vx;
         p_vy[pi] = vy;
-        p_max_ttl[pi] = random_range(350, 750);
+        p_max_ttl[pi] = random_range(650, 1300);
         p_ttl[pi] = p_max_ttl[pi];
         p_hue[pi] = (hue + random_range(-12, 13)) & 0xFF;
     }
@@ -214,6 +217,7 @@ void update(int tick_ms) {
     int bvel   = get_param_i32(6);
     int bsize  = get_param_i32(7);
     int btail  = get_param_i32(8);
+    int smode  = get_param_i32(9);      /* 0 gravity, 1 float, 2 rise */
     if (bvel  < 20) bvel  = 100;        /* guards for saves predating these params */
     if (bsize < 1)  bsize = 14;
     if (btail < 0)  btail = 0;
@@ -237,7 +241,11 @@ void update(int tick_ms) {
     prev_tick = tick_ms;
     float dt = (float)delta_ms / 1000.0f;
 
-    float gravity = (float)H * 1.1f;   /* pulls splash sparks back down */
+    /* spark behaviour: pull down (gravity), none (float), or push up (rise) */
+    float gravity;
+    if (smode == 1)      gravity = 0.0f;
+    else if (smode == 2) gravity = -(float)H * 0.55f;   /* anti-gravity: rise away */
+    else                 gravity = (float)H * 1.1f;
 
     /* ---- Update meteors ---- */
     for (int i = 0; i < count; i++) {
