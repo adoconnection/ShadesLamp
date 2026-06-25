@@ -1,0 +1,30 @@
+{
+  "guid": "a2c4e6f8-1b3d-4e5f-8a90-b1c2d3e4f506",
+  "version": "1.0.0",
+  "name": "Meteor Shower",
+  "desc": "Meteors fall from the sky and burst on impact",
+  "author": "Shades",
+  "category": "Particles",
+  "cover": {"from": "#0B1026", "to": "#FB923C", "via": "#7C3AED", "angle": 200},
+  "pulse": "#FB923C",
+  "about": "Meteors streak in from the top of the lamp, falling diagonally with a glowing tail, then burst into a spray of sparks the moment they strike the ground. Choose a fiery, icy or mixed colour palette.",
+  "tags": ["meteor", "shower", "space", "sparks", "fireworks"],
+  "i18n": {
+    "ru": {
+      "name": "Метеоритный дождь",
+      "desc": "Метеориты падают с неба и взрываются от удара",
+      "about": "Метеориты влетают сверху, падают по диагонали со светящимся хвостом и взрываются брызгами искр в момент удара о землю. Можно выбрать огненную, ледяную или смешанную палитру.",
+      "params": {
+        "0": {"name": "Количество", "desc": "Число одновременных метеоритов"},
+        "1": {"name": "Яркость", "desc": "Общая яркость"},
+        "2": {"name": "Скорость", "desc": "Скорость падения"},
+        "3": {"name": "Хвост", "desc": "Длина хвоста"},
+        "4": {"name": "Цвет", "desc": "Цветовая палитра метеоритов", "options": ["Огонь", "Лёд", "Смесь"]},
+        "5": {"name": "Макс. угол", "desc": "Максимальный угол падения от вертикали (град.)"},
+        "6": {"name": "Скорость взрыва", "desc": "Как быстро разлетаются искры при ударе"},
+        "7": {"name": "Размер взрыва", "desc": "Количество искр при ударе"},
+        "8": {"name": "Хвост искр", "desc": "Длина хвостиков искр"}
+      }
+    }
+  }
+}

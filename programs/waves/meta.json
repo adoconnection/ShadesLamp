@@ -1,8 +1,8 @@
 {
   "guid": "5ca3b4c5-dced-4fec-a3b4-c5d6e7f8edf8",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Waves",
-  "desc": "Smooth sine waves flowing across the display",
+  "desc": "An undulating sea surface with crests and foam",
   "author": "Gunner47",
   "category": "Streams",
   "cover": {"from": "#0E4429", "to": "#22D3EE", "via": "#14B8A6", "angle": 165},
@@ -11,7 +11,15 @@
   "i18n": {
     "ru": {
       "name": "Волны",
-      "desc": "Плавные синусоидальные волны"
+      "desc": "Колышущаяся морская поверхность с гребнями и пеной",
+      "params": {
+        "0": {"name": "Скорость", "desc": "Как быстро бегут волны"},
+        "1": {"name": "Оттенок", "desc": "Цвет воды (150=морской синий)"},
+        "2": {"name": "Яркость", "desc": "Общая яркость"},
+        "3": {"name": "Уровень", "desc": "Уровень заполнения водой (%)"},
+        "4": {"name": "Волнение", "desc": "Высота волн / шероховатость"},
+        "5": {"name": "Пена", "desc": "Белые барашки на гребнях"}
+      }
     }
   }
 }

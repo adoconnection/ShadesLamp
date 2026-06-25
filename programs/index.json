@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-05-01",
+  "updated": "2026-06-26",
   "featured": ["flame_particle", "spirals", "tricolor"],
   "programs": [
     {"slug": "aurora", "meta": "programs/aurora/meta.json", "wasm": "programs/aurora/main.wasm"},
@@ -33,6 +33,7 @@
     {"slug": "matrix_rain", "meta": "programs/matrix_rain/meta.json", "wasm": "programs/matrix_rain/main.wasm"},
     {"slug": "matrix_test", "meta": "programs/matrix_test/meta.json", "wasm": "programs/matrix_test/main.wasm"},
     {"slug": "metaballs", "meta": "programs/metaballs/meta.json", "wasm": "programs/metaballs/main.wasm"},
+    {"slug": "meteor_shower", "meta": "programs/meteor_shower/meta.json", "wasm": "programs/meteor_shower/main.wasm"},
     {"slug": "moire", "meta": "programs/moire/meta.json", "wasm": "programs/moire/main.wasm"},
     {"slug": "morphing", "meta": "programs/morphing/meta.json", "wasm": "programs/morphing/main.wasm"},
     {"slug": "ocean", "meta": "programs/ocean/meta.json", "wasm": "programs/ocean/main.wasm"},
@@ -49,6 +50,7 @@
     {"slug": "spirals", "meta": "programs/spirals/meta.json", "wasm": "programs/spirals/main.wasm"},
     {"slug": "starfall", "meta": "programs/starfall/meta.json", "wasm": "programs/starfall/main.wasm"},
     {"slug": "tricolor", "meta": "programs/tricolor/meta.json", "wasm": "programs/tricolor/main.wasm"},
+    {"slug": "tv", "meta": "programs/tv/meta.json", "wasm": "programs/tv/main.wasm"},
     {"slug": "twinkling", "meta": "programs/twinkling/meta.json", "wasm": "programs/twinkling/main.wasm"},
     {"slug": "vortex", "meta": "programs/vortex/meta.json", "wasm": "programs/vortex/main.wasm"},
     {"slug": "warp", "meta": "programs/warp/meta.json", "wasm": "programs/warp/main.wasm"},

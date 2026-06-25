@@ -3,12 +3,15 @@
 /* ---- Metadata JSON ---- */
 static const char META[] =
     "{\"name\":\"DNA Helix\","
-    "\"desc\":\"Clean double helix: two twisting strands with base-pair rungs\","
+    "\"desc\":\"Double helix wrapped around the lamp, rotating at a steady pace\","
     "\"params\":["
-        "{\"id\":0,\"name\":\"Hue\",\"type\":\"int\","
+        "{\"id\":0,\"name\":\"Speed\",\"type\":\"int\","
+         "\"min\":1,\"max\":10,\"default\":5,"
+         "\"desc\":\"Rotation speed of the helix\"},"
+        "{\"id\":1,\"name\":\"Hue\",\"type\":\"int\","
          "\"min\":0,\"max\":255,\"default\":0,"
          "\"desc\":\"Base hue (0=rainbow cycle)\"},"
-        "{\"id\":1,\"name\":\"Brightness\",\"type\":\"int\","
+        "{\"id\":2,\"name\":\"Brightness\",\"type\":\"int\","
          "\"min\":1,\"max\":255,\"default\":200,"
          "\"desc\":\"Overall brightness\"}"
     "]}";
@@ -18,37 +21,6 @@ int get_meta_ptr(void) { return (int)META; }
 
 EXPORT(get_meta_len)
 int get_meta_len(void) { return sizeof(META) - 1; }
-
-/* ---- Sin lookup table (256 entries, values -127..+127) ---- */
-static const signed char sin_table[256] = {
-      0,   3,   6,   9,  12,  16,  19,  22,  25,  28,  31,  34,  37,  40,  43,  46,
-     49,  51,  54,  57,  60,  63,  65,  68,  71,  73,  76,  78,  81,  83,  85,  88,
-     90,  92,  94,  96,  98, 100, 102, 104, 106, 107, 109, 111, 112, 113, 115, 116,
-    117, 118, 120, 121, 122, 122, 123, 124, 125, 125, 126, 126, 126, 127, 127, 127,
-    127, 127, 127, 127, 126, 126, 126, 125, 125, 124, 123, 122, 122, 121, 120, 118,
-    117, 116, 115, 113, 112, 111, 109, 107, 106, 104, 102, 100,  98,  96,  94,  92,
-     90,  88,  85,  83,  81,  78,  76,  73,  71,  68,  65,  63,  60,  57,  54,  51,
-     49,  46,  43,  40,  37,  34,  31,  28,  25,  22,  19,  16,  12,   9,   6,   3,
-      0,  -3,  -6,  -9, -12, -16, -19, -22, -25, -28, -31, -34, -37, -40, -43, -46,
-    -49, -51, -54, -57, -60, -63, -65, -68, -71, -73, -76, -78, -81, -83, -85, -88,
-    -90, -92, -94, -96, -98,-100,-102,-104,-106,-107,-109,-111,-112,-113,-115,-116,
-   -117,-118,-120,-121,-122,-122,-123,-124,-125,-125,-126,-126,-126,-127,-127,-127,
-   -127,-127,-127,-127,-126,-126,-126,-125,-125,-124,-123,-122,-122,-121,-120,-118,
-   -117,-116,-115,-113,-112,-111,-109,-107,-106,-104,-102,-100, -98, -96, -94, -92,
-    -90, -88, -85, -83, -81, -78, -76, -73, -71, -68, -65, -63, -60, -57, -54, -51,
-    -49, -46, -43, -40, -37, -34, -31, -28, -25, -22, -19, -16, -12,  -9,  -6,  -3
-};
-
-/* Smooth sine: angle in Q8 fixed point (65536 = full circle). Returns -127..127
-   with linear interpolation between table entries for sub-pixel smoothness. */
-static int sin_q(int a) {
-    int idx  = (a >> 8) & 255;
-    int frac = a & 255;
-    int s0 = sin_table[idx];
-    int s1 = sin_table[(idx + 1) & 255];
-    return s0 + (((s1 - s0) * frac) >> 8);
-}
-static int cos_q(int a) { return sin_q(a + (64 << 8)); }
 
 /* ---- HSV to RGB (h,s,v in 0..255) ---- */
 static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
@@ -73,11 +45,11 @@ static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
 #define MAX_W 64
 #define MAX_H 64
 
-/* Rows per full turn of the helix. The lamp is a cylinder (X wraps), default
-   16x32. 16 rows/turn => ~2 readable turns on a 32-high panel. */
-#define PITCH_ROWS   16
-#define RUNG_STEP    3      /* draw a base-pair rung every N rows */
-#define EDGE_MARGIN  384    /* keep strands this far (Q8: 1.5px) from the X edges */
+/* The lamp is a cylinder: X wraps around the circumference. The helix is a pair
+   of diagonal strands that spiral around it; advancing the phase scrolls them
+   smoothly in one direction (true rotation, no edge slow-down or reversal). */
+#define PITCH_ROWS   16     /* rows per full revolution around the cylinder */
+#define RUNG_STEP    4      /* draw a base-pair rung every N rows */
 
 static uint32_t tick_acc;
 
@@ -100,9 +72,8 @@ static void put(int x, int y, int r, int g, int b, int W, int H) {
     if (b > fb_b[x][y]) fb_b[x][y] = (uint8_t)b;
 }
 
-/* Draw one anti-aliased strand pixel-ribbon on row y.
-   x_fp is the strand center in Q8. core_fp = solid half-width, the ribbon
-   feathers to zero over one more pixel. r,g,b are full-brightness colors. */
+/* Anti-aliased strand ribbon centered at x_fp (Q8) on row y, wrapping in X.
+   core_fp = solid half-width; the ribbon feathers to zero over one more pixel. */
 static void draw_strand(int x_fp, int y, int r, int g, int b,
                         int core_fp, int W, int H) {
     int feather = 230;                 /* ~0.9px soft edge */
@@ -122,8 +93,9 @@ static void draw_strand(int x_fp, int y, int r, int g, int b,
 
 EXPORT(update)
 void update(int tick_ms) {
-    int hue    = get_param_i32(0);
-    int bright = get_param_i32(1);
+    int speed  = get_param_i32(0);
+    int hue    = get_param_i32(1);
+    int bright = get_param_i32(2);
     int W = get_width();
     int H = get_height();
 
@@ -140,65 +112,53 @@ void update(int tick_ms) {
             fb_r[x][y] = 0; fb_g[x][y] = 0; fb_b[x][y] = 0;
         }
 
-    /* Geometry (Q8 fixed point) */
-    int cx_fp  = (W - 1) * 128;                    /* horizontal center */
-    int amp_fp = cx_fp - EDGE_MARGIN;              /* sine amplitude */
-    if (amp_fp < 256) amp_fp = 256;
+    /* Gentle rotation around the cylinder, scaled by speed (Q16, 65536 = one
+       full revolution). ~speed/2 units per ms => speed=5 is a calm ~26s/turn. */
+    uint32_t ang = ((uint32_t)tick_acc * (uint32_t)speed) / 2u;
+    uint32_t row_ang = 65536u / PITCH_ROWS;        /* twist added per row */
+    uint32_t halfW_fp = (uint32_t)(W * 256) / 2u;  /* half circumference (Q8) */
 
-    int angstep = 65536 / PITCH_ROWS;              /* phase advance per row */
-    /* Helix rotation: advancing the phase sweeps the strands and reads as a
-       twist. Fixed calm rate of ~2.5 units/ms (65536 = one full turn) gives a
-       steady ~26s per turn. Bounded mod full-circle so the int never overflows. */
-    int phase = (int)((((uint32_t)tick_acc * 5u) / 2u) & 0xFFFFu);
+    /* Fixed base hue (rainbow gradient runs along the height) */
+    int base_hue = 0;
 
-    /* Animated base hue for rainbow mode */
-    int base_hue = (int)((tick_acc / 50) & 255);
+    int core_fp  = 150;                            /* front strand half-width (~0.6px) */
+    int core_fp2 = 105;                            /* back strand: thinner (looks farther) */
 
     for (int y = 0; y < H; y++) {
-        int a1 = phase + y * angstep;
-        int a2 = a1 + (128 << 8);                  /* opposite strand, 180deg */
+        uint32_t t1 = (ang + (uint32_t)y * row_ang) & 0xFFFFu;
+        uint32_t t2 = (t1 + 0x8000u) & 0xFFFFu;    /* opposite strand: +half turn */
 
-        int s1 = sin_q(a1), s2 = sin_q(a2);
-        int z1 = cos_q(a1), z2 = cos_q(a2);        /* depth: +front, -back */
-
-        int x1_fp = cx_fp + amp_fp * s1 / 127;
-        int x2_fp = cx_fp + amp_fp * s2 / 127;
-
-        /* Depth -> brightness (back strand ~35%, front 100%) and thickness */
-        int f1 = 90 + (166 * (z1 + 127)) / 254;    /* 90..256 */
-        int f2 = 90 + (166 * (z2 + 127)) / 254;
-        int v1 = bright * f1 / 256;
-        int v2 = bright * f2 / 256;
-        int core1 = 80 + 70 * (z1 + 127) / 254;    /* front strand a touch thicker */
-        int core2 = 80 + 70 * (z2 + 127) / 254;
+        int x1_fp = (int)((t1 * (uint32_t)W) >> 8);  /* 0 .. W*256 */
+        int x2_fp = (int)((t2 * (uint32_t)W) >> 8);
 
         /* Colors */
         int h1, h2, hr;
         if (hue == 0) {
             h1 = base_hue + y * 2;
-            h2 = h1 + 28;
+            h2 = h1 + 22;
         } else {
             h1 = hue;
-            h2 = hue + 28;
+            h2 = hue + 22;
         }
-        hr = (h1 + h2) / 2 + 8;
+        hr = (h1 + h2) / 2 + 6;
 
+        /* Front strand full brightness; the anti-phase strand is the far side
+           of the helix, drawn ~2x dimmer to fake the lamp being see-through. */
         int r1, g1, b1, r2, g2, b2;
-        hsv_to_rgb(h1, 255, v1, &r1, &g1, &b1);
-        hsv_to_rgb(h2, 255, v2, &r2, &g2, &b2);
+        hsv_to_rgb(h1, 255, bright, &r1, &g1, &b1);
+        hsv_to_rgb(h2, 255, bright * 45 / 100, &r2, &g2, &b2);
 
-        /* Rung: connects the strands; fades to nothing at crossings (where the
-           base pair turns edge-on) and is brightest when strands are far apart. */
+        /* Base-pair rung: connects the two strands across the cylinder. It is
+           brightest near the two backbones and fades toward the middle, so it
+           reads as a link between the strands rather than a solid bar. */
         if ((y % RUNG_STEP) == 0) {
-            int lo = x1_fp < x2_fp ? x1_fp : x2_fp;
-            int hi = x1_fp < x2_fp ? x2_fp : x1_fp;
-            int sep = hi - lo;
-            int alpha = sep * 255 / (2 * amp_fp);
-            if (alpha > 255) alpha = 255;
-            int rv = bright * 105 / 256 * alpha / 255;
+            int rv = bright * 70 / 256;
             if (rv > 4) {
-                int rr, rg, rb;
-                hsv_to_rgb(hr, 170, rv, &rr, &rg, &rb);
+                int lo = x1_fp;
+                int hi = x1_fp + (int)halfW_fp;    /* go from strand1 to strand2 (+X) */
+                int mid = (lo + hi) / 2;
+                int half = (hi - lo) / 2;
+                if (half < 1) half = 1;
                 int q0 = lo >> 8;
                 int q1 = (hi + 255) >> 8;
                 for (int px = q0; px <= q1; px++) {
@@ -209,19 +169,21 @@ void update(int tick_ms) {
                     if (m >= 128) cov = 255;
                     else if (m <= -128) continue;
                     else cov = (m + 128) * 255 / 256;
+                    /* end-weighted: 100% at the strands, ~40% in the middle */
+                    int dmid = px * 256 - mid; if (dmid < 0) dmid = -dmid;
+                    int w = 100 + 155 * dmid / half;
+                    if (w > 255) w = 255;
+                    int v = rv * w / 255;
+                    int rr, rg, rb;
+                    hsv_to_rgb(hr, 160, v, &rr, &rg, &rb);
                     put(px, y, rr * cov / 255, rg * cov / 255, rb * cov / 255, W, H);
                 }
             }
         }
 
-        /* Draw back strand first, front strand last so it wins at crossings. */
-        if (z1 <= z2) {
-            draw_strand(x1_fp, y, r1, g1, b1, core1, W, H);
-            draw_strand(x2_fp, y, r2, g2, b2, core2, W, H);
-        } else {
-            draw_strand(x2_fp, y, r2, g2, b2, core2, W, H);
-            draw_strand(x1_fp, y, r1, g1, b1, core1, W, H);
-        }
+        /* Draw the dim far strand first, the bright near strand on top. */
+        draw_strand(x2_fp, y, r2, g2, b2, core_fp2, W, H);
+        draw_strand(x1_fp, y, r1, g1, b1, core_fp,  W, H);
     }
 
     /* Output */
