@@ -237,6 +237,22 @@ void update(int tick_ms) {
         } else {
             /* integrate physics */
             ball_vy[i] -= gravity * dt;
+
+            /* Smooth cushioning near the top boundary: as the ball rises into
+             * the upper margin, add extra deceleration that grows toward the
+             * ceiling, so it eases into a gentle, hanging apex instead of
+             * shooting straight up to the edge. */
+            float cushion = ceil_y * 0.32f;
+            if (cushion > 1.0f && ball_vy[i] > 0.0f) {
+                float dist_top = ceil_y - ball_y[i];
+                if (dist_top < 0.0f) dist_top = 0.0f;
+                if (dist_top < cushion) {
+                    float ease = 1.0f - dist_top / cushion;  /* 0 at margin .. 1 at ceiling */
+                    ease = ease * ease;                       /* gentle start, firmer near edge */
+                    ball_vy[i] -= ball_vy[i] * 5.0f * ease * dt;
+                }
+            }
+
             ball_y[i]  += ball_vy[i] * dt;
             ball_x[i]  += ball_vx[i] * dt;
 
