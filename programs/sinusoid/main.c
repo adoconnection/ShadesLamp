@@ -175,10 +175,10 @@ void update(int tick_ms) {
         float overshoot = (float)period / (float)W;     /* > 1 */
         float cf = (overshoot - 1.0f) / 3.0f;           /* ramps 0..1 over period W..4W */
         if (cf > 1.0f) cf = 1.0f;
-        amp_scale = 1.0f - 0.45f * cf;                  /* make room for the glide */
+        amp_scale = 1.0f - 0.85f * cf;                  /* shrink the modulated wave a lot */
         uint32_t cdiv = (uint32_t)(40.0f * overshoot);  /* slower carrier for longer period */
         if (cdiv < 1u) cdiv = 1u;
-        carrier_off = amp_max * 0.5f * cf * fsin((int)(t_acc / cdiv));
+        carrier_off = amp_max * 0.75f * cf * fsin((int)(t_acc / cdiv)); /* carrier takes over */
     }
 
     /* ---- 1. Compute each wave's curve + color ---- */
