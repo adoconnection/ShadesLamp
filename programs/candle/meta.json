@@ -2,16 +2,25 @@
   "guid": "d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f80",
   "version": "1.0.0",
   "name": "Candle",
-  "desc": "Warm flickering candle light",
+  "desc": "Warm living candlelight with organic flicker",
   "author": "Shades",
   "category": "Fire",
   "cover": {"from": "#7F1D1D", "to": "#FBBF24", "via": "#DC2626", "angle": 175},
   "pulse": "#FBBF24",
-  "tags": ["candle", "warm", "flicker"],
+  "tags": ["candle", "warm", "flicker", "fire", "cozy"],
   "i18n": {
     "ru": {
       "name": "Свеча",
-      "desc": "Тёплый мерцающий свет свечи"
+      "desc": "Тёплый живой свет свечи с органичным мерцанием",
+      "params": {
+        "0": {"name": "Положение", "desc": "Где горит свеча: у основания или от середины", "options": ["Снизу", "С середины"]},
+        "1": {"name": "Теплота", "desc": "Тон цвета (0=густо-красный, 40=золотой)"},
+        "2": {"name": "Мерцание", "desc": "Сила мерцания (сквозняки и провалы)"},
+        "3": {"name": "Скорость", "desc": "Скорость мерцания"},
+        "4": {"name": "Высота", "desc": "Высота свечения (% лампы)"},
+        "5": {"name": "Яркость", "desc": "Общая яркость"},
+        "6": {"name": "Танец", "desc": "Колыхание пламени вокруг лампы"}
+      }
     }
   }
 }

@@ -1,8 +1,8 @@
 {
   "guid": "c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Breathing",
-  "desc": "Gentle brightness pulsing",
+  "desc": "Lifelike breathing or a heartbeat pulse",
   "author": "Shades",
   "category": "Ambient",
   "cover": {"from": "#1a1a2e", "to": "#4a00e0", "via": "#3f37c9", "angle": 180},
@@ -11,7 +11,7 @@
   "i18n": {
     "ru": {
       "name": "Дыхание",
-      "desc": "Плавная пульсация яркости"
+      "desc": "Реалистичное дыхание или биение сердца"
     }
   }
 }

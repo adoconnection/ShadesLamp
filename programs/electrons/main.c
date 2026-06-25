@@ -31,7 +31,10 @@ static const char META[] =
          "\"desc\":\"White electron head\"},"
         "{\"id\":6,\"name\":\"Spread\",\"type\":\"int\","
          "\"min\":1,\"max\":100,\"default\":25,"
-         "\"desc\":\"Vertical spread (% of height)\"}"
+         "\"desc\":\"Vertical spread (% of height)\"},"
+        "{\"id\":7,\"name\":\"Rotation\",\"type\":\"int\","
+         "\"min\":0,\"max\":200,\"default\":40,"
+         "\"desc\":\"Rotate equator-crossing points around the lamp\"}"
     "]}";
 
 EXPORT(get_meta_ptr)
@@ -90,6 +93,11 @@ static float p_incl[MAX_P];    /* vertical amplitude fraction: -1.0 to +1.0 */
 static float p_speed[MAX_P];   /* individual speed mult */
 static uint8_t p_hue[MAX_P];   /* hue offset */
 
+/* Phase offset of the vertical oscillation. Advancing it rotates the
+ * equator-crossing points (nodes) around the cylinder instead of pinning
+ * them to fixed columns (x=0 and x=width/2). */
+static float rot_phase = 0.0f;
+
 /* ---- Framebuffer ---- */
 #define MAX_W 64
 #define MAX_H 64
@@ -121,6 +129,7 @@ void init(void) {
         fb_hue[i] = 0; fb_val[i] = 0;
     }
     rng = 77317;
+    rot_phase = 0.0f;
 
     for (int i = 0; i < MAX_P; i++) {
         /* Spread starting angles evenly + jitter */
@@ -147,6 +156,7 @@ void update(int tick_ms) {
     int bright     = get_param_i32(4);
     int white_head = get_param_i32(5);
     int spread     = get_param_i32(6);
+    int rotation   = get_param_i32(7);
 
     cur_w = get_width();
     cur_h = get_height();
@@ -171,6 +181,10 @@ void update(int tick_ms) {
 
     rng ^= (uint32_t)tick_ms;
 
+    /* Advance the node rotation phase (0 = classic fixed crossing points) */
+    rot_phase += (float)rotation * 0.0003f;
+    while (rot_phase >= TWO_PI) rot_phase -= TWO_PI;
+
     /* Fade framebuffer */
     for (int i = 0; i < cur_w * cur_h; i++)
         fb_val[FB(i / cur_h, i % cur_h)] = (uint8_t)((int)fb_val[FB(i / cur_h, i % cur_h)] * fade >> 8);
@@ -182,8 +196,10 @@ void update(int tick_ms) {
 
         /* X: linear around cylinder */
         float fx = p_angle[i] / TWO_PI * (float)cur_w;
-        /* Y: oscillation around equator, amplitude = max_amp * incl fraction */
-        float fy = equator + fsin(p_angle[i]) * max_amp * p_incl[i];
+        /* Y: oscillation around equator, amplitude = max_amp * incl fraction.
+         * Subtracting rot_phase decouples the crossing nodes from x position,
+         * letting them rotate around the cylinder over time. */
+        float fy = equator + fsin(p_angle[i] - rot_phase) * max_amp * p_incl[i];
 
         if (fy < 0.0f) fy = 0.0f;
         if (fy >= (float)cur_h - 0.01f) fy = (float)cur_h - 0.01f;

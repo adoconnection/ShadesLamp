@@ -73,6 +73,10 @@ public:
     String getOrderJson() const;
     bool setOrder(const String& json);
 
+    // IDs in display order (custom order first, then any unordered programs).
+    // Used by hardware controls to navigate next/previous.
+    std::vector<uint8_t> getOrderedIds() const;
+
     // Persist global config (active program, name, hw) to /config.json
     void saveConfig();
 

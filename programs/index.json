@@ -6,7 +6,7 @@
     {"slug": "aurora", "meta": "programs/aurora/meta.json", "wasm": "programs/aurora/main.wasm"},
     {"slug": "bouncing_balls", "meta": "programs/bouncing_balls/meta.json", "wasm": "programs/bouncing_balls/main.wasm"},
     {"slug": "breathing", "meta": "programs/breathing/meta.json", "wasm": "programs/breathing/main.wasm"},
-    {"slug": "candle", "meta": "programs/candle/meta.json"},
+    {"slug": "candle", "meta": "programs/candle/meta.json", "wasm": "programs/candle/main.wasm"},
     {"slug": "clouds", "meta": "programs/clouds/meta.json", "wasm": "programs/clouds/main.wasm"},
     {"slug": "colored_rain", "meta": "programs/colored_rain/meta.json", "wasm": "programs/colored_rain/main.wasm"},
     {"slug": "comet", "meta": "programs/comet/meta.json", "wasm": "programs/comet/main.wasm"},

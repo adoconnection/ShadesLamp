@@ -1,8 +1,8 @@
 {
   "guid": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "name": "Bouncing Balls",
-  "desc": "Bouncing colored balls with physics",
+  "desc": "Sized balls bouncing with gravity and angle",
   "author": "Gunner47",
   "category": "Particles",
   "cover": {"from": "#1A1A2E", "to": "#E040FB", "via": "#4A00E0", "angle": 140},
@@ -11,7 +11,7 @@
   "i18n": {
     "ru": {
       "name": "Прыгающие мячи",
-      "desc": "Цветные мячи с физикой отскока"
+      "desc": "Мячи с гравитацией, углом прыжка и размером"
     }
   }
 }

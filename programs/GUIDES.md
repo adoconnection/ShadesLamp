@@ -210,6 +210,11 @@ This avoids dynamic allocation (no `malloc` in WASM).
 
 ## Step 2: Compile
 
+The output **must** be named `main.wasm` — that's the file `index.json` and the
+app load. (`tools\build_wasm.bat` is a legacy helper that only builds a few
+seed programs and writes `{name}.wasm`; don't rely on it for new programs —
+just run clang directly.)
+
 ```bash
 clang --target=wasm32 -nostdlib -O2 \
   -Wl,--no-entry -Wl,--export-dynamic -Wl,--allow-undefined \
@@ -219,6 +224,19 @@ clang --target=wasm32 -nostdlib -O2 \
 ```
 
 Requires LLVM/Clang with wasm32 target support.
+
+### On Windows (PowerShell)
+
+PowerShell parses the bare `-Wl,...` linker flags as its own arguments and
+fails with *"Missing argument in parameter list"*. Use the `--%` stop-parsing
+token so everything after it is passed to clang verbatim:
+
+```powershell
+$env:Path = "C:\Program Files\LLVM\bin;$env:Path"
+clang --% --target=wasm32 -nostdlib -O2 -I programs\common -Wl,--no-entry -Wl,--export-dynamic -Wl,--allow-undefined -o programs\your_program\main.wasm programs\your_program\main.c
+```
+
+A successful build is typically 1–8 KB.
 
 ## Step 3: Create `meta.json`
 
@@ -276,7 +294,30 @@ Add your program entry to `programs/index.json` in alphabetical order:
 {"slug": "your_program", "meta": "programs/your_program/meta.json", "wasm": "programs/your_program/main.wasm"}
 ```
 
-## Step 5: Commit and Push
+## Step 5: Test in the simulator
+
+`simulator.html` (repo root) is a 3D lamp emulator that runs your `.wasm`
+exactly like the firmware does (same host functions, switchable lamp sizes).
+Serve the repo over HTTP and open it:
+
+```bash
+python -m http.server 8777
+# then open http://localhost:8777/simulator.html
+```
+
+- **Drag-and-drop** your `main.wasm` onto the page, or click *"Открыть .wasm"* —
+  works for any file with no extra setup.
+- To get your program into the built-in dropdown, add its slug to the `PRESETS`
+  array near the bottom of `simulator.html`.
+- Use the lamp-size buttons (16×16 … 32×48) to confirm the effect holds up at
+  every aspect ratio — `get_width()`/`get_height()` change live each frame.
+
+For headless / automated checks you can instantiate the module directly with
+your own host functions and assert on the pixels — e.g. sample per-row
+brightness to verify a flame's vertical profile, or measure frame-to-frame
+variation to confirm it actually animates.
+
+## Step 6: Commit and Push
 
 ```bash
 git add programs/your_program/main.c programs/your_program/main.wasm programs/your_program/meta.json programs/index.json

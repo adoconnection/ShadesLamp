@@ -1,0 +1,27 @@
+{
+  "guid": "7b1e2c3d-4f50-4a61-9c72-d8e9f0a1b2c3",
+  "version": "1.0.0",
+  "name": "TV",
+  "desc": "Retro television: channels, static and scanlines",
+  "author": "Shades",
+  "category": "Effects",
+  "cover": {"from": "#3B2A12", "to": "#E8B468", "via": "#8A5A1E", "angle": 160},
+  "pulse": "#E8B468",
+  "about": "A retro TV set on your lamp: it flips between channels — colour-bar test card, a Coca-Cola bottle, a news broadcast and a flashy ad — wrapped in CRT scanlines, signal snow and the odd vertical-hold roll. Switch the picture between Colour, Sepia and black & white.",
+  "tags": ["tv", "retro", "crt", "channels", "static", "sepia"],
+  "i18n": {
+    "ru": {
+      "name": "Телевизор",
+      "desc": "Ретро-телевизор: каналы, помехи и развёртка",
+      "about": "Ретро-телевизор на лампе: переключает каналы — цветная тест-таблица, бутылка Coca-Cola, выпуск новостей и яркая реклама — со строчной развёрткой ЭЛТ, снегом помех и случайным срывом синхронизации. Картинку можно переключать между цветом, сепией и чёрно-белым.",
+      "params": {
+        "0": {"name": "Картинка", "desc": "Цветовой режим", "options": ["Цвет", "Сепия", "Ч-Б"]},
+        "1": {"name": "Канал", "desc": "Авто-перебор каналов или выбор одного", "options": ["Авто", "Тест-таблица", "Кола", "Новости", "Реклама", "Бег"]},
+        "2": {"name": "Длительность", "desc": "Секунд на канал (Авто)"},
+        "3": {"name": "Яркость", "desc": "Общая яркость"},
+        "4": {"name": "Развёртка", "desc": "Сила строчной развёртки ЭЛТ"},
+        "5": {"name": "Помехи", "desc": "Шум сигнала и сбои"}
+      }
+    }
+  }
+}

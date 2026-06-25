@@ -13,6 +13,10 @@
 #include "program_manager.h"
 #include "ble_service.h"
 #include "storage.h"
+#include "touch_input.h"
+
+// Touch sensor (digital, active-HIGH) for hardware power/program control
+static const uint8_t TOUCH_PIN = 1;
 
 // ── Global Objects ─────────────────────────────────────────────────────────
 
@@ -104,6 +108,7 @@ void setup() {
     // Create and initialize LED driver with config values
     ledDriver = new LedDriver(ledPin, ledWidth, ledHeight, ledZigzag, ledColorOrder);
     ledDriver->begin();
+    ledDriver->setMaxCurrent(2000); // limit estimated LED draw to ~2 A
 
     // Create engine and manager with dynamic pointers
     wasmEngine = new WasmEngine(ledDriver, &paramStore);
@@ -115,6 +120,10 @@ void setup() {
 
     // Initialize BLE service (use device name from config, default: "Shades LED Lamp")
     bleService->begin(programManager->getDeviceName().c_str());
+
+    // Initialize hardware touch button
+    g_touch = new TouchInput(TOUCH_PIN, /*activeLow=*/false);
+    g_touch->begin(bleService, programManager);
 
     // Create render task on Core 1 (BLE runs on Core 0)
     BaseType_t taskResult = xTaskCreatePinnedToCore(
@@ -150,5 +159,6 @@ void setup() {
 // ── Arduino Loop ───────────────────────────────────────────────────────────
 
 void loop() {
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    if (g_touch) g_touch->tick();
+    vTaskDelay(pdMS_TO_TICKS(5));
 }

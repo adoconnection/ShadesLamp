@@ -680,6 +680,24 @@ String ProgramManager::getOrderJson() const {
     return output;
 }
 
+std::vector<uint8_t> ProgramManager::getOrderedIds() const {
+    std::vector<uint8_t> result;
+    result.reserve(_programs.size());
+    if (_order.size() > 0) {
+        for (uint8_t id : _order) {
+            if (findProgramIndex(id) >= 0) result.push_back(id);
+        }
+        for (const ProgramInfo& p : _programs) {
+            bool found = false;
+            for (uint8_t oid : result) { if (oid == p.id) { found = true; break; } }
+            if (!found) result.push_back(p.id);
+        }
+    } else {
+        for (const ProgramInfo& p : _programs) result.push_back(p.id);
+    }
+    return result;
+}
+
 bool ProgramManager::setOrder(const String& json) {
     JsonDocument doc;
     if (deserializeJson(doc, json)) return false;

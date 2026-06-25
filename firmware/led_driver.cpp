@@ -22,6 +22,7 @@ LedDriver::LedDriver(uint8_t pin, uint16_t width, uint16_t height, bool zigzag, 
     , _zigzag(zigzag)
     , _colorOrder(colorOrder < LED_ORDER_COUNT ? colorOrder : LED_ORDER_GRB)
     , _framebuffer(nullptr)
+    , _maxCurrentMa(0)
     , _strip(nullptr)
 {
     _mutex = xSemaphoreCreateMutex();
@@ -76,6 +77,21 @@ void LedDriver::setPixel(uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b
 void LedDriver::show() {
     xSemaphoreTake(_mutex, portMAX_DELAY);
 
+    // Optional current limiting: estimate total draw and, if it exceeds the
+    // configured budget, scale every channel down by a single fixed-point factor.
+    // scale256 is 8.8 fixed point: 256 == 1.0 (no scaling).
+    uint16_t scale256 = 256;
+    if (_maxCurrentMa > 0) {
+        uint64_t channelSum = 0;
+        size_t total = (size_t)_numPixels * 3;
+        for (size_t i = 0; i < total; i++) channelSum += _framebuffer[i];
+        // Each channel at value 255 draws ~LED_MA_PER_CHANNEL mA.
+        uint32_t estimatedMa = (uint32_t)(channelSum * LED_MA_PER_CHANNEL / 255);
+        if (estimatedMa > _maxCurrentMa) {
+            scale256 = (uint16_t)(((uint64_t)_maxCurrentMa * 256) / estimatedMa);
+        }
+    }
+
     // Copy framebuffer to NeoPixel strip with optional zigzag remapping
     for (uint16_t y = 0; y < _height; y++) {
         for (uint16_t x = 0; x < _width; x++) {
@@ -87,13 +103,27 @@ void LedDriver::show() {
             } else {
                 stripIdx = y * _width + x;
             }
-            _strip->setPixelColor(stripIdx,
-                _framebuffer[fbIdx], _framebuffer[fbIdx + 1], _framebuffer[fbIdx + 2]);
+            uint8_t r = _framebuffer[fbIdx];
+            uint8_t g = _framebuffer[fbIdx + 1];
+            uint8_t b = _framebuffer[fbIdx + 2];
+            if (scale256 < 256) {
+                r = (uint8_t)((r * scale256) >> 8);
+                g = (uint8_t)((g * scale256) >> 8);
+                b = (uint8_t)((b * scale256) >> 8);
+            }
+            _strip->setPixelColor(stripIdx, r, g, b);
         }
     }
     _strip->show();
 
     xSemaphoreGive(_mutex);
+}
+
+void LedDriver::setMaxCurrent(uint32_t maxMa) {
+    xSemaphoreTake(_mutex, portMAX_DELAY);
+    _maxCurrentMa = maxMa;
+    xSemaphoreGive(_mutex);
+    Serial.printf("%s Max current limit: %u mA%s\r\n", TAG, maxMa, maxMa == 0 ? " (disabled)" : "");
 }
 
 void LedDriver::clear() {
