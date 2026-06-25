@@ -1,0 +1,28 @@
+{
+  "guid": "c3d5e7f9-2a4b-4c6d-8e90-f1a2b3c4d5e6",
+  "version": "1.0.0",
+  "name": "Trading",
+  "desc": "Scrolling candlestick chart chasing its fading tail",
+  "author": "Shades",
+  "category": "Visualizers",
+  "cover": {"from": "#04140C", "to": "#22C55E", "via": "#7F1D1D", "angle": 160},
+  "pulse": "#22C55E",
+  "about": "A live candlestick chart wraps around the lamp: each new candle appears to the right of the last as the price random-walks, drawing green up-candles and red down-candles with high/low wicks. Older candles fade, so the bright head candle endlessly chases its own tail around the ring.",
+  "tags": ["trading", "candles", "stock", "chart", "finance"],
+  "i18n": {
+    "ru": {
+      "name": "Трейдинг",
+      "desc": "Бегущий график свечей, догоняющий свой угасающий хвост",
+      "about": "Живой свечной график оборачивается вокруг лампы: каждая новая свеча появляется правее предыдущей по мере случайного блуждания цены — зелёные свечи вверх, красные вниз, с тенями (хвостами) максимума и минимума. Старые свечи угасают, и яркая головная свеча бесконечно догоняет свой хвост по кругу.",
+      "params": {
+        "0": {"name": "Период", "desc": "Период свечи (x300мс)"},
+        "1": {"name": "Темп сделок", "desc": "Как часто прилетают сделки"},
+        "2": {"name": "Яркость", "desc": "Общая яркость"},
+        "3": {"name": "Волатильность", "desc": "Размах одной сделки"},
+        "4": {"name": "Ширина", "desc": "Ширина свечи (пиксели)"},
+        "5": {"name": "Хвост", "desc": "Видимых свечей (хвостовые 3 угасают)"},
+        "6": {"name": "Палитра", "desc": "Цветовая схема рост/падение", "options": ["Классика", "Неон", "Моно"]}
+      }
+    }
+  }
+}
