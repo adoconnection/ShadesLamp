@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-06-25T22:56:21Z",
+  "updated": "2026-06-25T23:23:59Z",
   "featured": ["flame_particle", "spirals", "tricolor", "fireworks", "fountains", "sinusoid"],
   "programs": [
     {"slug": "aurora", "meta": "programs/aurora/meta.json", "wasm": "programs/aurora/main.wasm"},
@@ -24,6 +24,7 @@
     {"slug": "forest", "meta": "programs/forest/meta.json", "wasm": "programs/forest/main.wasm"},
     {"slug": "fountains", "meta": "programs/fountains/meta.json", "wasm": "programs/fountains/main.wasm"},
     {"slug": "grass", "meta": "programs/grass/meta.json", "wasm": "programs/grass/main.wasm"},
+    {"slug": "hearts", "meta": "programs/hearts/meta.json", "wasm": "programs/hearts/main.wasm"},
     {"slug": "helix", "meta": "programs/helix/meta.json", "wasm": "programs/helix/main.wasm"},
     {"slug": "hexagons", "meta": "programs/hexagons/meta.json", "wasm": "programs/hexagons/main.wasm"},
     {"slug": "jellyfish", "meta": "programs/jellyfish/meta.json", "wasm": "programs/jellyfish/main.wasm"},
