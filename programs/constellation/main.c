@@ -12,25 +12,28 @@ static const char META[] =
     "{\"name\":\"Constellation\","
     "\"desc\":\"Drifting particles link with glowing lines when they get close\","
     "\"params\":["
-        "{\"id\":0,\"name\":\"Size\",\"type\":\"select\","
+        "{\"id\":0,\"name\":\"Motion\",\"type\":\"select\","
+         "\"options\":[\"Chaotic\",\"Linear\",\"Sinusoid\"],\"default\":0,"
+         "\"desc\":\"Movement mode: random, drift along a slowly rotating axis, or wavy drift\"},"
+        "{\"id\":1,\"name\":\"Size\",\"type\":\"select\","
          "\"options\":[\"Small\",\"Big\"],\"default\":1,"
          "\"desc\":\"Particle size\"},"
-        "{\"id\":1,\"name\":\"Count\",\"type\":\"int\","
+        "{\"id\":2,\"name\":\"Count\",\"type\":\"int\","
          "\"min\":3,\"max\":40,\"default\":18,"
          "\"desc\":\"Number of particles\"},"
-        "{\"id\":2,\"name\":\"Brightness\",\"type\":\"int\","
+        "{\"id\":3,\"name\":\"Brightness\",\"type\":\"int\","
          "\"min\":1,\"max\":255,\"default\":200,"
          "\"desc\":\"Overall brightness\"},"
-        "{\"id\":3,\"name\":\"Speed\",\"type\":\"int\","
+        "{\"id\":4,\"name\":\"Speed\",\"type\":\"int\","
          "\"min\":1,\"max\":100,\"default\":30,"
          "\"desc\":\"Drift speed\"},"
-        "{\"id\":4,\"name\":\"Link Distance\",\"type\":\"int\","
+        "{\"id\":5,\"name\":\"Link Distance\",\"type\":\"int\","
          "\"min\":2,\"max\":24,\"default\":9,"
          "\"desc\":\"Max distance to draw a link\"},"
-        "{\"id\":5,\"name\":\"Link Glow\",\"type\":\"int\","
+        "{\"id\":6,\"name\":\"Link Glow\",\"type\":\"int\","
          "\"min\":0,\"max\":100,\"default\":0,"
          "\"desc\":\"0 = subtle, 100 = stars & links at full brightness\"},"
-        "{\"id\":6,\"name\":\"Colour\",\"type\":\"select\","
+        "{\"id\":7,\"name\":\"Colour\",\"type\":\"select\","
          "\"options\":[\"Ice\",\"Neon\",\"Rainbow\",\"Mono\"],\"default\":0,"
          "\"desc\":\"Colour palette\"}"
     "]}";
@@ -59,8 +62,10 @@ static void hsv(int h,int s,int v,int*r,int*g,int*b){
 #define MAX_W 64
 #define MAX_H 64
 static float p_x[MAX_P], p_y[MAX_P], p_vx[MAX_P], p_vy[MAX_P];
+static float p_sf[MAX_P], p_ph[MAX_P];   /* per-particle speed factor & sinusoid phase */
 static uint8_t p_hue[MAX_P];
 static float glow[MAX_P];
+static float axis_ang = 0.0f;            /* slowly rotating drift axis (Linear/Sinusoid) */
 static int uf_parent[MAX_P], csize[MAX_P];
 static uint8_t acc[MAX_W*MAX_H*3];
 
@@ -94,6 +99,7 @@ void init(void) {
     rng = 24681;
     prev_tick = 0;
     started = 0;
+    axis_ang = 0.0f;
 }
 
 static void spawn(int i, int W, int H) {
@@ -101,6 +107,8 @@ static void spawn(int i, int W, int H) {
     p_y[i] = frand() * (float)H;
     float a = frand() * TWO_PI;
     p_vx[i] = m_cos(a); p_vy[i] = m_sin(a);
+    p_sf[i] = 0.4f + frand() * 1.3f;     /* different speeds */
+    p_ph[i] = frand() * TWO_PI;          /* sinusoid phase */
     p_hue[i] = (uint8_t)(rng_next() & 0xFF);
 }
 
@@ -116,13 +124,14 @@ static void particle_color(int palette, int i, int *r, int *g, int *b) {
 
 EXPORT(update)
 void update(int tick_ms) {
-    int size    = get_param_i32(0);   /* 0 small, 1 big */
-    int count   = get_param_i32(1);
-    int bright  = get_param_i32(2);
-    int speed   = get_param_i32(3);
-    int linkd   = get_param_i32(4);
-    int linkglow= get_param_i32(5);
-    int palette = get_param_i32(6);
+    int motion  = get_param_i32(0);   /* 0 chaotic, 1 linear, 2 sinusoid */
+    int size    = get_param_i32(1);   /* 0 small, 1 big */
+    int count   = get_param_i32(2);
+    int bright  = get_param_i32(3);
+    int speed   = get_param_i32(4);
+    int linkd   = get_param_i32(5);
+    int linkglow= get_param_i32(6);
+    int palette = get_param_i32(7);
     if (linkglow < 0) linkglow = 0; if (linkglow > 100) linkglow = 100;
     float gboost = (float)linkglow / 100.0f;   /* 0 = as before, 1 = full */
 
@@ -149,15 +158,38 @@ void update(int tick_ms) {
     float pxs = 1.0f + (float)speed / 100.0f * 14.0f;   /* px per second */
     float linkf = (float)linkd;
 
-    /* move particles: wrap horizontally, bounce vertically */
-    for (int i = 0; i < count; i++) {
-        p_x[i] += p_vx[i] * pxs * dt;
-        p_y[i] += p_vy[i] * pxs * dt;
-        while (p_x[i] < 0.0f)        p_x[i] += (float)W;
-        while (p_x[i] >= (float)W)   p_x[i] -= (float)W;
-        if (p_y[i] < 0.0f)            { p_y[i] = 0.0f;            p_vy[i] = -p_vy[i]; }
-        if (p_y[i] > (float)(H-1))    { p_y[i] = (float)(H-1);    p_vy[i] = -p_vy[i]; }
-        glow[i] = 0.0f;
+    if (motion == 0) {
+        /* Chaotic: wrap horizontally, bounce vertically */
+        for (int i = 0; i < count; i++) {
+            p_x[i] += p_vx[i] * pxs * dt;
+            p_y[i] += p_vy[i] * pxs * dt;
+            while (p_x[i] < 0.0f)      p_x[i] += (float)W;
+            while (p_x[i] >= (float)W) p_x[i] -= (float)W;
+            if (p_y[i] < 0.0f)         { p_y[i] = 0.0f;         p_vy[i] = -p_vy[i]; }
+            if (p_y[i] > (float)(H-1)) { p_y[i] = (float)(H-1); p_vy[i] = -p_vy[i]; }
+            glow[i] = 0.0f;
+        }
+    } else {
+        /* Linear / Sinusoid: drift along a slowly rotating axis (toroidal wrap) */
+        axis_ang += 0.18f * dt;                 /* slow rotation of the flow axis */
+        float dax = m_cos(axis_ang), day = m_sin(axis_ang);
+        float pax = -day, pay = dax;            /* perpendicular */
+        float tsec = (float)tick_ms * 0.001f;
+        for (int i = 0; i < count; i++) {
+            float v  = pxs * p_sf[i];           /* different speeds per star */
+            float vx = dax * v, vy = day * v;
+            if (motion == 2) {                  /* add perpendicular wave (height varies) */
+                float osc = m_cos(tsec * 1.1f + p_ph[i]) * pxs * 0.9f;
+                vx += pax * osc; vy += pay * osc;
+            }
+            p_x[i] += vx * dt;
+            p_y[i] += vy * dt;
+            while (p_x[i] < 0.0f)      p_x[i] += (float)W;
+            while (p_x[i] >= (float)W) p_x[i] -= (float)W;
+            while (p_y[i] < 0.0f)      p_y[i] += (float)H;
+            while (p_y[i] >= (float)H) p_y[i] -= (float)H;
+            glow[i] = 0.0f;
+        }
     }
 
     /* clear accumulator */
