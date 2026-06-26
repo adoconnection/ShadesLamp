@@ -17,6 +17,24 @@ export interface Param {
   options?: string[];
 }
 
+// Per-language overrides from a program's meta i18n. `params` is keyed by
+// the param id (as a string) and overrides the English name/desc/options.
+export interface ParamI18n {
+  name?: string;
+  desc?: string;
+  options?: string[];
+}
+
+export interface LangI18n {
+  name?: string;
+  desc?: string;
+  params?: { [paramId: string]: ParamI18n };
+}
+
+export interface ProgramI18n {
+  [lang: string]: LangI18n;
+}
+
 export interface ProgramListItem {
   id: number;
   name: string;
@@ -37,4 +55,5 @@ export interface Program {
   category: string;
   params: Param[];
   slug?: string;
+  i18n?: ProgramI18n;
 }

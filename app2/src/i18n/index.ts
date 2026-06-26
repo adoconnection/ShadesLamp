@@ -1,5 +1,6 @@
 import { NativeModules, Platform } from 'react-native';
 import { getLocales } from 'expo-localization';
+import { ProgramI18n } from '../types/program';
 import { en, StringKey } from './en';
 import { ru } from './ru';
 
@@ -63,12 +64,42 @@ export function tCategory(cat: string): string {
   return lang === 'ru' ? categoryRu[cat] ?? cat : cat;
 }
 
-// Pick a localized name/desc from a marketplace item's meta i18n, else the base value.
+// Pick a localized name/desc from a program/market item's meta i18n, else base.
 export function localized(
-  item: { i18n?: { ru?: { name: string; desc: string } } },
+  item: { i18n?: ProgramI18n },
   field: 'name' | 'desc',
   fallback: string,
 ): string {
-  if (lang === 'ru' && item.i18n?.ru?.[field]) return item.i18n.ru[field];
+  if (lang !== 'en') {
+    const v = item.i18n?.[lang]?.[field];
+    if (v) return v;
+  }
+  return fallback;
+}
+
+// Localized parameter name/desc from meta i18n.params[paramId], else fallback.
+export function localizedParam(
+  i18n: ProgramI18n | undefined,
+  paramId: number,
+  field: 'name' | 'desc',
+  fallback: string,
+): string {
+  if (lang !== 'en') {
+    const v = i18n?.[lang]?.params?.[String(paramId)]?.[field];
+    if (v) return v;
+  }
+  return fallback;
+}
+
+// Localized select options for a parameter, else fallback.
+export function localizedOptions(
+  i18n: ProgramI18n | undefined,
+  paramId: number,
+  fallback?: string[],
+): string[] | undefined {
+  if (lang !== 'en') {
+    const opts = i18n?.[lang]?.params?.[String(paramId)]?.options;
+    if (opts && opts.length) return opts;
+  }
   return fallback;
 }

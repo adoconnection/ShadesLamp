@@ -14,7 +14,7 @@ import ParamControl from '../components/ParamControl';
 import { BackIcon, StarFillIcon, StarOutlineIcon } from '../components/Icon';
 import { gradientColors } from '../utils/color';
 import { padId } from '../utils/format';
-import { t } from '../i18n';
+import { t, localizedParam, localizedOptions } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -49,14 +49,16 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
         }
         const params: Param[] = paramsSchema.map((p: any) => ({
           id: p.id,
-          name: p.name || `Param ${p.id}`,
+          // Param schema (names/descs) comes from the WASM in English; overlay
+          // the localized strings from the program's meta i18n when present.
+          name: localizedParam(program?.i18n, p.id, 'name', p.name || `Param ${p.id}`),
           type: p.type || 'int',
           min: p.min,
           max: p.max,
           default: p.default ?? 0,
           value: paramValues?.[String(p.id)] ?? p.default ?? 0,
-          desc: p.desc || '',
-          options: p.options,
+          desc: localizedParam(program?.i18n, p.id, 'desc', p.desc || ''),
+          options: localizedOptions(program?.i18n, p.id, p.options),
         }));
         setProgramParams(programId, params);
       })

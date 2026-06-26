@@ -1,4 +1,4 @@
-import { Gradient } from './program';
+import { Gradient, ProgramI18n } from './program';
 
 export interface MarketItem {
   slug: string;
@@ -13,5 +13,5 @@ export interface MarketItem {
   tags: string[];
   wasmUrl: string;
   metaUrl: string;
-  i18n?: { ru?: { name: string; desc: string } };
+  i18n?: ProgramI18n;
 }

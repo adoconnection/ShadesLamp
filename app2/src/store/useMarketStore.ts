@@ -33,11 +33,16 @@ export const useMarketStore = create<MarketState>((set, get) => ({
   fetchCatalog: async () => {
     set({ loading: true, error: null });
     try {
-      const indexRes = await fetch(INDEX_URL);
+      // raw.githubusercontent.com serves with Cache-Control: max-age=300 (Fastly
+      // CDN) and the platform HTTP cache (NSURLCache/OkHttp) can hold it longer.
+      // Always pull the index fresh, then cache-bust meta/wasm by the catalog's
+      // `updated` stamp so they only refetch when the catalog actually changes.
+      const indexRes = await fetch(`${INDEX_URL}?t=${Date.now()}`, { cache: 'no-store' });
       if (!indexRes.ok) throw new Error(`Index fetch failed: ${indexRes.status}`);
       const index = await indexRes.json();
       const entries: IndexEntry[] = index.programs || [];
       const featuredSlugs: string[] = index.featured || [];
+      const ver = encodeURIComponent(index.updated || String(Date.now()));
 
       // Fetch all meta.json in parallel
       const items = await Promise.all(
@@ -45,7 +50,7 @@ export const useMarketStore = create<MarketState>((set, get) => ({
           .filter((e) => e.wasm) // Only show programs that have wasm
           .map(async (entry): Promise<MarketItem | null> => {
             try {
-              const metaRes = await fetch(`${BASE_URL}/${entry.meta}`);
+              const metaRes = await fetch(`${BASE_URL}/${entry.meta}?v=${ver}`, { cache: 'no-store' });
               if (!metaRes.ok) return null;
               const meta = await metaRes.json();
               return {
@@ -59,8 +64,8 @@ export const useMarketStore = create<MarketState>((set, get) => ({
                 coverSvg: meta.coverSvg,
                 pulse: meta.pulse || '#FFFFFF',
                 tags: meta.tags || [],
-                wasmUrl: `${BASE_URL}/${entry.wasm}`,
-                metaUrl: `${BASE_URL}/${entry.meta}`,
+                wasmUrl: `${BASE_URL}/${entry.wasm}?v=${ver}`,
+                metaUrl: `${BASE_URL}/${entry.meta}?v=${ver}`,
                 i18n: meta.i18n,
               };
             } catch {

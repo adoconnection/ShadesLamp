@@ -79,6 +79,7 @@ export async function connectAndLoadDevice(
             category: raw?.category || 'Effects',
             params: [],
             slug: raw?.slug,
+            i18n: raw?.i18n,
           });
           if (raw?.slug) marketStore.markInstalled(raw.slug);
         })
@@ -158,6 +159,7 @@ async function resolveProgramsMeta(items: ProgramListItem[]): Promise<Program[]>
             id: p.id, name: meta.name, desc: meta.desc, author: meta.author,
             size: '', version: p.version, cover: meta.cover, coverSvg: meta.coverSvg,
             pulse: meta.pulse, category: meta.category, params: [], slug: meta.slug,
+            i18n: meta.i18n,
           };
         }
       }
@@ -177,6 +179,7 @@ async function resolveProgramsMeta(items: ProgramListItem[]): Promise<Program[]>
             pulse: raw.pulse || '#888888',
             tags: raw.tags,
             slug: raw.slug,
+            i18n: raw.i18n,
           };
           if (p.guid && p.version) {
             await setCachedMeta(p.guid, p.version, meta);
@@ -190,6 +193,7 @@ async function resolveProgramsMeta(items: ProgramListItem[]): Promise<Program[]>
         id: p.id, name: meta.name, desc: meta.desc, author: meta.author,
         size: '', version: p.version || metaVersion, cover: meta.cover, coverSvg: meta.coverSvg,
         pulse: meta.pulse, category: meta.category, params: [], slug: meta.slug,
+        i18n: meta.i18n,
       };
     }),
   );

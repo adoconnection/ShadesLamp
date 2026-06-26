@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Gradient } from '../types/program';
+import { Gradient, ProgramI18n } from '../types/program';
 
 const CACHE_KEY = '@metaCache';
 const MAX_ENTRIES = 200;
@@ -14,6 +14,7 @@ export interface CachedMeta {
   pulse: string;
   tags?: string[];
   slug?: string;
+  i18n?: ProgramI18n;
 }
 
 type MetaCache = Record<string, CachedMeta>;

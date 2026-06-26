@@ -110,6 +110,7 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
         pulse: item!.pulse,
         tags: item!.tags,
         slug: item!.slug,
+        i18n: item!.i18n,
       });
 
       // Auto-activate the new program
@@ -131,6 +132,7 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
         category: item!.category,
         params: [],
         slug: item!.slug,
+        i18n: item!.i18n,
       });
 
       setInstalledId(newId);

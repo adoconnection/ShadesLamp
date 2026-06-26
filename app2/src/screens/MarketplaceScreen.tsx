@@ -74,6 +74,7 @@ export default function MarketplaceScreen({ navigation }: Props) {
         pulse: item.pulse,
         tags: item.tags,
         slug: item.slug,
+        i18n: item.i18n,
       });
 
       try {
@@ -93,6 +94,7 @@ export default function MarketplaceScreen({ navigation }: Props) {
         category: item.category,
         params: [],
         slug: item.slug,
+        i18n: item.i18n,
       });
 
       markInstalled(item.slug);
