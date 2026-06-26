@@ -35,6 +35,13 @@ void renderTask(void* param) {
 
     Serial.printf("[MAIN] Render task started on core %d\r\n", xPortGetCoreID());
 
+    // Host-side crossfade on program switch: fade the old program out, swap,
+    // then fade the new one in (dip to black). Switch is deferred until fade-out.
+    enum FadeState { FADE_IDLE, FADE_OUT, FADE_IN };
+    FadeState fadeState = FADE_IDLE;
+    uint32_t  fadeStart = 0;
+    const uint32_t FADE_MS = 300;
+
     while (true) {
         // Skip rendering while upload is in progress (LED shows progress bar)
         if (bleService->isPausedByUpload()) {
@@ -48,13 +55,50 @@ void renderTask(void* param) {
             continue;
         }
 
-        // Process pending program switches + deferred saves
-        uint8_t prevActive = programManager->getActiveId();
-        programManager->processPending();
-        uint8_t newActive = programManager->getActiveId();
-        if (newActive != prevActive) {
-            bleService->notifyActiveProgram(newActive);
-            Serial.printf("[MAIN] Program switched: %u -> %u\r\n", prevActive, newActive);
+        // ── Program-switch crossfade state machine ──
+        uint32_t now = millis();
+        if (fadeState == FADE_IDLE) {
+            if (programManager->hasPendingSwitch()) {
+                // Begin fading the current program out; apply the switch later.
+                fadeState = FADE_OUT;
+                fadeStart = now;
+            } else {
+                // No switch pending: run normally, handle deletes + deferred saves.
+                ledDriver->setFadeScale(256);
+                uint8_t prevActive = programManager->getActiveId();
+                programManager->processPending();
+                uint8_t newActive = programManager->getActiveId();
+                if (newActive != prevActive) {
+                    bleService->notifyActiveProgram(newActive);
+                }
+            }
+        }
+
+        if (fadeState == FADE_OUT) {
+            uint32_t el = now - fadeStart;
+            if (el >= FADE_MS) {
+                // Fade-out done: swap program (at black), then fade the new one in.
+                uint8_t prevActive = programManager->getActiveId();
+                ledDriver->setFadeScale(0);
+                programManager->processPending();   // applies the queued switch
+                uint8_t newActive = programManager->getActiveId();
+                if (newActive != prevActive) {
+                    bleService->notifyActiveProgram(newActive);
+                    Serial.printf("[MAIN] Program switched: %u -> %u\r\n", prevActive, newActive);
+                }
+                fadeState = FADE_IN;
+                fadeStart = millis();
+            } else {
+                ledDriver->setFadeScale((uint16_t)(256 - el * 256 / FADE_MS)); // 256 -> 0
+            }
+        } else if (fadeState == FADE_IN) {
+            uint32_t el = now - fadeStart;
+            if (el >= FADE_MS) {
+                ledDriver->setFadeScale(256);
+                fadeState = FADE_IDLE;
+            } else {
+                ledDriver->setFadeScale((uint16_t)(el * 256 / FADE_MS));         // 0 -> 256
+            }
         }
 
         // Process deferred BLE event notifications (queued from BLE callbacks)

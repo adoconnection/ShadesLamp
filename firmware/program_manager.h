@@ -92,6 +92,9 @@ public:
     // Request async program switch (returns immediately, processed in processPending())
     void requestSwitch(uint8_t programId);
 
+    // True if a program switch is queued but not yet applied (for crossfade timing)
+    bool hasPendingSwitch() const { return _pendingSwitchId != 0xFF; }
+
     // Request async program delete (returns immediately, processed in processPending())
     void requestDelete(uint8_t programId);
 

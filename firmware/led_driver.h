@@ -39,6 +39,11 @@ public:
     void     setMaxCurrent(uint32_t maxMa);
     uint32_t getMaxCurrent() const { return _maxCurrentMa; }
 
+    // Global brightness scale applied in show() (8.8 fixed: 256 = full).
+    // Used for host-side crossfade on program switch.
+    void     setFadeScale(uint16_t scale256) { _fadeScale = scale256 > 256 ? 256 : scale256; }
+    uint16_t getFadeScale() const { return _fadeScale; }
+
 private:
     uint8_t  _pin;
     uint16_t _width;
@@ -49,6 +54,7 @@ private:
     uint8_t  _colorOrder;
     uint8_t* _framebuffer;          // RGB framebuffer in PSRAM
     uint32_t _maxCurrentMa;         // 0 = no current limit
+    uint16_t _fadeScale;            // 0..256 global brightness (crossfade)
     Adafruit_NeoPixel* _strip;
     SemaphoreHandle_t  _mutex;
 };

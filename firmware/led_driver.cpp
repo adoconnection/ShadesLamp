@@ -23,6 +23,7 @@ LedDriver::LedDriver(uint8_t pin, uint16_t width, uint16_t height, bool zigzag, 
     , _colorOrder(colorOrder < LED_ORDER_COUNT ? colorOrder : LED_ORDER_GRB)
     , _framebuffer(nullptr)
     , _maxCurrentMa(0)
+    , _fadeScale(256)
     , _strip(nullptr)
 {
     _mutex = xSemaphoreCreateMutex();
@@ -97,6 +98,11 @@ void LedDriver::show() {
         if (estimatedMa > _maxCurrentMa) {
             scale256 = (uint16_t)(((uint64_t)_maxCurrentMa * 256) / estimatedMa);
         }
+    }
+
+    // Apply global crossfade brightness on top of current limiting.
+    if (_fadeScale < 256) {
+        scale256 = (uint16_t)(((uint32_t)scale256 * _fadeScale) >> 8);
     }
 
     // Copy framebuffer to NeoPixel strip with optional zigzag remapping
