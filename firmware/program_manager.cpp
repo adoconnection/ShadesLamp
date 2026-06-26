@@ -22,6 +22,7 @@ ProgramManager::ProgramManager(WasmEngine* engine, ParamStore* paramStore, LedDr
     , _lastParamDirtyTime(0)
     , _pendingSwitchId(0xFF)
     , _pendingDeleteId(0xFF)
+    , _pendingClearAll(false)
 {
     _mutex = xSemaphoreCreateMutex();
 }
@@ -34,6 +35,14 @@ void ProgramManager::begin() {
     Serial.printf("%s Found %u programs on flash\r\n", TAG, ids.size());
 
     for (uint8_t id : ids) {
+        // Programs without the .ok marker are incomplete/failed installs
+        // (upload interrupted before metadata arrived) — wipe them so they
+        // never get activated with garbage state.
+        if (!Storage::isProgramInstalled(id)) {
+            Serial.printf("%s Program %u missing .ok marker -> wiping incomplete install\r\n", TAG, id);
+            Storage::deleteProgram(id);  // removes the whole /programs/{id}/ folder
+            continue;
+        }
         loadProgramMeta(id);  // Just registers ID, no I/O
     }
 
@@ -345,6 +354,13 @@ bool ProgramManager::setProgramMeta(uint8_t id, const String& json) {
 
     if (!Storage::saveProgramMeta(id, json.c_str())) return false;
 
+    // Receiving real metadata is the final mandatory step of an install, so
+    // this is our commit point: mark the program as fully installed. The
+    // fallback meta written during uploadProgram() goes straight through
+    // Storage::saveProgramMeta() and deliberately does NOT set this flag, so a
+    // program whose meta never arrives stays unmarked and is wiped on reboot.
+    Storage::markProgramInstalled(id);
+
     // Update cached fields
     JsonDocument richDoc;
     if (!deserializeJson(richDoc, json)) {
@@ -534,7 +550,40 @@ void ProgramManager::requestDelete(uint8_t programId) {
     _pendingDeleteId = programId;
 }
 
+void ProgramManager::requestClearAll() {
+    _pendingClearAll = true;
+}
+
+void ProgramManager::clearAllPrograms() {
+    xSemaphoreTake(_mutex, portMAX_DELAY);
+    _engine->unload();
+    _ledDriver->clear();
+    _ledDriver->show();
+
+    // Remove every program's wasm + params + meta from flash (covers orphans too)
+    std::vector<uint8_t> ids = Storage::listPrograms();
+    for (uint8_t id : ids) {
+        Storage::deleteProgram(id);
+        Storage::deleteParamValues(id);
+        Storage::deleteProgramMeta(id);
+    }
+
+    _programs.clear();
+    _order.clear();
+    _activeId = 0xFF;
+    xSemaphoreGive(_mutex);
+
+    saveConfig();   // persist empty active program + order (device name/hw kept)
+    Serial.printf("%s Cleared all programs (%u removed)\r\n", TAG, (unsigned)ids.size());
+}
+
 void ProgramManager::processPending() {
+    // Handle async full wipe (must run on render task, not BLE core)
+    if (_pendingClearAll) {
+        _pendingClearAll = false;
+        clearAllPrograms();
+    }
+
     // Handle async program delete (must run on render task, not BLE core)
     uint8_t deleteId = _pendingDeleteId;
     if (deleteId != 0xFF) {

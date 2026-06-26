@@ -11,7 +11,7 @@ import Animated, {
 import Cover from './Cover';
 import { ChevronIcon, StarSmallIcon } from './Icon';
 import { Program } from '../types/program';
-import { t, tCategory } from '../i18n';
+import { t, tCategory, localized } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -46,13 +46,13 @@ export default function ProgramRow({ program, active, isFavorite, onTap, onOpen,
         )}
       </Pressable>
 
-      <Pressable onPress={onTap} style={styles.info} accessibilityRole="button" accessibilityLabel={program.name}>
+      <Pressable onPress={onTap} style={styles.info} accessibilityRole="button" accessibilityLabel={localized(program, 'name', program.name)}>
         <View style={styles.nameRow}>
           <Text
             style={[styles.name, active && { color: program.pulse }]}
             numberOfLines={1}
           >
-            {program.name}
+            {localized(program, 'name', program.name)}
           </Text>
           {isFavorite && <StarSmallIcon size={12} />}
         </View>

@@ -15,6 +15,14 @@
 #include "storage.h"
 #include "touch_input.h"
 
+#include <Update.h>
+
+// setup() runs in the Arduino loopTask. programManager->begin() activates the
+// saved program, which executes the WASM init() through the wasm3 interpreter —
+// and wasm3 chains its op-codes deep on the C stack. The default 8 KB loopTask
+// stack overflows there (stack-canary panic), so give it generous headroom.
+SET_LOOP_TASK_STACK_SIZE(32 * 1024);
+
 // Touch sensor (digital, active-HIGH) for hardware power/program control
 static const uint8_t TOUCH_PIN = 1;
 
@@ -43,6 +51,12 @@ void renderTask(void* param) {
     const uint32_t FADE_MS = 300;
 
     while (true) {
+        // Transmit any queued BLE response from here (render task), NOT from the
+        // BLE callback — sending a large multi-chunk reply inline on the BLE
+        // stack task starves the notify tx-buffers and the reply stalls after a
+        // few chunks. Flushed first so it runs even when paused/powered off.
+        bleService->flushPendingResponse();
+
         // Skip rendering while upload is in progress (LED shows progress bar)
         if (bleService->isPausedByUpload()) {
             vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(33));
@@ -55,8 +69,33 @@ void renderTask(void* param) {
             continue;
         }
 
-        // ── Program-switch crossfade state machine ──
+        // Freeze rendering during BLE bursts. Refreshing the WS2812 strip
+        // (show() disables interrupts for the bit-stream) while the radio is
+        // busy corrupts the timing and the panel flickers/tears. Holding the
+        // last latched frame keeps it rock-steady until BLE goes quiet.
+        if (bleService->isBleBusy()) {
+            vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(33));
+            continue;
+        }
+
         uint32_t now = millis();
+
+        // A WASM upload just finished: its green bar was faded to black on the
+        // BLE task. Apply the queued switch at black and fade the new one in.
+        if (bleService->consumeFadeIn()) {
+            ledDriver->setFadeScale(0);
+            programManager->processPending();
+            bleService->notifyActiveProgram(programManager->getActiveId());
+            fadeState = FADE_IN;
+            // processPending() loads the WASM program, which can take longer than
+            // FADE_MS. Start the fade-in clock AFTER that work (and refresh `now`)
+            // so the first frame is at scale 0 and the ramp isn't skipped — else
+            // the program pops to full brightness instead of fading in.
+            now = millis();
+            fadeStart = now;
+        }
+
+        // ── Program-switch crossfade state machine ──
         if (fadeState == FADE_IDLE) {
             if (programManager->hasPendingSwitch()) {
                 // Begin fading the current program out; apply the switch later.
@@ -200,9 +239,117 @@ void setup() {
     Serial.printf("[MAIN] Setup complete. Free heap: %u bytes\r\n", ESP.getFreeHeap());
 }
 
+// ── OTA firmware update (over BLE) ───────────────────────────────────────────
+
+// Draw a horizontal progress fill (blue) from the bottom up. Runs while
+// rendering is paused (pausedByUpload), so there's no contention for the LEDs.
+static void otaProgressBar(size_t cur, size_t total) {
+    if (!ledDriver || total == 0) return;
+    uint16_t w = ledDriver->getWidth();
+    uint16_t h = ledDriver->getHeight();
+    uint32_t totalPixels = (uint32_t)w * h;
+    // The BLE-receive phase already filled the bottom 90%; the flash-write phase
+    // continues the SAME bar through the top 10% so it reads as one sweep.
+    uint32_t base = totalPixels * 9 / 10;
+    uint32_t filled = base + (uint32_t)((uint64_t)cur * (totalPixels - base) / total);
+    ledDriver->clear();
+    for (uint32_t i = 0; i < filled && i < totalPixels; i++) {
+        ledDriver->setPixel(i % w, i / w, 0, 80, 255);  // blue
+    }
+    ledDriver->show();
+}
+
+// Fade a full blue panel out to black (mirrors the green post-upload fade),
+// used as the OTA "done" animation right before reboot.
+static void otaFadeOut() {
+    if (!ledDriver) return;
+    uint16_t w = ledDriver->getWidth();
+    uint16_t h = ledDriver->getHeight();
+    for (uint16_t y = 0; y < h; y++)
+        for (uint16_t x = 0; x < w; x++)
+            ledDriver->setPixel(x, y, 0, 80, 255);
+    const int STEPS = 40;
+    for (int i = STEPS; i >= 0; i--) {
+        float t = (float)i / STEPS;                 // 1 -> 0
+        ledDriver->setFadeScale((uint16_t)(t * t * 256.0f + 0.5f));
+        ledDriver->show();
+        delay(11);
+    }
+    ledDriver->setFadeScale(0);
+}
+
+// Flash a firmware image (already received over BLE into PSRAM) into the
+// inactive OTA slot, then reboot. Blocking; runs on loop()'s 32 KB stack so it
+// can feed the watchdog. The buffer is freed here (ownership transferred from
+// BleService). On failure it resumes normal rendering.
+static void performBleOta(uint8_t* img, size_t size) {
+    Serial.printf("[OTA] Flashing %u bytes from BLE image...\r\n", (unsigned)size);
+    ledDriver->setFadeScale(256);
+
+    if (!Update.begin(size, U_FLASH)) {
+        Serial.printf("[OTA] Update.begin failed: %s\r\n", Update.errorString());
+        free(img);
+        bleService->pausedByUpload = false;
+        return;
+    }
+
+    // Write in blocks, updating the LED bar and feeding the task watchdog.
+    const size_t BLOCK = 16 * 1024;
+    size_t written = 0;
+    bool ok = true;
+    while (written < size) {
+        size_t n = (size - written < BLOCK) ? (size - written) : BLOCK;
+        if (Update.write(img + written, n) != n) {
+            Serial.printf("[OTA] Update.write failed at %u: %s\r\n", (unsigned)written, Update.errorString());
+            ok = false;
+            break;
+        }
+        written += n;
+        otaProgressBar(written, size);
+        delay(0);   // yield so the idle task can pet the watchdog
+    }
+
+    free(img);
+
+    if (!ok) {
+        Update.abort();
+        bleService->pausedByUpload = false;
+        return;
+    }
+
+    if (!Update.end(true)) {   // true = set boot partition; expects full image
+        Serial.printf("[OTA] Update.end failed: %s\r\n", Update.errorString());
+        bleService->pausedByUpload = false;
+        return;
+    }
+
+    Serial.println("[OTA] Success — rebooting into new firmware");
+    otaFadeOut();        // fade the full blue bar out to black, like the green one
+    delay(150);
+    ESP.restart();
+}
+
 // ── Arduino Loop ───────────────────────────────────────────────────────────
 
 void loop() {
     if (g_touch) g_touch->tick();
+
+    // Firmware image received over BLE? Flash it here (loop has the large stack).
+    if (bleService) {
+        uint8_t* otaImg = nullptr;
+        size_t   otaSize = 0;
+        if (bleService->consumeOtaFlash(&otaImg, &otaSize) && otaImg) {
+            performBleOta(otaImg, otaSize);
+        }
+    }
+
+    // Refresh the advertised chip temperature every ~5 s so scanners see it live.
+    static uint32_t lastTempPub = 0;
+    uint32_t nowMs = millis();
+    if (bleService && (nowMs - lastTempPub) >= 5000) {
+        lastTempPub = nowMs;
+        bleService->updateAdvertisedTemp();
+    }
+
     vTaskDelay(pdMS_TO_TICKS(5));
 }

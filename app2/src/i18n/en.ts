@@ -103,11 +103,16 @@ export const en = {
   online: 'ONLINE',
   offline: 'OFFLINE',
   matrix: 'MATRIX',
+  temperature: 'TEMP',
   firmware: 'FIRMWARE',
   storage: 'STORAGE',
   programsSection: 'PROGRAMS',
   deviceSection: 'DEVICE',
   power: 'Power',
+  clearMemory: 'Clear memory',
+  clearMemoryTitle: 'Clear memory?',
+  clearMemoryMsg: 'All uploaded programs will be erased from the lamp. The device name and settings are kept.',
+  clear: 'Clear',
 } as const;
 
 export type StringKey = keyof typeof en;

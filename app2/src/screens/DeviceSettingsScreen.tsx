@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -6,7 +6,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { useBleStore } from '../store/useBleStore';
 import { useProgramStore } from '../store/useProgramStore';
-import { reboot, setPower } from '../ble/commands';
+import { reboot, setPower, getHwConfig, clearStorage } from '../ble/commands';
+import { refreshPrograms } from '../ble/connectFlow';
 import NavButton from '../components/NavButton';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
@@ -20,8 +21,28 @@ type Props = NativeStackScreenProps<RootStackParamList, 'DeviceSettings'>;
 
 export default function DeviceSettingsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { deviceInfo, connectionState, powerOn, setPowerOn } = useBleStore();
+  const { deviceInfo, connectionState, powerOn, setPowerOn, setDeviceInfo } = useBleStore();
   const { programs } = useProgramStore();
+
+  // Live chip-temperature: poll GET_HW_CONFIG every 5 s while on this screen.
+  useEffect(() => {
+    if (connectionState !== 'connected') return;
+    let alive = true;
+    const poll = async () => {
+      try {
+        const hw = await getHwConfig();
+        if (alive && hw && hw.ok) {
+          const patch: any = {};
+          if (typeof hw.temp === 'number') patch.temp = hw.temp;
+          if (hw.build != null) patch.firmware = `build ${hw.build}`;
+          if (Object.keys(patch).length) setDeviceInfo(patch);
+        }
+      } catch {}
+    };
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => { alive = false; clearInterval(id); };
+  }, [connectionState, setDeviceInfo]);
 
   const handleRestart = () => {
     Alert.alert(t('restartDeviceTitle'), t('restartDeviceMsg'), [
@@ -35,6 +56,27 @@ export default function DeviceSettingsScreen({ navigation }: Props) {
             } catch (err) {
               console.warn('Reboot error:', err);
             }
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleClearMemory = () => {
+    Alert.alert(t('clearMemoryTitle'), t('clearMemoryMsg'), [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('clear'),
+        style: 'destructive',
+        onPress: async () => {
+          if (connectionState !== 'connected') return;
+          try {
+            await clearStorage();
+            // Give the lamp a moment to wipe flash, then resync the app lists.
+            await new Promise((r) => setTimeout(r, 700));
+            await refreshPrograms();
+          } catch (err) {
+            console.warn('Clear memory error:', err);
           }
         },
       },
@@ -63,11 +105,16 @@ export default function DeviceSettingsScreen({ navigation }: Props) {
         <View style={styles.onlineRow}>
           <View style={[styles.onlineDot, connectionState !== 'connected' && { backgroundColor: '#6B7280' }]} />
           <Text style={[styles.onlineText, connectionState !== 'connected' && { color: '#6B7280' }]}>
-            {connectionState === 'connected' ? `${t('online')} · ${deviceInfo.rssi} dBm` : t('offline')}
+            {connectionState === 'connected'
+              ? `${t('online')} · ${deviceInfo.rssi} dBm${typeof deviceInfo.temp === 'number' ? ` · ${Math.round(deviceInfo.temp)}°C` : ''}`
+              : t('offline')}
           </Text>
         </View>
         <View style={styles.statsGrid}>
           <StatBlock label={t('matrix')} value={deviceInfo.matrix} />
+          {typeof deviceInfo.temp === 'number' && (
+            <StatBlock label={t('temperature')} value={`${Math.round(deviceInfo.temp)}°C`} />
+          )}
           <StatBlock label={t('firmware')} value={deviceInfo.firmware} />
           <StatBlock
             label={t('storage')}
@@ -85,6 +132,7 @@ export default function DeviceSettingsScreen({ navigation }: Props) {
       <SectionLabel>{t('deviceSection')}</SectionLabel>
       <Card>
         <SettingsRow label={t('restart')} onPress={handleRestart} />
+        <SettingsRow label={t('clearMemory')} onPress={handleClearMemory} danger />
         <SettingsRow
           label={t('power')}
           toggle

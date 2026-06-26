@@ -14,7 +14,7 @@ import ParamControl from '../components/ParamControl';
 import { BackIcon, StarFillIcon, StarOutlineIcon } from '../components/Icon';
 import { gradientColors } from '../utils/color';
 import { padId } from '../utils/format';
-import { t, localizedParam, localizedOptions } from '../i18n';
+import { t, tCategory, localized, localizedParam, localizedOptions } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -133,10 +133,10 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
 
         <View style={styles.heroInfo}>
           <Text style={styles.heroLabel}>
-            ID {padId(program.id)} · {program.category}
+            ID {padId(program.id)} · {tCategory(program.category)}
           </Text>
-          <Text style={styles.heroTitle}>{program.name}</Text>
-          {program.desc ? <Text style={styles.heroDesc}>{program.desc}</Text> : null}
+          <Text style={styles.heroTitle}>{localized(program, 'name', program.name)}</Text>
+          {(() => { const d = localized(program, 'desc', program.desc); return d ? <Text style={styles.heroDesc}>{d}</Text> : null; })()}
         </View>
       </View>
 

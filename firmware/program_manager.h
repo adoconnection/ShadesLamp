@@ -98,6 +98,10 @@ public:
     // Request async program delete (returns immediately, processed in processPending())
     void requestDelete(uint8_t programId);
 
+    // Request async wipe of ALL programs (wasm + meta + params). Processed in
+    // processPending() on the render task. Device config (name/hw) is kept.
+    void requestClearAll();
+
     // Process pending switch + deferred saves; call from loop()
     void processPending();
 
@@ -115,6 +119,7 @@ public:
 
 private:
     int findProgramIndex(uint8_t id) const;
+    void clearAllPrograms();   // actual wipe; runs on render task via processPending()
     void loadConfig();
     void loadProgramMeta(uint8_t id);
     void ensureMetaLoaded(uint8_t id) const;
@@ -146,6 +151,7 @@ private:
     // Async program switch / delete (set from BLE callback, processed in loop)
     volatile uint8_t  _pendingSwitchId;  // 0xFF = none
     volatile uint8_t  _pendingDeleteId;  // 0xFF = none
+    volatile bool     _pendingClearAll;  // wipe all programs on next processPending()
 };
 
 #endif // PROGRAM_MANAGER_H

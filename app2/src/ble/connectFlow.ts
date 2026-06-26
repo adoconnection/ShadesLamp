@@ -127,10 +127,11 @@ export async function connectAndLoadDevice(
     name: deviceName || 'Shades LED Lamp',
     serial: hwConfig.serial || '—',
     mac: device.id,
-    firmware: hwConfig.firmware || hwConfig.fw || hwConfig.version || '—',
+    firmware: hwConfig.build != null ? `build ${hwConfig.build}` : (hwConfig.firmware || hwConfig.fw || hwConfig.version || '—'),
     matrix: hwConfig.ok ? `${hwConfig.width} × ${hwConfig.height}` : '—',
     storage: { used: storageUsedKB, total: storageTotalKB },
     rssi: device.rssi ?? 0,
+    temp: (hwConfig.ok && typeof hwConfig.temp === 'number') ? hwConfig.temp : undefined,
   });
 
   setConnectionState('connected');

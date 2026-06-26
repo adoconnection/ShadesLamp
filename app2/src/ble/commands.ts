@@ -1,4 +1,4 @@
-import { CMD, UPLOAD_CHUNK_SIZE } from './constants';
+import { CMD, UPLOAD_CHUNK_SIZE, UPLOAD_TYPE } from './constants';
 import { CommandQueue } from './protocol';
 import { writeCommand, writeUploadChunk, writeActiveProgram, readActiveProgram } from './manager';
 
@@ -69,6 +69,54 @@ export async function uploadWasm(
   return finishResult.id;
 }
 
+// Stream a firmware image to the device for OTA. Uses the same chunked upload
+// pipeline as programs but with type=FIRMWARE; the device buffers it in PSRAM,
+// flashes the inactive OTA slot, and reboots. The final response is
+// { ok: true, ota: "flashing" } (the device reboots shortly after).
+export async function uploadFirmware(
+  data: Uint8Array,
+  onProgress?: (progress: number) => void,
+): Promise<any> {
+  // UPLOAD_START: size(4 LE) + type=FIRMWARE
+  await queue.enqueue(() => {
+    const sizeBytes = toLE32(data.length);
+    return writeCommand(new Uint8Array([CMD.UPLOAD_START, ...sizeBytes, UPLOAD_TYPE.FIRMWARE]));
+  });
+
+  const totalChunks = Math.ceil(data.length / UPLOAD_CHUNK_SIZE);
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * UPLOAD_CHUNK_SIZE;
+    const end = Math.min(start + UPLOAD_CHUNK_SIZE, data.length);
+    await writeUploadChunk(data.slice(start, end));
+    if (i > 0 && i % 10 === 0) {
+      await new Promise(r => setTimeout(r, 20));
+    }
+    onProgress?.((i + 1) / totalChunks);
+  }
+
+  // UPLOAD_FINISH -> { ok: true, ota: "flashing" }
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.UPLOAD_FINISH])));
+}
+
+// List a directory on the device flash. Returns
+// [{ name, size, dir }, ...].
+export async function listFiles(path: string): Promise<Array<{ name: string; size: number; dir: boolean }>> {
+  return queue.enqueue(() => {
+    const pathBytes = new TextEncoder().encode(path);
+    return writeCommand(new Uint8Array([CMD.LIST_FILES, ...pathBytes]));
+  });
+}
+
+// Read a file off the device flash (text files like /config.json or
+// /programs/{id}/meta.json). Binary files (code.wasm) are not supported here —
+// the response path decodes as UTF-8/JSON.
+export async function getFile(path: string): Promise<any> {
+  return queue.enqueue(() => {
+    const pathBytes = new TextEncoder().encode(path);
+    return writeCommand(new Uint8Array([CMD.GET_FILE, ...pathBytes]));
+  });
+}
+
 export async function deleteProgram(programId: number): Promise<any> {
   return queue.enqueue(() =>
     writeCommand(new Uint8Array([CMD.DELETE_PROGRAM, programId])),
@@ -97,6 +145,11 @@ export async function getHwConfig(): Promise<any> {
 
 export async function reboot(): Promise<any> {
   return queue.enqueue(() => writeCommand(new Uint8Array([CMD.REBOOT])));
+}
+
+// Wipe all programs on the lamp (device name/hardware config are kept).
+export async function clearStorage(): Promise<any> {
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.CLEAR_STORAGE])));
 }
 
 export async function getMeta(programId: number): Promise<any> {

@@ -34,6 +34,16 @@ export const CMD = {
   GET_STORAGE:     0x29,
   SET_ORDER:       0x2A,
   GET_ORDER:       0x2B,
+  CLEAR_STORAGE:   0x2C,
+  GET_FILE:        0x2D,
+  LIST_FILES:      0x2E,
+} as const;
+
+// Upload pipeline payload types (UPLOAD_START byte after the 4-byte size)
+export const UPLOAD_TYPE = {
+  WASM:     0,
+  META:     1,
+  FIRMWARE: 2,
 } as const;
 
 export const FLAG_FINAL = 0x01;

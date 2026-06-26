@@ -44,6 +44,11 @@ class LedDriver;
 #define CMD_GET_STORAGE     0x29
 #define CMD_SET_ORDER       0x2A
 #define CMD_GET_ORDER       0x2B
+#define CMD_CLEAR_STORAGE   0x2C   // wipe all programs (keeps device config)
+#define CMD_GET_FILE        0x2D   // read a file from flash: payload = path string
+#define CMD_LIST_FILES      0x2E   // list a directory: payload = path; returns JSON array
+// Firmware OTA is streamed over the existing upload pipeline (UPLOAD_START with
+// type=2), not a dedicated command.
 
 // Response chunk flags
 #define CHUNK_FLAG_FINAL    0x01
@@ -56,8 +61,21 @@ public:
     // Initialize BLE stack, create service and characteristics, start advertising
     void begin(const char* deviceName);
 
-    // Send a chunked response on the Response characteristic
+    // Queue a chunked response on the Response characteristic. Safe to call
+    // from BLE command callbacks: it does NOT transmit inline (that would stall
+    // the BLE stack task and drop notifications), it hands the data to the
+    // render task which transmits it via flushPendingResponse().
     void sendResponse(const String& data, bool isError = false);
+
+    // Binary-safe queued response (handles embedded NULs, e.g. WASM files)
+    void sendRawResponse(const uint8_t* data, size_t len, bool isError = false);
+
+    // Transmit any queued response. MUST be called from the render task (not a
+    // BLE callback) so the BLE stack can drain notification tx-buffers.
+    void flushPendingResponse();
+
+    // Ask the render task to reboot right after the current response is sent.
+    void rebootAfterResponse() { _rebootAfterTx = true; }
 
     // Update the Active Program characteristic value and notify
     void notifyActiveProgram(uint8_t id);
@@ -81,9 +99,41 @@ public:
     // Upload progress: pause/resume rendering
     bool isPausedByUpload() const { return pausedByUpload; }
 
+    // Render-freeze during BLE bursts. Refreshing the WS2812 strip (show()
+    // disables interrupts for the bit-stream) while the radio is busy causes
+    // visible flicker/tearing, so the render task holds the last latched frame
+    // until BLE has been quiet for BLE_QUIET_MS.
+    static const uint32_t BLE_QUIET_MS = 120;
+    void markBleActivity() { _lastBleActivityMs = millis(); }
+    bool isBleBusy() const { return (uint32_t)(millis() - _lastBleActivityMs) < BLE_QUIET_MS; }
+
+    // After a WASM upload, the green progress bar fades out on the BLE task;
+    // this asks the render task to fade the freshly uploaded program in.
+    void requestFadeIn() { _fadeInRequest = true; }
+    bool consumeFadeIn() { if (_fadeInRequest) { _fadeInRequest = false; return true; } return false; }
+
+    // Refresh the advertised chip temperature (manufacturer data in the scan
+    // response) so scanners can read it without connecting. Call periodically.
+    void updateAdvertisedTemp();
+
     // Power on/off (LEDs off but BLE still active)
     bool isPowerOn() const { return powerOn; }
     void setPower(bool on);
+
+    // Firmware OTA over BLE. The full image is streamed into a PSRAM buffer via
+    // the upload pipeline (type=2); UPLOAD_FINISH hands it off here, and loop()
+    // (large stack, can feed the watchdog) flashes it into the inactive OTA slot
+    // and reboots. Ownership of `img` transfers to the consumer, which frees it.
+    void requestOtaFlash(uint8_t* img, size_t size) {
+        _otaImage = img; _otaImageSize = size; _otaFlashPending = true;
+    }
+    bool consumeOtaFlash(uint8_t** img, size_t* size) {
+        if (!_otaFlashPending) return false;
+        *img = _otaImage; *size = _otaImageSize;
+        _otaImage = nullptr; _otaImageSize = 0;
+        _otaFlashPending = false;
+        return true;
+    }
 
     ProgramManager* getProgramManager() const { return _pm; }
     LedDriver* getLedDriver() const { return _led; }
@@ -96,13 +146,25 @@ public:
     uint32_t  uploadSize;
     uint32_t  uploadOffset;
     bool      uploadInProgress;
-    uint8_t   uploadType;         // 0=WASM, 1=META
+    uint8_t   uploadType;         // 0=WASM, 1=META, 2=FIRMWARE
     uint8_t   uploadMetaProgId;   // program ID for META upload
+    uint32_t  uploadLastFilledPixels; // throttle progress redraw to pixel changes
     volatile bool pausedByUpload;
     volatile bool powerOn;
 
 private:
     uint16_t getChunkPayload() const;
+
+    // Actual chunked notify on _charResponse. Private: only flushPendingResponse
+    // (render task) may call it, so the BLE stack task stays free to drain.
+    void transmitRaw(const uint8_t* data, size_t len, bool isError);
+
+    // Deferred response slot (commands are serialized, so one slot suffices)
+    uint8_t*       _txBuf = nullptr;
+    size_t         _txLen = 0;
+    bool           _txErr = false;
+    volatile bool  _txPending = false;
+    volatile bool  _rebootAfterTx = false;
 
     ProgramManager* _pm;
     LedDriver*      _led;
@@ -118,6 +180,15 @@ private:
 
     uint16_t _connectedClients;
     uint16_t _negotiatedMtu;
+
+    volatile uint32_t _lastBleActivityMs;   // millis() of last BLE RX/TX
+    volatile bool      _fadeInRequest;       // render task should fade new program in
+    String             _deviceName;          // for rebuilding advertising payload
+
+    // OTA flash request (set on BLE task at UPLOAD_FINISH, consumed by loop())
+    volatile bool      _otaFlashPending = false;
+    uint8_t*           _otaImage = nullptr;
+    size_t             _otaImageSize = 0;
 
     SemaphoreHandle_t _mutex;
 

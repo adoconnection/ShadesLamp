@@ -1,6 +1,7 @@
 #include "ble_service.h"
 #include "program_manager.h"
 #include "led_driver.h"
+#include "version.h"
 #include <LittleFS.h>
 
 #define TAG "[BLE]"
@@ -56,6 +57,7 @@ class ServerCallbacks : public BLEServerCallbacks {
 class CommandCallbacks : public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic* pChar) override {
         if (!g_bleService) return;
+        g_bleService->markBleActivity();   // freeze rendering during BLE bursts
 
         String val = pChar->getValue();
         if (val.length() == 0) return;
@@ -127,11 +129,13 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 memcpy(&totalSize, payload, 4); // little-endian
 
                 // Optional: type(1) + progId(1) after size
-                // type: 0=WASM (default), 1=META
+                // type: 0=WASM (default), 1=META, 2=FIRMWARE (OTA)
                 uint8_t upType = (payloadLen >= 5) ? payload[4] : 0;
                 uint8_t metaProgId = (payloadLen >= 6) ? payload[5] : 0;
 
-                uint32_t maxSize = (upType == 1) ? 8192 : MAX_UPLOAD_SIZE;
+                uint32_t maxSize = MAX_UPLOAD_SIZE;
+                if (upType == 1)      maxSize = 8192;           // META
+                else if (upType == 2) maxSize = 3 * 1024 * 1024; // FIRMWARE (OTA slot)
                 if (totalSize == 0 || totalSize > maxSize) {
                     Serial.printf("%s UPLOAD_START: invalid size %u (type=%u)\r\n", TAG, totalSize, upType);
                     g_bleService->sendResponse("{\"ok\":false,\"err\":\"invalid size\"}", true);
@@ -164,9 +168,11 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 g_bleService->uploadInProgress = true;
                 g_bleService->uploadType = upType;
                 g_bleService->uploadMetaProgId = metaProgId;
+                g_bleService->uploadLastFilledPixels = 0xFFFFFFFF;  // force first draw
 
-                // Pause rendering and show progress only for WASM uploads
-                if (upType == 0) {
+                // Pause rendering and show a progress bar for WASM (0) and
+                // FIRMWARE (2) uploads. META (1) streams silently.
+                if (upType == 0 || upType == 2) {
                     g_bleService->pausedByUpload = true;
                     LedDriver* led = g_bleService->getLedDriver();
                     if (led) {
@@ -200,7 +206,21 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                     break;
                 }
 
-                if (upType == 1) {
+                if (upType == 2) {
+                    // ── FIRMWARE (OTA) upload ──
+                    // Hand the buffered image to loop() to flash; ownership of
+                    // the buffer transfers there (it frees it). Do NOT free here.
+                    uint8_t* img = g_bleService->uploadBuffer;
+                    size_t   imgSize = g_bleService->uploadSize;
+                    g_bleService->uploadBuffer = nullptr;
+                    g_bleService->uploadInProgress = false;
+
+                    g_bleService->requestOtaFlash(img, imgSize);
+                    Serial.printf("%s OTA image received (%u bytes) -> flashing\r\n", TAG, (unsigned)imgSize);
+                    // Keep pausedByUpload = true; loop() reboots on success or
+                    // resumes rendering on failure.
+                    g_bleService->sendResponse("{\"ok\":true,\"ota\":\"flashing\"}");
+                } else if (upType == 1) {
                     // ── META upload ──
                     uint8_t progId = g_bleService->uploadMetaProgId;
                     String json((const char*)g_bleService->uploadBuffer, g_bleService->uploadSize);
@@ -218,36 +238,64 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                     }
                 } else {
                     // ── WASM upload ──
-                    // Flash all green briefly to indicate success before processing
-                    {
-                        LedDriver* led = g_bleService->getLedDriver();
-                        if (led) {
-                            uint16_t w = led->getWidth();
-                            uint16_t h = led->getHeight();
-                            for (uint16_t y = 0; y < h; y++)
-                                for (uint16_t x = 0; x < w; x++)
-                                    led->setPixel(x, y, 0, 255, 0);
-                            led->show();
-                        }
-                    }
-
                     int8_t newId = pm->uploadProgram(g_bleService->uploadBuffer, g_bleService->uploadSize);
 
                     free(g_bleService->uploadBuffer);
                     g_bleService->uploadBuffer = nullptr;
                     g_bleService->uploadInProgress = false;
-                    g_bleService->pausedByUpload = false;
 
                     if (newId < 0) {
+                        g_bleService->pausedByUpload = false;
                         g_bleService->sendResponse("{\"ok\":false,\"err\":\"invalid WASM\"}", true);
                     } else {
+                        // Fade the full-green progress bar out to black (still
+                        // paused, so the render task won't fight us), then hand
+                        // off to the render task to fade the new program in.
+                        LedDriver* led = g_bleService->getLedDriver();
+                        if (led) {
+                            uint16_t w = led->getWidth();
+                            uint16_t h = led->getHeight();
+                            // Paint the bar full green once, then fade it out
+                            // smoothly via the driver's global scaler instead of
+                            // re-quantizing the pixel value each frame. An
+                            // ease-out curve (scale ∝ t²) gives a soft tail into
+                            // black. ~40 steps × 11 ms ≈ 440 ms.
+                            for (uint16_t y = 0; y < h; y++)
+                                for (uint16_t x = 0; x < w; x++)
+                                    led->setPixel(x, y, 0, 255, 0);
+                            const int STEPS = 40;
+                            for (int i = STEPS; i >= 0; i--) {
+                                float t = (float)i / STEPS;          // 1 -> 0
+                                uint16_t scale = (uint16_t)(t * t * 256.0f + 0.5f);
+                                led->setFadeScale(scale);
+                                led->show();
+                                vTaskDelay(pdMS_TO_TICKS(11));
+                            }
+                            led->setFadeScale(0);   // stay black for the fade-in
+                        }
+
+                        // Show the freshly uploaded program, faded in from black.
+                        pm->requestSwitch((uint8_t)newId);
+                        g_bleService->requestFadeIn();
+
                         char resp[64];
                         snprintf(resp, sizeof(resp), "{\"ok\":true,\"id\":%d}", newId);
                         Serial.printf("%s UPLOAD_FINISH: saved as ID %d\r\n", TAG, newId);
                         g_bleService->sendResponse(String(resp));
                         g_bleService->queueEvent(EVT_PROGRAM_ADDED, (uint8_t)newId);
+
+                        g_bleService->pausedByUpload = false;   // resume -> fade-in
                     }
                 }
+                break;
+            }
+
+            case CMD_CLEAR_STORAGE: {
+                // Wipe all programs (wasm + meta + params). Deferred to the
+                // render task; device name/hw config are kept.
+                Serial.printf("%s CMD CLEAR_STORAGE (deferred wipe)\r\n", TAG);
+                pm->requestClearAll();
+                g_bleService->sendResponse("{\"ok\":true}");
                 break;
             }
 
@@ -299,11 +347,13 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 uint8_t order = pm->getLedColorOrder();
                 const char* orderName = (order < 6) ? ORDER_NAMES[order] : "GRB";
 
-                char resp[224];
+                float tempC = temperatureRead();   // ESP32-S3 internal die sensor (°C)
+
+                char resp[256];
                 snprintf(resp, sizeof(resp),
-                    "{\"ok\":true,\"pin\":%u,\"width\":%u,\"height\":%u,\"zigzag\":%s,\"colorOrder\":%u,\"colorOrderName\":\"%s\",\"serial\":\"%s\"}",
-                    pm->getLedPin(), pm->getLedWidth(), pm->getLedHeight(),
-                    pm->getLedZigzag() ? "true" : "false", order, orderName, serial);
+                    "{\"ok\":true,\"build\":%u,\"pin\":%u,\"width\":%u,\"height\":%u,\"zigzag\":%s,\"colorOrder\":%u,\"colorOrderName\":\"%s\",\"serial\":\"%s\",\"temp\":%.1f}",
+                    (unsigned)FW_BUILD, pm->getLedPin(), pm->getLedWidth(), pm->getLedHeight(),
+                    pm->getLedZigzag() ? "true" : "false", order, orderName, serial, tempC);
                 Serial.printf("%s CMD GET_HW_CONFIG: %s\r\n", TAG, resp);
                 g_bleService->sendResponse(String(resp));
                 break;
@@ -371,8 +421,9 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
             case CMD_REBOOT: {
                 Serial.printf("%s CMD REBOOT\r\n", TAG);
                 g_bleService->sendResponse("{\"ok\":true}");
-                delay(500);
-                ESP.restart();
+                // Reboot happens in the render task right after the response is
+                // actually transmitted (sendResponse only queues it).
+                g_bleService->rebootAfterResponse();
                 break;
             }
 
@@ -407,6 +458,85 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                     (unsigned)used, (unsigned)total, (unsigned)(total - used));
                 Serial.printf("%s CMD GET_STORAGE: %s\r\n", TAG, resp);
                 g_bleService->sendResponse(String(resp));
+                break;
+            }
+
+            case CMD_GET_FILE: {
+                if (payloadLen < 1) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"missing path\"}", true);
+                    break;
+                }
+                String path((const char*)payload, payloadLen);
+                if (!path.startsWith("/")) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"path must be absolute\"}", true);
+                    break;
+                }
+                if (!LittleFS.exists(path)) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"not found\"}", true);
+                    break;
+                }
+                File f = LittleFS.open(path, "r");
+                if (!f || f.isDirectory()) {
+                    if (f) f.close();
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"not a file\"}", true);
+                    break;
+                }
+                size_t sz = f.size();
+                // Allocate in PSRAM (WASM files can be tens of KB)
+                uint8_t* buf = (uint8_t*)ps_malloc(sz ? sz : 1);
+                if (!buf) buf = (uint8_t*)malloc(sz ? sz : 1);
+                if (!buf) {
+                    f.close();
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"alloc failed\"}", true);
+                    break;
+                }
+                size_t rd = (sz > 0) ? f.read(buf, sz) : 0;
+                f.close();
+                Serial.printf("%s CMD GET_FILE '%s' -> %u bytes\r\n", TAG, path.c_str(), (unsigned)rd);
+                // Binary-safe: send raw bytes (handles NULs in WASM)
+                g_bleService->sendRawResponse(buf, rd, false);
+                free(buf);
+                break;
+            }
+
+            case CMD_LIST_FILES: {
+                // payload = directory path (defaults to "/"); returns a JSON
+                // array: [{"name":"x","size":N,"dir":bool},...]
+                String path = (payloadLen > 0) ? String((const char*)payload, payloadLen) : String("/");
+                if (!path.startsWith("/")) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"path must be absolute\"}", true);
+                    break;
+                }
+                File dir = LittleFS.open(path);
+                if (!dir || !dir.isDirectory()) {
+                    if (dir) dir.close();
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"not a directory\"}", true);
+                    break;
+                }
+                String out = "[";
+                bool first = true;
+                File entry;
+                while ((entry = dir.openNextFile())) {
+                    String name = entry.name();
+                    int slash = name.lastIndexOf('/');
+                    if (slash >= 0) name = name.substring(slash + 1);
+                    bool isDir = entry.isDirectory();
+                    uint32_t sz = (uint32_t)entry.size();
+                    entry.close();
+                    if (!first) out += ",";
+                    first = false;
+                    out += "{\"name\":\"";
+                    out += name;
+                    out += "\",\"size\":";
+                    out += String(sz);
+                    out += ",\"dir\":";
+                    out += isDir ? "true" : "false";
+                    out += "}";
+                }
+                dir.close();
+                out += "]";
+                Serial.printf("%s CMD LIST_FILES '%s' -> %u bytes\r\n", TAG, path.c_str(), out.length());
+                g_bleService->sendResponse(out);
                 break;
             }
 
@@ -466,7 +596,9 @@ class ActiveProgramCallbacks : public BLECharacteristicCallbacks {
 
 class UploadCallbacks : public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic* pChar) override {
-        if (!g_bleService || !g_bleService->uploadInProgress || !g_bleService->uploadBuffer) {
+        if (!g_bleService) return;
+        g_bleService->markBleActivity();   // freeze rendering during BLE bursts
+        if (!g_bleService->uploadInProgress || !g_bleService->uploadBuffer) {
             return;
         }
 
@@ -486,22 +618,42 @@ class UploadCallbacks : public BLECharacteristicCallbacks {
                           g_bleService->uploadOffset, g_bleService->uploadSize);
         }
 
-        // Update LED progress bar (green fill from bottom to top)
+        // Update LED progress bar (green fill from bottom to top) — only for
+        // WASM uploads. META uploads run silently so they don't draw over the
+        // live program (which would fight the render task and flicker).
         LedDriver* led = g_bleService->getLedDriver();
-        if (led && g_bleService->uploadSize > 0) {
+        uint8_t upType = g_bleService->uploadType;
+        if (led && (upType == 0 || upType == 2) && g_bleService->uploadSize > 0) {
             uint16_t w = led->getWidth();
             uint16_t h = led->getHeight();
             uint32_t totalPixels = (uint32_t)w * h;
-            uint32_t filledPixels = (uint32_t)((uint64_t)g_bleService->uploadOffset * totalPixels / g_bleService->uploadSize);
+            // Firmware OTA has a 2nd phase (flash write) that continues the same
+            // bar, so the BLE-receive phase only fills the bottom 90%; the flash
+            // phase (performBleOta) fills the top 10%. WASM uploads use the full
+            // bar (single phase).
+            uint32_t span = (upType == 2) ? (totalPixels * 9 / 10) : totalPixels;
+            uint32_t filledPixels = (uint32_t)((uint64_t)g_bleService->uploadOffset * span / g_bleService->uploadSize);
 
-            led->clear();
-            // Fill from bottom (y=0) upwards
-            for (uint32_t i = 0; i < filledPixels && i < totalPixels; i++) {
-                uint16_t x = i % w;
-                uint16_t y = i / w;
-                led->setPixel(x, y, 0, 255, 0);
+            // Redraw ONLY when the filled-pixel count actually advances. show()
+            // disables IRQs ~15 ms for a 16x32 panel; doing it on every chunk
+            // (thousands of them for a firmware image) starves the BLE link and
+            // drops the connection. Throttling to pixel boundaries gives a
+            // smooth bottom-up fill with at most `totalPixels` redraws.
+            if (filledPixels != g_bleService->uploadLastFilledPixels) {
+                g_bleService->uploadLastFilledPixels = filledPixels;
+
+                // green = WASM program, blue = firmware (OTA)
+                uint8_t r = 0, g = (upType == 2) ? 80 : 255, b = (upType == 2) ? 255 : 0;
+
+                led->clear();
+                // Fill from bottom (y=0) upwards
+                for (uint32_t i = 0; i < filledPixels && i < totalPixels; i++) {
+                    uint16_t x = i % w;
+                    uint16_t y = i / w;
+                    led->setPixel(x, y, r, g, b);
+                }
+                led->show();
             }
-            led->show();
         }
     }
 };
@@ -530,6 +682,9 @@ BleService::BleService(ProgramManager* pm, LedDriver* led)
     , uploadInProgress(false)
     , uploadType(0)
     , uploadMetaProgId(0)
+    , uploadLastFilledPixels(0xFFFFFFFF)
+    , _lastBleActivityMs(0)
+    , _fadeInRequest(false)
 {
     _mutex = xSemaphoreCreateMutex();
     g_bleService = this;
@@ -596,14 +751,44 @@ void BleService::begin(const char* deviceName) {
     _service->start();
 
     // Start advertising
+    _deviceName = deviceName;
     BLEAdvertising* advertising = BLEDevice::getAdvertising();
     advertising->addServiceUUID(SERVICE_UUID);
     advertising->setScanResponse(true);
     advertising->setMinPreferred(0x06);  // help with iPhone connection
     advertising->setMinPreferred(0x12);
+    updateAdvertisedTemp();              // scan response: name + temp (mfg data)
     BLEDevice::startAdvertising();
 
     Serial.printf("%s BLE advertising started as '%s'\r\n", TAG, deviceName);
+}
+
+// Put the chip temperature into the scan-response manufacturer data so scanners
+// can read it without connecting. Manufacturer data layout (4 bytes):
+//   [0xFF 0xFF]  company id 0xFFFF (local/test use)
+//   ['T' 0x54]   marker
+//   [temp+64]    chip temperature in °C, offset by +64 (so the byte is never 0,
+//                which would truncate the Arduino String). Decode: byte - 64.
+void BleService::updateAdvertisedTemp() {
+    BLEAdvertising* advertising = BLEDevice::getAdvertising();
+    if (!advertising) return;
+
+    float t = temperatureRead();
+    int tc = (int)(t + (t >= 0 ? 0.5f : -0.5f));
+    if (tc < -60)  tc = -60;
+    if (tc > 190)  tc = 190;
+    uint8_t enc = (uint8_t)(tc + 64);   // -60..190 -> 4..254, never 0
+
+    String mfg;
+    mfg += (char)0xFF;
+    mfg += (char)0xFF;
+    mfg += 'T';
+    mfg += (char)enc;
+
+    BLEAdvertisementData scanData;
+    scanData.setName(_deviceName);
+    scanData.setManufacturerData(mfg);
+    advertising->setScanResponseData(scanData);
 }
 
 uint16_t BleService::getChunkPayload() const {
@@ -614,10 +799,54 @@ uint16_t BleService::getChunkPayload() const {
 }
 
 void BleService::sendResponse(const String& data, bool isError) {
-    if (!_charResponse) return;
+    sendRawResponse((const uint8_t*)data.c_str(), data.length(), isError);
+}
 
-    const uint8_t* src = (const uint8_t*)data.c_str();
-    size_t totalLen = data.length();
+// Queue a response (called from BLE command callbacks). Copies the bytes and
+// hands them to the render task; does NOT transmit here.
+void BleService::sendRawResponse(const uint8_t* src, size_t len, bool isError) {
+    // Wait for any previous response to be flushed (commands are serialized, so
+    // this rarely spins). Bounded so a stuck render task can't hang us forever.
+    uint32_t spin = 0;
+    while (_txPending && spin++ < 200) delay(5);
+
+    uint8_t* buf = (uint8_t*)((len > 0) ? ps_malloc(len) : malloc(1));
+    if (!buf) {
+        buf = (uint8_t*)malloc(len > 0 ? len : 1);
+        if (!buf) return;   // out of memory: drop the response
+    }
+    if (len > 0) memcpy(buf, src, len);
+
+    if (_txBuf) free(_txBuf);
+    _txBuf = buf;
+    _txLen = len;
+    _txErr = isError;
+    _txPending = true;
+}
+
+// Transmit the queued response. Render-task context only.
+void BleService::flushPendingResponse() {
+    if (!_txPending) return;
+    uint8_t* buf = _txBuf;
+    size_t   len = _txLen;
+    bool     err = _txErr;
+    _txBuf = nullptr;
+    _txPending = false;
+
+    transmitRaw(buf, len, err);
+    if (buf) free(buf);
+
+    if (_rebootAfterTx) {
+        _rebootAfterTx = false;
+        delay(200);
+        ESP.restart();
+    }
+}
+
+void BleService::transmitRaw(const uint8_t* src, size_t totalLen, bool isError) {
+    if (!_charResponse) return;
+    markBleActivity();   // TX burst — freeze rendering to avoid show() flicker
+
     uint8_t seq = 0;
     uint16_t chunkPayload = getChunkPayload();
 
@@ -639,6 +868,15 @@ void BleService::sendResponse(const String& data, bool isError) {
         if (isError) chunk[1] |= CHUNK_FLAG_ERROR;
 
         memcpy(chunk + CHUNK_HEADER_SIZE, src + offset, chunkSize);
+
+        // Keep rendering frozen for the WHOLE response, not just the first
+        // BLE_QUIET_MS. A large reply (e.g. the program list) takes many chunks
+        // and outlasts that window; if the render task wakes mid-stream, show()
+        // disables interrupts for the WS2812 bit-bang and corrupts the BLE
+        // timing, silently dropping notifications (including the FINAL chunk),
+        // which makes the client time out. Re-arming the freeze each chunk
+        // holds it off until the response fully drains.
+        markBleActivity();
 
         _charResponse->setValue(chunk, CHUNK_HEADER_SIZE + chunkSize);
         _charResponse->notify();
@@ -725,6 +963,8 @@ void BleService::notifyParamValues() {
         chunk[1] = isFinal ? CHUNK_FLAG_FINAL : 0;
 
         memcpy(chunk + CHUNK_HEADER_SIZE, src + offset, chunkSize);
+
+        markBleActivity();   // keep render frozen for the whole multi-chunk push
 
         _charParamValues->setValue(chunk, CHUNK_HEADER_SIZE + chunkSize);
         _charParamValues->notify();

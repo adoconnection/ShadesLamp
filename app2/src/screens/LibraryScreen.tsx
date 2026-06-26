@@ -24,7 +24,7 @@ import ActionTile from '../components/ActionTile';
 import { MarketIcon, StarOutlineIcon, SettingsIcon, PowerIcon } from '../components/Icon';
 import { gradientColors } from '../utils/color';
 import { padId } from '../utils/format';
-import { t, tCategory } from '../i18n';
+import { t, tCategory, localized, localizedParam } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -183,12 +183,12 @@ export default function LibraryScreen({ navigation }: Props) {
               </View>
 
               <View style={styles.heroBottom}>
-                <Text style={styles.heroTitle}>{activeProgram.name}</Text>
-                <Text style={styles.heroDesc}>{activeProgram.desc}</Text>
+                <Text style={styles.heroTitle}>{localized(activeProgram, 'name', activeProgram.name)}</Text>
+                <Text style={styles.heroDesc}>{localized(activeProgram, 'desc', activeProgram.desc)}</Text>
                 <View style={styles.paramChips}>
                   {activeProgram.params.slice(0, 3).map((p) => (
                     <View key={p.id} style={styles.chip}>
-                      <Text style={styles.chipLabel}>{p.name}</Text>
+                      <Text style={styles.chipLabel}>{localizedParam(activeProgram.i18n, p.id, 'name', p.name)}</Text>
                       <Text style={styles.chipValue}>
                         {p.type === 'bool'
                           ? p.value ? t('on') : t('off')

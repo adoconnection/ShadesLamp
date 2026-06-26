@@ -15,4 +15,5 @@ export interface DeviceInfo {
   matrix: string;
   storage: { used: number; total: number };
   rssi: number;
+  temp?: number;   // ESP32-S3 chip temperature, °C (from GET_HW_CONFIG)
 }
