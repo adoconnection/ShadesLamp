@@ -260,7 +260,9 @@ This avoids dynamic allocation (no `malloc` in WASM).
 ## Constraints
 
 - **No standard library** (`-nostdlib`): no `malloc`, `printf`, `math.h`, `string.h`
-- Implement math functions yourself (`sin`, `cos`, `sqrt`, etc.)
+- Prefer the **native math primitives** (`m_sin`, `m_cos`, `m_sqrt`, `m_hsv`, …) over
+  hand-rolled versions — they're faster and run on the host. Implement your own only
+  as a fallback for older firmware.
 - Static arrays live in WASM linear memory (64KB page), not C stack
 - Keep total static data well under 64KB
 - No floating-point math in signatures — only `int` and `float`
