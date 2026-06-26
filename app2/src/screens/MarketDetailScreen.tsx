@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -11,6 +11,7 @@ import { uploadWasm, setMeta, setActiveProgram, deleteProgram as bleDeleteProgra
 import NavButton from '../components/NavButton';
 import { BackIcon, DownloadIcon, CheckIcon, TrashIcon, SettingsIcon } from '../components/Icon';
 import { gradientColors } from '../utils/color';
+import { t, tCategory, localized } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -43,9 +44,34 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
   const installing = phase === 'downloading' || phase === 'uploading' || phase === 'verifying';
   const connected = connectionState === 'connected';
 
+  function handleRemove() {
+    if (!connected || installedId == null) return;
+    const id = installedId;
+    Alert.alert(t('removeConfirmTitle'), t('removeConfirmMsg'), [
+      { text: t('cancel'), style: 'cancel' },
+      {
+        text: t('remove'),
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await bleDeleteProgram(id);
+            removeProgram(id);
+            unmarkInstalled(itemId);
+            setInstalledId(null);
+            setPhase('idle');
+            setProgress(0);
+          } catch (e: any) {
+            setErrorMsg(e.message || t('deleteFailed'));
+            setPhase('error');
+          }
+        },
+      },
+    ]);
+  }
+
   async function handleInstall() {
     if (!connected) {
-      setErrorMsg('Connect to device first');
+      setErrorMsg(t('connectToDeviceFirst'));
       setPhase('error');
       return;
     }
@@ -112,7 +138,7 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
       setPhase('done');
       markInstalled(itemId);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Installation failed');
+      setErrorMsg(err.message || t('installationFailed'));
       setPhase('error');
     }
   }
@@ -137,9 +163,9 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
           <View style={{ width: 36 }} />
         </View>
         <View style={styles.heroInfo}>
-          <Text style={styles.heroLabel}>{item.category} · by {item.author}{item.version ? ` · v${item.version}` : ''}</Text>
-          <Text style={styles.heroTitle}>{item.name}</Text>
-          <Text style={styles.heroDesc}>{item.desc}</Text>
+          <Text style={styles.heroLabel}>{tCategory(item.category)} · {t('by')} {item.author}{item.version ? ` · v${item.version}` : ''}</Text>
+          <Text style={styles.heroTitle}>{localized(item, 'name', item.name)}</Text>
+          <Text style={styles.heroDesc}>{localized(item, 'desc', item.desc)}</Text>
         </View>
       </View>
 
@@ -152,7 +178,7 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
           >
             <DownloadIcon color="#0A0A08" />
             <Text style={styles.installText}>
-              {connected ? 'Install' : 'Connect to install'}
+              {connected ? t('install') : t('connectToInstall')}
             </Text>
           </Pressable>
         )}
@@ -161,9 +187,9 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
           <View style={styles.progressCard}>
             <View style={styles.progressHeader}>
               <Text style={styles.progressLabel}>
-                {phase === 'downloading' ? 'Downloading from GitHub'
-                  : phase === 'uploading' ? 'Uploading to lamp'
-                  : 'Setting metadata'}
+                {phase === 'downloading' ? t('downloadingFromGithub')
+                  : phase === 'uploading' ? t('uploadingToLamp')
+                  : t('settingMetadata')}
               </Text>
               <Text style={styles.progressPercent}>{Math.round(progress * 100)}%</Text>
             </View>
@@ -186,7 +212,7 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.doneTitle}>
-                  {installedId != null && activeId === installedId ? 'Installed & Running' : 'Installed'}
+                  {installedId != null && activeId === installedId ? t('installedAndRunning') : t('installed')}
                 </Text>
               </View>
               {installedId != null && activeId !== installedId && (
@@ -201,7 +227,7 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
                   }}
                   style={styles.playBtn}
                 >
-                  <Text style={styles.playText}>▶ Run</Text>
+                  <Text style={styles.playText}>▶ {t('run')}</Text>
                 </Pressable>
               )}
             </View>
@@ -212,29 +238,16 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
                   style={styles.settingsBtn}
                 >
                   <SettingsIcon size={16} color="#0A0A08" />
-                  <Text style={styles.settingsText}>Settings</Text>
+                  <Text style={styles.settingsText}>{t('settings')}</Text>
                 </Pressable>
               )}
               <Pressable
-                onPress={async () => {
-                  if (connected && installedId != null) {
-                    try {
-                      await bleDeleteProgram(installedId);
-                      removeProgram(installedId);
-                      unmarkInstalled(itemId);
-                      setInstalledId(null);
-                      setPhase('idle');
-                      setProgress(0);
-                    } catch (e: any) {
-                      setErrorMsg(e.message || 'Delete failed');
-                      setPhase('error');
-                    }
-                  }
-                }}
+                onPress={handleRemove}
                 style={styles.deleteBtn}
+                accessibilityRole="button"
               >
                 <TrashIcon color={colors.red} />
-                <Text style={styles.deleteText}>Remove</Text>
+                <Text style={styles.deleteText}>{t('remove')}</Text>
               </Pressable>
             </View>
           </View>
@@ -244,7 +257,7 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
           <View style={styles.errorCard}>
             <Text style={styles.errorText}>{errorMsg}</Text>
             <Pressable onPress={() => setPhase('idle')} style={styles.retryBtn}>
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={styles.retryText}>{t('retry')}</Text>
             </Pressable>
           </View>
         )}
@@ -262,17 +275,17 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
       )}
 
       {/* About */}
-      <Text style={styles.sectionTitle}>About</Text>
+      <Text style={styles.sectionTitle}>{t('about')}</Text>
       <Text style={styles.aboutText}>
-        {item.desc}
+        {localized(item, 'desc', item.desc)}
       </Text>
 
       {/* Technical */}
-      <Text style={styles.sectionTitle}>Technical</Text>
+      <Text style={styles.sectionTitle}>{t('technical')}</Text>
       <View style={styles.techCard}>
-        <TechRow label="Module" value={`${item.slug}/main.wasm`} />
-        <TechRow label="Source" value="github.com/adoconnection/ShadesLamp" />
-        <TechRow label="Memory" value="1 page (64 KB)" last />
+        <TechRow label={t('moduleLabel')} value={`${item.slug}/main.wasm`} />
+        <TechRow label={t('sourceLabel')} value="github.com/adoconnection/ShadesLamp" />
+        <TechRow label={t('memoryLabel')} value="1 page (64 KB)" last />
       </View>
 
       <View style={{ height: 40 }} />

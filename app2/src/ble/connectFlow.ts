@@ -98,11 +98,13 @@ export async function connectAndLoadDevice(
     }
   });
 
+  // Each call is independently guarded: a single slow/failed request (e.g. a
+  // device that hangs on one command) must not abort the whole connection.
   const [programList, activeId, hwConfig, deviceName, storageInfo, powerOn] = await Promise.all([
-    getPrograms(),
-    getActiveProgram(),
-    getHwConfig(),
-    getDeviceName(),
+    getPrograms().catch(() => [] as Array<{ id: number; name: string }>),
+    getActiveProgram().catch(() => -1),
+    getHwConfig().catch(() => ({})),
+    getDeviceName().catch(() => undefined),
     getStorage().catch(() => ({ used: 0, total: 0, free: 0 })),
     getPower().catch(() => true),
   ]);
@@ -121,9 +123,10 @@ export async function connectAndLoadDevice(
   const storageUsedKB = Math.round(storageInfo.used / 1024);
   const storageTotalKB = Math.round(storageInfo.total / 1024);
   setDeviceInfo({
-    name: deviceName,
+    name: deviceName || 'Shades LED Lamp',
     serial: hwConfig.serial || '—',
     mac: device.id,
+    firmware: hwConfig.firmware || hwConfig.fw || hwConfig.version || '—',
     matrix: hwConfig.ok ? `${hwConfig.width} × ${hwConfig.height}` : '—',
     storage: { used: storageUsedKB, total: storageTotalKB },
     rssi: device.rssi ?? 0,

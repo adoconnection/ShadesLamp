@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Program } from '../types/program';
 
 interface ProgramState {
@@ -13,7 +15,9 @@ interface ProgramState {
   reorderPrograms: (programs: Program[]) => void;
 }
 
-export const useProgramStore = create<ProgramState>((set) => ({
+export const useProgramStore = create<ProgramState>()(
+  persist(
+    (set) => ({
   programs: [],
   activeId: -1,
   setPrograms: (programs) => set({ programs }),
@@ -51,4 +55,13 @@ export const useProgramStore = create<ProgramState>((set) => ({
       activeId: state.activeId === programId ? 0 : state.activeId,
     })),
   reorderPrograms: (programs) => set({ programs }),
-}));
+    }),
+    {
+      name: '@programs',
+      storage: createJSONStorage(() => AsyncStorage),
+      // Persist the program list + active id for an instant cold start; the
+      // live list is replaced as soon as the device reconnects and syncs.
+      partialize: (state) => ({ programs: state.programs, activeId: state.activeId }),
+    },
+  ),
+);

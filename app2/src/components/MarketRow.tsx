@@ -3,6 +3,7 @@ import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-nati
 import Cover from './Cover';
 import { CheckIcon, ChevronIcon, DownloadIcon } from './Icon';
 import { MarketItem } from '../types/marketplace';
+import { tCategory, localized } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -16,33 +17,24 @@ interface MarketRowProps {
 
 export default function MarketRow({ item, installed, installing, onPress, onAction }: MarketRowProps) {
   return (
-    <Pressable onPress={onPress} style={styles.row}>
+    <Pressable onPress={onPress} style={styles.row} accessibilityRole="button" accessibilityLabel={localized(item, 'name', item.name)}>
+
       <Cover cover={item.cover} coverSvg={item.coverSvg} pulse={item.pulse} size={56} radius={12} />
       <View style={styles.info}>
         <View style={styles.nameRow}>
-          <Text style={styles.name} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.name} numberOfLines={1}>{localized(item, 'name', item.name)}</Text>
           {installed && <CheckIcon size={16} color={colors.green} />}
         </View>
         <View style={styles.metaRow}>
-          <Text style={styles.metaText}>{item.category}</Text>
+          <Text style={styles.metaText}>{tCategory(item.category)}</Text>
           <Text style={styles.sep}>·</Text>
           <Text style={styles.metaText}>{item.author}</Text>
-          {item.rating != null && (
-            <>
-              <Text style={styles.sep}>·</Text>
-              <Text style={styles.metaText}>★ {item.rating.toFixed(1)}</Text>
-            </>
-          )}
-          {item.downloads != null && (
-            <>
-              <Text style={styles.sep}>·</Text>
-              <Text style={styles.metaText}>{item.downloads}</Text>
-            </>
-          )}
         </View>
       </View>
       <Pressable
         onPress={installed ? onPress : onAction}
+        disabled={installing}
+        accessibilityRole="button"
         style={[styles.actionBtn, { backgroundColor: installed ? 'transparent' : item.pulse + '22' }]}
       >
         {installing

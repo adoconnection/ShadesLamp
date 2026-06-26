@@ -9,6 +9,7 @@ import { useFavoritesStore } from '../store/useFavoritesStore';
 import NavButton from '../components/NavButton';
 import ProgramRow from '../components/ProgramRow';
 import { BackIcon, MarketIcon, StarFillIcon, StarOutlineIcon } from '../components/Icon';
+import { t } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -24,7 +25,7 @@ export default function FavoritesScreen({ navigation }: Props) {
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60 }}>
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <NavButton icon={<BackIcon />} onPress={() => navigation.goBack()} />
-        <Text style={styles.headerCount}>{items.length} starred</Text>
+        <Text style={styles.headerCount}>{t('starredCount', { n: items.length })}</Text>
       </View>
 
       {/* Hero */}
@@ -41,12 +42,12 @@ export default function FavoritesScreen({ navigation }: Props) {
               <StarFillIcon size={22} color="#FAFAF7" />
             </View>
             <View>
-              <Text style={styles.heroLabel}>YOUR COLLECTION</Text>
-              <Text style={styles.heroTitle}>Favorites</Text>
+              <Text style={styles.heroLabel}>{t('yourCollection')}</Text>
+              <Text style={styles.heroTitle}>{t('favorites')}</Text>
             </View>
           </View>
           <Text style={styles.heroDesc}>
-            Quick access to your starred programs. Tap the star on any program to add it here.
+            {t('favHeroDesc')}
           </Text>
         </View>
       </View>
@@ -56,16 +57,16 @@ export default function FavoritesScreen({ navigation }: Props) {
           <View style={styles.emptyCircle}>
             <StarOutlineIcon size={32} color="#FCD34D" />
           </View>
-          <Text style={styles.emptyTitle}>No favorites yet</Text>
+          <Text style={styles.emptyTitle}>{t('noFavoritesTitle')}</Text>
           <Text style={styles.emptyDesc}>
-            Open any program and tap the star to pin it here for quick access.
+            {t('noFavoritesDesc')}
           </Text>
           <Pressable
             onPress={() => navigation.navigate('Marketplace')}
             style={styles.browseBtn}
           >
             <MarketIcon size={18} color={colors.text} />
-            <Text style={styles.browseText}>Browse marketplace</Text>
+            <Text style={styles.browseText}>{t('browseMarketplace')}</Text>
           </Pressable>
         </View>
       ) : (

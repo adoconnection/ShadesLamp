@@ -17,6 +17,7 @@ import { scanDevices } from '../ble/manager';
 import { connectAndLoadDevice } from '../ble/connectFlow';
 import NavButton from '../components/NavButton';
 import { BackIcon, RefreshIcon, BluetoothIcon, SignalIcon } from '../components/Icon';
+import { t } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -34,23 +35,35 @@ export default function BleConnectScreen({ navigation }: Props) {
   const [scanning, setScanning] = useState(true);
   const [devices, setDevices] = useState<ScannedDevice[]>([]);
   const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [scanError, setScanError] = useState<'permission' | 'scan' | null>(null);
   const scanIntervalRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   const doScan = useCallback(() => {
     setScanning(true);
+    setScanError(null);
     setDevices([]);
     const seen = new Map<string, ScannedDevice>();
 
-    scanDevices((device: Device) => {
-      if (!device.id) return;
-      const entry: ScannedDevice = {
-        id: device.id,
-        name: device.localName || device.name || 'Unknown',
-        rssi: device.rssi ?? -100,
-      };
-      seen.set(device.id, entry);
-      setDevices(Array.from(seen.values()));
-    }, 4000).then(() => setScanning(false));
+    scanDevices(
+      (device: Device) => {
+        if (!device.id) return;
+        const entry: ScannedDevice = {
+          id: device.id,
+          name: device.localName || device.name || t('unknownDevice'),
+          rssi: device.rssi ?? -100,
+        };
+        seen.set(device.id, entry);
+        setDevices(Array.from(seen.values()));
+      },
+      4000,
+      (err) => {
+        setScanError(err.message === 'permission-denied' ? 'permission' : 'scan');
+        if (scanIntervalRef.current) {
+          clearInterval(scanIntervalRef.current);
+          scanIntervalRef.current = null;
+        }
+      },
+    ).then(() => setScanning(false));
   }, []);
 
   useEffect(() => {
@@ -84,13 +97,13 @@ export default function BleConnectScreen({ navigation }: Props) {
         <NavButton icon={<BackIcon />} onPress={() => navigation.goBack()} />
         <Pressable onPress={doScan} style={styles.rescanBtn}>
           <RefreshIcon color={colors.text} />
-          <Text style={styles.rescanText}>Rescan</Text>
+          <Text style={styles.rescanText}>{t('rescan')}</Text>
         </Pressable>
       </View>
 
       <View style={styles.titleArea}>
         <Text style={styles.titleLabel}>BLE GATT · 0000ff00</Text>
-        <Text style={styles.title}>Devices</Text>
+        <Text style={styles.title}>{t('devices')}</Text>
       </View>
 
       {/* BLE Animation */}
@@ -104,14 +117,33 @@ export default function BleConnectScreen({ navigation }: Props) {
           </View>
         </View>
         <Text style={styles.scanStatus}>
-          {scanning ? 'Scanning…' : `${devices.length} device${devices.length !== 1 ? 's' : ''} found`}
+          {connectingId
+            ? t('loadingDeviceData')
+            : scanning
+            ? t('scanning')
+            : t('devicesFound', { n: devices.length })}
         </Text>
       </View>
+
+      {/* Permission / scan error */}
+      {scanError && (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorTitle}>
+            {scanError === 'permission' ? t('blePermissionDenied') : t('bleScanError')}
+          </Text>
+          {scanError === 'permission' && (
+            <Text style={styles.errorHint}>{t('blePermissionHint')}</Text>
+          )}
+          <Pressable onPress={doScan} style={styles.errorRetry}>
+            <Text style={styles.errorRetryText}>{t('rescan')}</Text>
+          </Pressable>
+        </View>
+      )}
 
       {/* Device list — only shown when devices found */}
       {devices.length > 0 && (
         <View style={styles.listArea}>
-          <Text style={styles.listLabel}>NEARBY</Text>
+          <Text style={styles.listLabel}>{t('nearby')}</Text>
           <View style={styles.listCard}>
             {devices.map((d, i) => (
               <Pressable
@@ -127,10 +159,10 @@ export default function BleConnectScreen({ navigation }: Props) {
                   <View style={styles.deviceNameRow}>
                     <Text style={styles.deviceName}>{d.name}</Text>
                     {connectingId === d.id && (
-                      <Text style={styles.connectingLabel}>connecting…</Text>
+                      <Text style={styles.connectingLabel}>{t('connecting')}</Text>
                     )}
                     {connectionState === 'connected' && connectingId === d.id && (
-                      <Text style={styles.connectedLabel}>● connected</Text>
+                      <Text style={styles.connectedLabel}>{t('connectedDot')}</Text>
                     )}
                   </View>
                   <Text style={styles.deviceMac}>{d.id.length > 17 ? d.id.slice(-17) : d.id} · {d.rssi} dBm</Text>
@@ -202,5 +234,10 @@ const styles = StyleSheet.create({
   connectingLabel: { fontFamily: fonts.mono, fontSize: 11, color: 'rgba(250,250,247,0.6)' },
   deviceMac: { fontFamily: fonts.mono, fontSize: 11, color: 'rgba(250,250,247,0.45)', marginTop: 2 },
   emptyText: { fontSize: 13, color: 'rgba(250,250,247,0.5)' },
+  errorBox: { marginHorizontal: 20, marginBottom: 24, padding: 16, borderRadius: 16, backgroundColor: 'rgba(248,113,113,0.08)', borderWidth: 0.5, borderColor: 'rgba(248,113,113,0.25)', alignItems: 'center', gap: 8 },
+  errorTitle: { fontSize: 14, fontWeight: '600', color: '#F87171', textAlign: 'center' },
+  errorHint: { fontSize: 12, color: 'rgba(250,250,247,0.6)', textAlign: 'center', lineHeight: 17 },
+  errorRetry: { marginTop: 4, paddingVertical: 8, paddingHorizontal: 18, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)' },
+  errorRetryText: { fontSize: 13, fontWeight: '600', color: colors.text },
   uuidLabel: { fontFamily: fonts.mono, fontSize: 11, color: 'rgba(250,250,247,0.4)', marginTop: 12, paddingLeft: 4, lineHeight: 16 },
 });

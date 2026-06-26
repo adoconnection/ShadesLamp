@@ -1,17 +1,21 @@
 import React from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
+import PressableScale from './PressableScale';
 
 interface NavButtonProps {
   icon: React.ReactNode;
   onPress?: () => void;
   active?: boolean;
   accent?: string;
+  accessibilityLabel?: string;
 }
 
-export default function NavButton({ icon, onPress, active, accent }: NavButtonProps) {
+export default function NavButton({ icon, onPress, active, accent, accessibilityLabel }: NavButtonProps) {
   return (
-    <Pressable
+    <PressableScale
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       style={[
         styles.button,
         {
@@ -20,7 +24,7 @@ export default function NavButton({ icon, onPress, active, accent }: NavButtonPr
       ]}
     >
       {icon}
-    </Pressable>
+    </PressableScale>
   );
 }
 

@@ -11,6 +11,7 @@ import Animated, {
 import Cover from './Cover';
 import { ChevronIcon, StarSmallIcon } from './Icon';
 import { Program } from '../types/program';
+import { t, tCategory } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -45,7 +46,7 @@ export default function ProgramRow({ program, active, isFavorite, onTap, onOpen,
         )}
       </Pressable>
 
-      <Pressable onPress={onTap} style={styles.info}>
+      <Pressable onPress={onTap} style={styles.info} accessibilityRole="button" accessibilityLabel={program.name}>
         <View style={styles.nameRow}>
           <Text
             style={[styles.name, active && { color: program.pulse }]}
@@ -56,11 +57,11 @@ export default function ProgramRow({ program, active, isFavorite, onTap, onOpen,
           {isFavorite && <StarSmallIcon size={12} />}
         </View>
         <Text style={styles.meta} numberOfLines={1}>
-          {program.author}{program.category ? ` · ${program.category}` : ''}
+          {program.author}{program.category ? ` · ${tCategory(program.category)}` : ''}
         </Text>
       </Pressable>
 
-      <Pressable onPress={onOpen} style={styles.chevronBtn}>
+      <Pressable onPress={onOpen} style={styles.chevronBtn} accessibilityRole="button" accessibilityLabel={t('settings')}>
         <ChevronIcon color="rgba(250,250,247,0.5)" />
       </Pressable>
     </Pressable>

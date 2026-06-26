@@ -24,6 +24,7 @@ import ActionTile from '../components/ActionTile';
 import { MarketIcon, StarOutlineIcon, SettingsIcon, PowerIcon } from '../components/Icon';
 import { gradientColors } from '../utils/color';
 import { padId } from '../utils/format';
+import { t, tCategory } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -121,7 +122,7 @@ export default function LibraryScreen({ navigation }: Props) {
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View>
           <Text style={styles.headerLabel}>SHADES</Text>
-          <Text style={styles.headerTitle}>Library</Text>
+          <Text style={styles.headerTitle}>{t('library')}</Text>
         </View>
         <View style={styles.headerRight}>
           <Pressable
@@ -174,7 +175,7 @@ export default function LibraryScreen({ navigation }: Props) {
               <View style={styles.heroTop}>
                 <View style={styles.nowRunning}>
                   <View style={styles.nowDot} />
-                  <Text style={styles.nowLabel}>NOW RUNNING</Text>
+                  <Text style={styles.nowLabel}>{t('nowRunning')}</Text>
                 </View>
                 <View style={styles.idBadge}>
                   <Text style={styles.idText}>ID {padId(activeProgram.id)}</Text>
@@ -190,7 +191,7 @@ export default function LibraryScreen({ navigation }: Props) {
                       <Text style={styles.chipLabel}>{p.name}</Text>
                       <Text style={styles.chipValue}>
                         {p.type === 'bool'
-                          ? p.value ? 'on' : 'off'
+                          ? p.value ? t('on') : t('off')
                           : p.type === 'select' && p.options
                           ? p.options[p.value]
                           : p.type === 'float'
@@ -210,26 +211,26 @@ export default function LibraryScreen({ navigation }: Props) {
       <View style={styles.actions}>
         <ActionTile
           icon={<MarketIcon color="rgba(250,250,247,0.85)" />}
-          label="Marketplace"
+          label={t('marketplace')}
           onPress={() => navigation.navigate('Marketplace')}
         />
         <ActionTile
           icon={<StarOutlineIcon color="rgba(250,250,247,0.85)" />}
-          label="Favorites"
+          label={t('favorites')}
           detail={favorites.length > 0 ? String(favorites.length) : null}
           onPress={() => navigation.navigate('Favorites')}
         />
         <ActionTile
           icon={<SettingsIcon color="rgba(250,250,247,0.85)" />}
-          label="Device"
+          label={t('device')}
           onPress={() => navigation.navigate('DeviceSettings')}
         />
       </View>
 
       {/* Section header */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Installed</Text>
-        <Text style={styles.sectionCount}>{programs.length} / 128</Text>
+        <Text style={styles.sectionTitle}>{t('installed')}</Text>
+        <Text style={styles.sectionCount}>{programs.length}</Text>
       </View>
 
       {/* Category tabs */}
@@ -244,12 +245,39 @@ export default function LibraryScreen({ navigation }: Props) {
             ]}
           >
             <Text style={[styles.tabText, { color: category === cat ? '#0A0A08' : colors.text }]}>
-              {cat}
+              {tCategory(cat)}
             </Text>
           </Pressable>
         ))}
       </ScrollView>
     </>
+  );
+
+  const ListEmpty = (
+    <View style={styles.empty}>
+      {programs.length === 0 ? (
+        connectionState !== 'connected' ? (
+          <>
+            <Text style={styles.emptyTitle}>{t('emptyDisconnected')}</Text>
+            <Text style={styles.emptyDesc}>{t('emptyDisconnectedDesc')}</Text>
+            <Pressable onPress={() => navigation.navigate('BleConnect')} style={styles.emptyBtn} accessibilityRole="button">
+              <Text style={styles.emptyBtnText}>{t('connectLamp')}</Text>
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Text style={styles.emptyTitle}>{t('emptyNoPrograms')}</Text>
+            <Text style={styles.emptyDesc}>{t('emptyNoProgramsDesc')}</Text>
+            <Pressable onPress={() => navigation.navigate('Marketplace')} style={styles.emptyBtn} accessibilityRole="button">
+              <MarketIcon size={18} color={colors.text} />
+              <Text style={styles.emptyBtnText}>{t('browseMarketplace')}</Text>
+            </Pressable>
+          </>
+        )
+      ) : (
+        <Text style={styles.emptyDesc}>{t('emptyCategory')}</Text>
+      )}
+    </View>
   );
 
   return (
@@ -259,6 +287,7 @@ export default function LibraryScreen({ navigation }: Props) {
       renderItem={renderItem}
       onDragEnd={handleDragEnd}
       ListHeaderComponent={ListHeader}
+      ListEmptyComponent={ListEmpty}
       contentContainerStyle={{ paddingBottom: 80 }}
       containerStyle={styles.container}
       activationDistance={15}
@@ -489,5 +518,38 @@ const styles = StyleSheet.create({
   },
   listItem: {
     paddingHorizontal: 12,
+  },
+  empty: {
+    paddingHorizontal: 32,
+    paddingTop: 30,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  emptyDesc: {
+    fontSize: 13,
+    color: 'rgba(250,250,247,0.5)',
+    lineHeight: 19,
+    textAlign: 'center',
+    marginBottom: 18,
+  },
+  emptyBtn: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 999,
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  emptyBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
   },
 });

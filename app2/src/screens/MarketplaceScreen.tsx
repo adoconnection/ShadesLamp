@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, TextInput, Pressable, StyleSheet, FlatList, ActivityIndicator, Alert, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TextInput, Pressable, StyleSheet, FlatList, Alert, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
@@ -12,7 +12,9 @@ import NavButton from '../components/NavButton';
 import BleStatusPill from '../components/BleStatusPill';
 import FeaturedCard from '../components/FeaturedCard';
 import MarketRow from '../components/MarketRow';
+import Skeleton from '../components/Skeleton';
 import { BackIcon, SearchIcon } from '../components/Icon';
+import { t, tCategory } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -51,7 +53,7 @@ export default function MarketplaceScreen({ navigation }: Props) {
 
   const quickInstall = useCallback(async (item: MarketItem) => {
     if (!connected) {
-      Alert.alert('Not connected', 'Connect to a device first.');
+      Alert.alert(t('notConnected'), t('connectFirst'));
       return;
     }
     if (installingSlug) return;
@@ -95,7 +97,7 @@ export default function MarketplaceScreen({ navigation }: Props) {
 
       markInstalled(item.slug);
     } catch (err: any) {
-      Alert.alert('Install failed', err.message || 'Unknown error');
+      Alert.alert(t('installFailed'), err.message || t('unknownError'));
     } finally {
       setInstallingSlug(null);
     }
@@ -133,7 +135,7 @@ export default function MarketplaceScreen({ navigation }: Props) {
         </View>
         <View style={styles.titleArea}>
           <Text style={styles.titleLabel}>github://ShadesLamp/programs</Text>
-          <Text style={styles.title}>Marketplace</Text>
+          <Text style={styles.title}>{t('marketplace')}</Text>
         </View>
 
         {/* Search */}
@@ -142,18 +144,26 @@ export default function MarketplaceScreen({ navigation }: Props) {
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder="Search programs, authors..."
+            placeholder={t('searchPlaceholder')}
             placeholderTextColor="rgba(250,250,247,0.35)"
             style={styles.searchInput}
           />
         </View>
       </View>
 
-      {/* Loading / Error */}
+      {/* Loading skeletons */}
       {loading && (
-        <View style={styles.centered}>
-          <ActivityIndicator color={colors.text} size="small" />
-          <Text style={styles.loadingText}>Loading catalog...</Text>
+        <View style={styles.skeletonList}>
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <View key={i} style={styles.skeletonRow}>
+              <Skeleton style={styles.skeletonCover} />
+              <View style={styles.skeletonInfo}>
+                <Skeleton style={styles.skeletonLine} />
+                <Skeleton style={styles.skeletonLineShort} />
+              </View>
+              <Skeleton style={styles.skeletonBtn} />
+            </View>
+          ))}
         </View>
       )}
 
@@ -161,7 +171,7 @@ export default function MarketplaceScreen({ navigation }: Props) {
         <View style={styles.centered}>
           <Text style={styles.errorText}>{error}</Text>
           <Pressable onPress={fetchCatalog} style={styles.retryBtn}>
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>{t('retry')}</Text>
           </Pressable>
         </View>
       )}
@@ -172,8 +182,8 @@ export default function MarketplaceScreen({ navigation }: Props) {
           {category === 'All' && !search && featuredItems.length > 0 && (
             <>
               <View style={styles.featuredHeader}>
-                <Text style={styles.featuredTitle}>Featured</Text>
-                <Text style={styles.featuredMeta}>{catalog.length} programs</Text>
+                <Text style={styles.featuredTitle}>{t('featured')}</Text>
+                <Text style={styles.featuredMeta}>{t('programsCount', { n: catalog.length })}</Text>
               </View>
               <FlatList
                 data={featuredItems}
@@ -205,7 +215,7 @@ export default function MarketplaceScreen({ navigation }: Props) {
                 ]}
               >
                 <Text style={[styles.tabText, { color: category === cat ? '#0A0A08' : colors.text }]}>
-                  {cat}
+                  {tCategory(cat)}
                 </Text>
               </Pressable>
             ))}
@@ -224,7 +234,7 @@ export default function MarketplaceScreen({ navigation }: Props) {
               />
             ))}
             {filtered.length === 0 && !loading && (
-              <Text style={styles.noResults}>No programs match this filter.</Text>
+              <Text style={styles.noResults}>{t('noResults')}</Text>
             )}
           </View>
         </>
@@ -285,6 +295,24 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
     gap: 12,
   },
+  skeletonList: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    gap: 8,
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 16,
+    padding: 10,
+  },
+  skeletonCover: { width: 56, height: 56, borderRadius: 12 },
+  skeletonInfo: { flex: 1, gap: 7 },
+  skeletonLine: { height: 13, width: '55%', borderRadius: 6 },
+  skeletonLineShort: { height: 11, width: '35%', borderRadius: 6 },
+  skeletonBtn: { width: 36, height: 36, borderRadius: 18 },
   loadingText: {
     color: 'rgba(250,250,247,0.5)',
     fontSize: 13,

@@ -1,4 +1,5 @@
-import { BleManager as PlxBleManager, Device, Characteristic } from 'react-native-ble-plx';
+import { BleManager as PlxBleManager, Device, Subscription } from 'react-native-ble-plx';
+import { PermissionsAndroid, Platform } from 'react-native';
 import { Buffer } from 'buffer';
 import { SERVICE_UUID, CHAR, CONNECT_TIMEOUT_MS } from './constants';
 import { ChunkedResponseAssembler } from './protocol';
@@ -13,7 +14,40 @@ export function getBleManager(): PlxBleManager {
 }
 
 let connectedDevice: Device | null = null;
-let disconnectSubscription: { remove: () => void } | null = null;
+let disconnectSubscription: Subscription | null = null;
+// Characteristic notification subscriptions for the active connection. Tracked
+// so we can tear them down on disconnect/reconnect and avoid ghost listeners
+// (which would otherwise double-process notifications after a reconnect).
+let monitorSubs: Subscription[] = [];
+
+function removeMonitors() {
+  for (const sub of monitorSubs) {
+    try { sub.remove(); } catch {}
+  }
+  monitorSubs = [];
+}
+
+/**
+ * Request the runtime permissions BLE needs on Android (scan/connect on API 31+,
+ * fine location below that). No-op on iOS. Returns true if all granted.
+ */
+export async function requestBlePermissions(): Promise<boolean> {
+  if (Platform.OS !== 'android') return true;
+  try {
+    const api = typeof Platform.Version === 'number' ? Platform.Version : parseInt(String(Platform.Version), 10);
+    const perms: string[] =
+      api >= 31
+        ? [
+            PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+            PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+          ]
+        : [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION];
+    const result: Record<string, string> = await PermissionsAndroid.requestMultiple(perms as any);
+    return perms.every((p) => result[p] === PermissionsAndroid.RESULTS.GRANTED);
+  } catch {
+    return false;
+  }
+}
 let onDisconnectedCallback: (() => void) | null = null;
 let onActiveChangedCallback: ((id: number) => void) | null = null;
 let onEventCallback: ((eventType: number, programId: number) => void) | null = null;
@@ -27,7 +61,13 @@ export function getConnectedDevice(): Device | null {
 export async function scanDevices(
   onFound: (device: Device) => void,
   timeoutMs = 5000,
+  onError?: (error: Error) => void,
 ): Promise<void> {
+  const granted = await requestBlePermissions();
+  if (!granted) {
+    onError?.(new Error('permission-denied'));
+    return;
+  }
   const mgr = getBleManager();
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
@@ -36,7 +76,13 @@ export async function scanDevices(
     }, timeoutMs);
 
     mgr.startDeviceScan([SERVICE_UUID], null, (error, device) => {
-      if (error) return;
+      if (error) {
+        clearTimeout(timer);
+        mgr.stopDeviceScan();
+        onError?.(error);
+        resolve();
+        return;
+      }
       if (device) onFound(device);
     });
   });
@@ -64,8 +110,12 @@ export async function connectToDevice(deviceId: string): Promise<Device> {
 
   await device.discoverAllServicesAndCharacteristics();
 
+  // Drop any subscriptions left over from a previous connection so the same
+  // notification is never delivered to two listeners after a reconnect.
+  removeMonitors();
+
   // Subscribe to response notifications
-  device.monitorCharacteristicForService(
+  monitorSubs.push(device.monitorCharacteristicForService(
     SERVICE_UUID,
     CHAR.RESPONSE,
     (error, char) => {
@@ -73,10 +123,10 @@ export async function connectToDevice(deviceId: string): Promise<Device> {
       const data = Buffer.from(char.value, 'base64');
       responseAssembler.onNotification(new Uint8Array(data));
     },
-  );
+  ));
 
   // Subscribe to param values notifications
-  device.monitorCharacteristicForService(
+  monitorSubs.push(device.monitorCharacteristicForService(
     SERVICE_UUID,
     CHAR.PARAM_VALUES,
     (error, char) => {
@@ -84,10 +134,10 @@ export async function connectToDevice(deviceId: string): Promise<Device> {
       const data = Buffer.from(char.value, 'base64');
       paramValuesAssembler.onNotification(new Uint8Array(data));
     },
-  );
+  ));
 
   // Subscribe to active program change notifications
-  device.monitorCharacteristicForService(
+  monitorSubs.push(device.monitorCharacteristicForService(
     SERVICE_UUID,
     CHAR.ACTIVE_PROGRAM,
     (error, char) => {
@@ -97,10 +147,10 @@ export async function connectToDevice(deviceId: string): Promise<Device> {
         onActiveChangedCallback?.(data[0]);
       }
     },
-  );
+  ));
 
   // Subscribe to event notifications (program added/deleted)
-  device.monitorCharacteristicForService(
+  monitorSubs.push(device.monitorCharacteristicForService(
     SERVICE_UUID,
     CHAR.EVENTS,
     (error, char) => {
@@ -110,11 +160,16 @@ export async function connectToDevice(deviceId: string): Promise<Device> {
         onEventCallback?.(data[0], data[1]);
       }
     },
-  );
+  ));
 
   // Monitor disconnection
+  if (disconnectSubscription) {
+    disconnectSubscription.remove();
+    disconnectSubscription = null;
+  }
   disconnectSubscription = mgr.onDeviceDisconnected(deviceId, () => {
     connectedDevice = null;
+    removeMonitors();
     onDisconnectedCallback?.();
   });
 
@@ -123,6 +178,7 @@ export async function connectToDevice(deviceId: string): Promise<Device> {
 }
 
 export async function disconnect(): Promise<void> {
+  removeMonitors();
   if (disconnectSubscription) {
     disconnectSubscription.remove();
     disconnectSubscription = null;

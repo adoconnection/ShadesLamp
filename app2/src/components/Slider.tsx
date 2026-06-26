@@ -65,6 +65,9 @@ export default function Slider({
     <GestureDetector gesture={composed}>
       <Animated.View
         pointerEvents={disabled ? 'none' : 'auto'}
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityValue={{ min, max, now: value }}
         style={styles.track}
         onLayout={(e) => {
           trackWidth.value = e.nativeEvent.layout.width;

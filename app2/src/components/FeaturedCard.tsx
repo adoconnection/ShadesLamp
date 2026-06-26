@@ -5,6 +5,7 @@ import { SvgXml } from 'react-native-svg';
 import { MarketItem } from '../types/marketplace';
 import { gradientColors } from '../utils/color';
 import { CheckIcon } from './Icon';
+import { tCategory, localized } from '../i18n';
 import { fonts } from '../theme/typography';
 
 interface FeaturedCardProps {
@@ -27,7 +28,7 @@ export default function FeaturedCard({ item, installed, onPress }: FeaturedCardP
 
       <View style={styles.top}>
         <View style={styles.categoryBadge}>
-          <Text style={styles.categoryText}>{item.category.toUpperCase()}</Text>
+          <Text style={styles.categoryText}>{tCategory(item.category).toUpperCase()}</Text>
         </View>
         {installed && (
           <View style={styles.checkBadge}>
@@ -37,12 +38,8 @@ export default function FeaturedCard({ item, installed, onPress }: FeaturedCardP
       </View>
 
       <View style={styles.bottom}>
-        <Text style={styles.name}>{item.name}</Text>
-        <Text style={styles.author}>
-          {item.author}
-          {item.rating != null ? ` · ★ ${item.rating.toFixed(1)}` : ''}
-          {item.downloads != null ? ` · ${item.downloads}` : ''}
-        </Text>
+        <Text style={styles.name}>{localized(item, 'name', item.name)}</Text>
+        <Text style={styles.author}>{item.author}</Text>
       </View>
     </Pressable>
   );

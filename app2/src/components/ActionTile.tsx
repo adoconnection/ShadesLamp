@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import PressableScale from './PressableScale';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -12,7 +13,12 @@ interface ActionTileProps {
 
 export default function ActionTile({ icon, label, detail, onPress }: ActionTileProps) {
   return (
-    <Pressable onPress={onPress} style={styles.tile}>
+    <PressableScale
+      onPress={onPress}
+      style={styles.tile}
+      accessibilityRole="button"
+      accessibilityLabel={detail ? `${label}, ${detail}` : label}
+    >
       <View style={styles.iconWrap}>{icon}</View>
       <Text style={styles.label}>{label}</Text>
       {detail && (
@@ -20,7 +26,7 @@ export default function ActionTile({ icon, label, detail, onPress }: ActionTileP
           <Text style={styles.badgeText}>{detail}</Text>
         </View>
       )}
-    </Pressable>
+    </PressableScale>
   );
 }
 

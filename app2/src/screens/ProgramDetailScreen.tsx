@@ -14,6 +14,7 @@ import ParamControl from '../components/ParamControl';
 import { BackIcon, StarFillIcon, StarOutlineIcon } from '../components/Icon';
 import { gradientColors } from '../utils/color';
 import { padId } from '../utils/format';
+import { t } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -26,6 +27,7 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
   const { favorites, toggleFavorite } = useFavoritesStore();
   const { connectionState } = useBleStore();
   const [loadingParams, setLoadingParams] = useState(false);
+  const [paramError, setParamError] = useState(false);
 
   const program = programs.find((p) => p.id === programId);
 
@@ -33,15 +35,16 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
   const debounceTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   // Load params from BLE if not yet loaded
-  useEffect(() => {
+  const loadParams = useCallback(() => {
     if (!program || program.params.length > 0) return;
     if (connectionState !== 'connected') return;
 
     setLoadingParams(true);
+    setParamError(false);
     Promise.all([getParams(programId), getParamValues(programId)])
       .then(([paramsSchema, paramValues]) => {
         if (!Array.isArray(paramsSchema)) {
-          console.warn('[ProgramDetail] paramsSchema is not array:', paramsSchema);
+          setParamError(true);
           return;
         }
         const params: Param[] = paramsSchema.map((p: any) => ({
@@ -57,9 +60,11 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
         }));
         setProgramParams(programId, params);
       })
-      .catch((err) => console.warn('[ProgramDetail] Failed to load params:', err))
+      .catch(() => setParamError(true))
       .finally(() => setLoadingParams(false));
   }, [programId, program, connectionState, setProgramParams]);
+
+  useEffect(() => { loadParams(); }, [loadParams]);
 
   const handleParamChange = useCallback((paramId: number, value: number, isFloat: boolean) => {
     updateParamValue(programId, paramId, value);
@@ -136,7 +141,7 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
       {/* Disconnected banner */}
       {disabled && (
         <View style={styles.disconnectedBanner}>
-          <Text style={styles.disconnectedText}>Lamp disconnected</Text>
+          <Text style={styles.disconnectedText}>{t('lampDisconnected')}</Text>
         </View>
       )}
 
@@ -160,26 +165,23 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
                   <View key={i} style={[styles.eqBar, { height: 6, backgroundColor: accent }]} />
                 ))}
               </View>
-              <Text style={[styles.activateText, { color: accent }]}>Running on Lamp</Text>
+              <Text style={[styles.activateText, { color: accent }]}>{t('runningOnLamp')}</Text>
             </View>
           ) : (
-            <Text style={[styles.activateText, { color: '#0A0A08' }]}>Set Active</Text>
+            <Text style={[styles.activateText, { color: '#0A0A08' }]}>{t('setActive')}</Text>
           )}
         </Pressable>
       </View>
 
       {/* Meta strip */}
       <View style={styles.metaStrip}>
-        <MetaCol label="AUTHOR" value={program.author} />
-        <MetaCol label="VERSION" value={program.version || '—'} />
+        <MetaCol label={t('authorLabel')} value={program.author} />
+        <MetaCol label={t('versionLabel')} value={program.version || '—'} />
       </View>
 
       {/* Parameters */}
-      <Text style={styles.sectionTitle}>Parameters</Text>
+      <Text style={styles.sectionTitle}>{t('parameters')}</Text>
       <View style={styles.params}>
-        {loadingParams && (
-          <Text style={styles.loadingText}>Loading parameters…</Text>
-        )}
         {program.params.map((p) => (
           <ParamControl
             key={p.id}
@@ -189,13 +191,26 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
             disabled={disabled}
           />
         ))}
-        {!loadingParams && program.params.length === 0 && (
-          <Text style={styles.loadingText}>No parameters</Text>
+        {program.params.length === 0 && (
+          loadingParams ? (
+            <Text style={styles.loadingText}>{t('loadingParameters')}</Text>
+          ) : paramError ? (
+            <View style={styles.paramErrorBox}>
+              <Text style={styles.paramErrorText}>{t('paramsError')}</Text>
+              <Pressable onPress={loadParams} style={styles.paramRetry} accessibilityRole="button">
+                <Text style={styles.paramRetryText}>{t('retry')}</Text>
+              </Pressable>
+            </View>
+          ) : disabled ? (
+            <Text style={styles.loadingText}>{t('connectToLoadParams')}</Text>
+          ) : (
+            <Text style={styles.loadingText}>{t('noParameters')}</Text>
+          )
         )}
       </View>
 
       {/* File info */}
-      <Text style={styles.sectionTitle}>File</Text>
+      <Text style={styles.sectionTitle}>{t('file')}</Text>
       <View style={styles.fileCard}>
         <View style={styles.fileRow}>
           <View>
@@ -206,7 +221,7 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
           </View>
           {program.author === 'built-in' && (
             <View style={styles.builtInBadge}>
-              <Text style={styles.builtInText}>BUILT-IN</Text>
+              <Text style={styles.builtInText}>{t('builtIn')}</Text>
             </View>
           )}
         </View>
@@ -334,6 +349,29 @@ const styles = StyleSheet.create({
     fontFamily: fonts.mono,
     fontSize: 12,
     color: 'rgba(250,250,247,0.5)',
+  },
+  paramErrorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  paramErrorText: {
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    color: '#F87171',
+    flex: 1,
+  },
+  paramRetry: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  paramRetryText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
   },
   fileCard: {
     marginHorizontal: 20,

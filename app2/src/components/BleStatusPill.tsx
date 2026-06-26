@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Pressable, Text, View, StyleSheet } from 'react-native';
+import { Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -8,6 +8,8 @@ import Animated, {
   withSequence,
 } from 'react-native-reanimated';
 import { ConnectionState } from '../types/ble';
+import PressableScale from './PressableScale';
+import { t } from '../i18n';
 import { colors } from '../theme/colors';
 
 interface BleStatusPillProps {
@@ -18,7 +20,7 @@ interface BleStatusPillProps {
 
 export default function BleStatusPill({ state, name, onPress }: BleStatusPillProps) {
   const dotColor = state === 'connected' ? colors.green : state === 'connecting' ? colors.yellow : colors.gray;
-  const label = state === 'connected' ? (name || 'Connected') : state === 'connecting' ? 'Connecting…' : 'Not connected';
+  const label = state === 'connected' ? (name || t('statusConnected')) : state === 'connecting' ? t('statusConnecting') : t('statusNotConnected');
 
   const pulseOpacity = useSharedValue(1);
 
@@ -41,7 +43,7 @@ export default function BleStatusPill({ state, name, onPress }: BleStatusPillPro
   }));
 
   return (
-    <Pressable onPress={onPress} style={styles.pill}>
+    <PressableScale onPress={onPress} style={styles.pill} accessibilityRole="button" accessibilityLabel={label}>
       <Animated.View
         style={[
           styles.dot,
@@ -56,7 +58,7 @@ export default function BleStatusPill({ state, name, onPress }: BleStatusPillPro
         ]}
       />
       <Text style={styles.label}>{label}</Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 

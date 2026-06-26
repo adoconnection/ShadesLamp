@@ -28,7 +28,12 @@ export default function Toggle({ value, color = '#FAFAF7', onChange, disabled }:
   }));
 
   return (
-    <Pressable onPress={() => onChange(!value)} disabled={disabled}>
+    <Pressable
+      onPress={() => onChange(!value)}
+      disabled={disabled}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value, disabled: !!disabled }}
+    >
       <Animated.View style={[styles.track, trackStyle]}>
         <Animated.View
           style={[

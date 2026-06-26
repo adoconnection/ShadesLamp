@@ -23,7 +23,13 @@ export default function Picker({ options, value, color = colors.text, onChange, 
 
   return (
     <>
-      <Pressable onPress={() => !disabled && setOpen(true)} disabled={disabled} style={styles.button}>
+      <Pressable
+        onPress={() => !disabled && setOpen(true)}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${options[value]}`}
+        style={styles.button}
+      >
         <View style={styles.buttonLeft}>
           <View style={[styles.dot, { backgroundColor: color }]} />
           <Text style={styles.buttonText}>{options[value]}</Text>
@@ -51,6 +57,9 @@ export default function Picker({ options, value, color = colors.text, onChange, 
                 <Pressable
                   key={i}
                   onPress={() => { onChange(i); setOpen(false); }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: i === value }}
+                  accessibilityLabel={opt}
                   style={[
                     styles.option,
                     i === value && { backgroundColor: color + '15' },

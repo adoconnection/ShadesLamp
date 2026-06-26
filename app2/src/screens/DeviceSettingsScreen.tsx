@@ -12,6 +12,7 @@ import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
 import SettingsRow from '../components/SettingsRow';
 import { BackIcon } from '../components/Icon';
+import { t } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -23,10 +24,10 @@ export default function DeviceSettingsScreen({ navigation }: Props) {
   const { programs } = useProgramStore();
 
   const handleRestart = () => {
-    Alert.alert('Restart device', 'Are you sure you want to restart the lamp?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('restartDeviceTitle'), t('restartDeviceMsg'), [
+      { text: t('cancel'), style: 'cancel' },
       {
-        text: 'Restart',
+        text: t('restart'),
         onPress: async () => {
           if (connectionState === 'connected') {
             try {
@@ -62,30 +63,30 @@ export default function DeviceSettingsScreen({ navigation }: Props) {
         <View style={styles.onlineRow}>
           <View style={[styles.onlineDot, connectionState !== 'connected' && { backgroundColor: '#6B7280' }]} />
           <Text style={[styles.onlineText, connectionState !== 'connected' && { color: '#6B7280' }]}>
-            {connectionState === 'connected' ? `ONLINE · ${deviceInfo.rssi} dBm` : 'OFFLINE'}
+            {connectionState === 'connected' ? `${t('online')} · ${deviceInfo.rssi} dBm` : t('offline')}
           </Text>
         </View>
         <View style={styles.statsGrid}>
-          <StatBlock label="MATRIX" value={deviceInfo.matrix} />
-          <StatBlock label="FIRMWARE" value={deviceInfo.firmware} />
+          <StatBlock label={t('matrix')} value={deviceInfo.matrix} />
+          <StatBlock label={t('firmware')} value={deviceInfo.firmware} />
           <StatBlock
-            label="STORAGE"
+            label={t('storage')}
             value={`${deviceInfo.storage.used} / ${deviceInfo.storage.total} KB`}
             bar={deviceInfo.storage.total > 0 ? deviceInfo.storage.used / deviceInfo.storage.total : 0}
           />
         </View>
       </View>
 
-      <SectionLabel>PROGRAMS</SectionLabel>
+      <SectionLabel>{t('programsSection')}</SectionLabel>
       <Card>
-        <SettingsRow label="Installed" detail={`${programs.length} of 128`} last />
+        <SettingsRow label={t('installed')} detail={String(programs.length)} last />
       </Card>
 
-      <SectionLabel>DEVICE</SectionLabel>
+      <SectionLabel>{t('deviceSection')}</SectionLabel>
       <Card>
-        <SettingsRow label="Restart" onPress={handleRestart} />
+        <SettingsRow label={t('restart')} onPress={handleRestart} />
         <SettingsRow
-          label="Power"
+          label={t('power')}
           toggle
           defaultOn={powerOn}
           onToggle={async (on: boolean) => {

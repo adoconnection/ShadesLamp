@@ -1,0 +1,110 @@
+// English UI strings (base language / fallback).
+// {n}, {rssi} etc. are interpolated by t(key, vars).
+export const en = {
+  // Library
+  library: 'Library',
+  marketplace: 'Marketplace',
+  favorites: 'Favorites',
+  device: 'Device',
+  nowRunning: 'NOW RUNNING',
+  installed: 'Installed',
+  statusConnected: 'Connected',
+  statusConnecting: 'Connecting…',
+  statusNotConnected: 'Not connected',
+  on: 'on',
+  off: 'off',
+
+  // Favorites
+  starredCount: '{n} starred',
+  yourCollection: 'YOUR COLLECTION',
+  favHeroDesc: 'Quick access to your starred programs. Tap the star on any program to add it here.',
+  noFavoritesTitle: 'No favorites yet',
+  noFavoritesDesc: 'Open any program and tap the star to pin it here for quick access.',
+  browseMarketplace: 'Browse marketplace',
+
+  // BLE connect
+  rescan: 'Rescan',
+  devices: 'Devices',
+  scanning: 'Scanning…',
+  devicesFound: '{n} found',
+  nearby: 'NEARBY',
+  connecting: 'connecting…',
+  connectedDot: '● connected',
+  unknownDevice: 'Unknown',
+  loadingDeviceData: 'Loading device data…',
+  blePermissionDenied: 'Bluetooth permission required',
+  blePermissionHint: 'Allow Bluetooth (and Location on older Android) in system settings, then try again.',
+  bleScanError: 'Scan failed. Is Bluetooth on?',
+
+  // Library empty states
+  emptyNoPrograms: 'No programs installed',
+  emptyNoProgramsDesc: 'Browse the marketplace to add effects to your lamp.',
+  emptyDisconnected: 'Lamp not connected',
+  emptyDisconnectedDesc: 'Connect to your lamp to see installed programs.',
+  emptyCategory: 'No programs in this category.',
+  connectLamp: 'Connect lamp',
+
+  // Program detail
+  lampDisconnected: 'Lamp disconnected',
+  paramsError: 'Couldn’t load parameters',
+  connectToLoadParams: 'Connect to the lamp to load parameters.',
+  removeConfirmTitle: 'Remove program?',
+  removeConfirmMsg: 'This deletes it from the lamp.',
+  runningOnLamp: 'Running on Lamp',
+  setActive: 'Set Active',
+  authorLabel: 'AUTHOR',
+  versionLabel: 'VERSION',
+  parameters: 'Parameters',
+  loadingParameters: 'Loading parameters…',
+  noParameters: 'No parameters',
+  file: 'File',
+  builtIn: 'BUILT-IN',
+
+  // Marketplace
+  searchPlaceholder: 'Search programs, authors…',
+  loadingCatalog: 'Loading catalog…',
+  retry: 'Retry',
+  featured: 'Featured',
+  programsCount: '{n} programs',
+  noResults: 'No programs match this filter.',
+  notConnected: 'Not connected',
+  connectFirst: 'Connect to a device first.',
+  installFailed: 'Install failed',
+  unknownError: 'Unknown error',
+
+  // Market detail
+  install: 'Install',
+  connectToInstall: 'Connect to install',
+  downloadingFromGithub: 'Downloading from GitHub',
+  uploadingToLamp: 'Uploading to lamp',
+  settingMetadata: 'Setting metadata',
+  installedAndRunning: 'Installed & Running',
+  run: 'Run',
+  settings: 'Settings',
+  remove: 'Remove',
+  connectToDeviceFirst: 'Connect to device first',
+  installationFailed: 'Installation failed',
+  deleteFailed: 'Delete failed',
+  about: 'About',
+  technical: 'Technical',
+  moduleLabel: 'Module',
+  sourceLabel: 'Source',
+  memoryLabel: 'Memory',
+  by: 'by',
+
+  // Device settings
+  restartDeviceTitle: 'Restart device',
+  restartDeviceMsg: 'Are you sure you want to restart the lamp?',
+  cancel: 'Cancel',
+  restart: 'Restart',
+  online: 'ONLINE',
+  offline: 'OFFLINE',
+  matrix: 'MATRIX',
+  firmware: 'FIRMWARE',
+  storage: 'STORAGE',
+  programsSection: 'PROGRAMS',
+  deviceSection: 'DEVICE',
+  power: 'Power',
+} as const;
+
+export type StringKey = keyof typeof en;
