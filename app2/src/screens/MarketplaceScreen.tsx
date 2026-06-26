@@ -14,7 +14,7 @@ import FeaturedCard from '../components/FeaturedCard';
 import MarketRow from '../components/MarketRow';
 import Skeleton from '../components/Skeleton';
 import { BackIcon, SearchIcon } from '../components/Icon';
-import { t, tCategory } from '../i18n';
+import { t, tCategory, localized } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -105,11 +105,20 @@ export default function MarketplaceScreen({ navigation }: Props) {
     }
   }, [connected, installingSlug]);
 
-  const filtered = catalog.filter((item) => {
-    if (category !== 'All' && item.category !== category) return false;
-    if (search && !item.name.toLowerCase().includes(search.toLowerCase()) && !item.author.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  const filtered = catalog
+    .filter((item) => {
+      if (category !== 'All' && item.category !== category) return false;
+      if (search && !item.name.toLowerCase().includes(search.toLowerCase()) && !item.author.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    })
+    // Sort by the displayed (localized) name, same as the Library screen.
+    .sort((a, b) =>
+      localized(a, 'name', a.name).localeCompare(
+        localized(b, 'name', b.name),
+        undefined,
+        { sensitivity: 'base' },
+      ),
+    );
 
   const featuredItems = catalog.filter((item) => featured.includes(item.slug));
 
