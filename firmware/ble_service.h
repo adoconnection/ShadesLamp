@@ -47,6 +47,20 @@ class LedDriver;
 #define CMD_CLEAR_STORAGE   0x2C   // wipe all programs (keeps device config)
 #define CMD_GET_FILE        0x2D   // read a file from flash: payload = path string
 #define CMD_LIST_FILES      0x2E   // list a directory: payload = path; returns JSON array
+#define CMD_WRITE_FILE      0x2F   // write a file: payload = pathLen(1)+path+data
+#define CMD_DELETE_FILE     0x30   // delete a file or directory: payload = path
+#define CMD_APPEND_FILE     0x31   // append to a file: payload = pathLen(1)+path+data
+
+// Playlist management (firmware owns /playlists/{id}.json)
+#define CMD_PL_LIST         0x32   // -> JSON [{id,name,mode,interval,count}]
+#define CMD_PL_GET          0x33   // id(1) -> full playlist JSON
+#define CMD_PL_CREATE       0x34   // name(string) -> {ok,id}
+#define CMD_PL_RENAME       0x35   // id(1)+name -> {ok}
+#define CMD_PL_DELETE       0x36   // id(1) -> {ok}
+#define CMD_PL_SET_ROTATION 0x37   // id(1)+mode(1)+interval(2 LE) -> {ok}
+#define CMD_PL_ADD_POS      0x38   // id(1)+position JSON -> {ok,index}
+#define CMD_PL_DEL_POS      0x39   // id(1)+index(1) -> {ok}
+#define CMD_PL_REORDER      0x3A   // id(1)+JSON array of indices -> {ok}
 // Firmware OTA is streamed over the existing upload pipeline (UPLOAD_START with
 // type=2), not a dedicated command.
 

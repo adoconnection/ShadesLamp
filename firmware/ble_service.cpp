@@ -2,7 +2,10 @@
 #include "program_manager.h"
 #include "led_driver.h"
 #include "version.h"
+#include "storage.h"
+#include "playlists.h"
 #include <LittleFS.h>
+#include <ArduinoJson.h>
 
 #define TAG "[BLE]"
 
@@ -499,6 +502,69 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 break;
             }
 
+            case CMD_WRITE_FILE: {
+                // payload: pathLen(1) + path + data
+                if (payloadLen < 2) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"bad payload\"}", true);
+                    break;
+                }
+                uint8_t plen = payload[0];
+                if (plen == 0 || (size_t)plen + 1 > payloadLen) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"bad path len\"}", true);
+                    break;
+                }
+                String path((const char*)(payload + 1), plen);
+                const uint8_t* data = payload + 1 + plen;
+                size_t dlen = payloadLen - 1 - plen;
+                if (!path.startsWith("/")) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"path must be absolute\"}", true);
+                    break;
+                }
+                bool ok = Storage::writeFileEnsure(path.c_str(), data, dlen);
+                Serial.printf("%s CMD WRITE_FILE '%s' %u bytes -> %s\r\n", TAG, path.c_str(), (unsigned)dlen, ok ? "OK" : "FAIL");
+                g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false,\"err\":\"write failed\"}", !ok);
+                break;
+            }
+
+            case CMD_APPEND_FILE: {
+                // payload: pathLen(1) + path + data  (append; for chunked writes)
+                if (payloadLen < 2) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"bad payload\"}", true);
+                    break;
+                }
+                uint8_t plen = payload[0];
+                if (plen == 0 || (size_t)plen + 1 > payloadLen) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"bad path len\"}", true);
+                    break;
+                }
+                String path((const char*)(payload + 1), plen);
+                const uint8_t* data = payload + 1 + plen;
+                size_t dlen = payloadLen - 1 - plen;
+                if (!path.startsWith("/")) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"path must be absolute\"}", true);
+                    break;
+                }
+                bool ok = Storage::appendFileEnsure(path.c_str(), data, dlen);
+                g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false,\"err\":\"append failed\"}", !ok);
+                break;
+            }
+
+            case CMD_DELETE_FILE: {
+                if (payloadLen < 1) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"missing path\"}", true);
+                    break;
+                }
+                String path((const char*)payload, payloadLen);
+                if (!path.startsWith("/")) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"path must be absolute\"}", true);
+                    break;
+                }
+                bool ok = Storage::deletePath(path.c_str());
+                Serial.printf("%s CMD DELETE_FILE '%s' -> %s\r\n", TAG, path.c_str(), ok ? "OK" : "FAIL");
+                g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false,\"err\":\"delete failed\"}", !ok);
+                break;
+            }
+
             case CMD_LIST_FILES: {
                 // payload = directory path (defaults to "/"); returns a JSON
                 // array: [{"name":"x","size":N,"dir":bool},...]
@@ -537,6 +603,66 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 out += "]";
                 Serial.printf("%s CMD LIST_FILES '%s' -> %u bytes\r\n", TAG, path.c_str(), out.length());
                 g_bleService->sendResponse(out);
+                break;
+            }
+
+            case CMD_PL_LIST: {
+                g_bleService->sendResponse(Playlists::listJson());
+                break;
+            }
+            case CMD_PL_GET: {
+                if (payloadLen < 1) { g_bleService->sendResponse("{\"ok\":false,\"err\":\"id\"}", true); break; }
+                String j = Playlists::getJson(payload[0]);
+                if (j.length() == 0) g_bleService->sendResponse("{\"ok\":false,\"err\":\"not found\"}", true);
+                else g_bleService->sendResponse(j);
+                break;
+            }
+            case CMD_PL_CREATE: {
+                String name((const char*)payload, payloadLen);
+                int id = Playlists::create(name);
+                char r[32]; snprintf(r, sizeof(r), "{\"ok\":%s,\"id\":%d}", id >= 0 ? "true" : "false", id);
+                g_bleService->sendResponse(r, id < 0);
+                break;
+            }
+            case CMD_PL_RENAME: {
+                if (payloadLen < 2) { g_bleService->sendResponse("{\"ok\":false,\"err\":\"args\"}", true); break; }
+                String name((const char*)(payload + 1), payloadLen - 1);
+                bool ok = Playlists::rename(payload[0], name);
+                g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false}", !ok);
+                break;
+            }
+            case CMD_PL_DELETE: {
+                if (payloadLen < 1) { g_bleService->sendResponse("{\"ok\":false,\"err\":\"id\"}", true); break; }
+                bool ok = Playlists::remove(payload[0]);
+                g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false}", !ok);
+                break;
+            }
+            case CMD_PL_SET_ROTATION: {
+                if (payloadLen < 4) { g_bleService->sendResponse("{\"ok\":false,\"err\":\"args\"}", true); break; }
+                uint16_t interval = (uint16_t)payload[2] | ((uint16_t)payload[3] << 8);
+                bool ok = Playlists::setRotation(payload[0], payload[1], interval);
+                g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false}", !ok);
+                break;
+            }
+            case CMD_PL_ADD_POS: {
+                if (payloadLen < 2) { g_bleService->sendResponse("{\"ok\":false,\"err\":\"args\"}", true); break; }
+                String posJson((const char*)(payload + 1), payloadLen - 1);
+                int idx = Playlists::addPosition(payload[0], posJson);
+                char r[32]; snprintf(r, sizeof(r), "{\"ok\":%s,\"index\":%d}", idx >= 0 ? "true" : "false", idx);
+                g_bleService->sendResponse(r, idx < 0);
+                break;
+            }
+            case CMD_PL_DEL_POS: {
+                if (payloadLen < 2) { g_bleService->sendResponse("{\"ok\":false,\"err\":\"args\"}", true); break; }
+                bool ok = Playlists::removePosition(payload[0], payload[1]);
+                g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false}", !ok);
+                break;
+            }
+            case CMD_PL_REORDER: {
+                if (payloadLen < 2) { g_bleService->sendResponse("{\"ok\":false,\"err\":\"args\"}", true); break; }
+                String idxJson((const char*)(payload + 1), payloadLen - 1);
+                bool ok = Playlists::reorder(payload[0], idxJson);
+                g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false}", !ok);
                 break;
             }
 

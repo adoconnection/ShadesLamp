@@ -1,17 +1,17 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, Pressable, StyleSheet, Modal, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { useProgramStore } from '../store/useProgramStore';
-import { useFavoritesStore } from '../store/useFavoritesStore';
+import { usePlaylistStore } from '../store/usePlaylistStore';
 import { useBleStore } from '../store/useBleStore';
 import { getParams, getParamValues, setParam, setActiveProgram } from '../ble/commands';
 import { Param } from '../types/program';
 import NavButton from '../components/NavButton';
 import ParamControl from '../components/ParamControl';
-import { BackIcon, StarFillIcon, StarOutlineIcon } from '../components/Icon';
+import { BackIcon, StarFillIcon, StarOutlineIcon, PlusIcon, CloseIcon } from '../components/Icon';
 import { gradientColors } from '../utils/color';
 import { padId } from '../utils/format';
 import { t, tCategory, localized, localizedParam, localizedOptions } from '../i18n';
@@ -24,8 +24,10 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { programId } = route.params;
   const { programs, activeId, setActiveId, updateParamValue, setProgramParams } = useProgramStore();
-  const variants = useFavoritesStore((s) => s.variants);
-  const addVariant = useFavoritesStore((s) => s.addVariant);
+  const playlists = usePlaylistStore((s) => s.playlists);
+  const addPosition = usePlaylistStore((s) => s.addPosition);
+  const createPlaylist = usePlaylistStore((s) => s.createPlaylist);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const { connectionState } = useBleStore();
   const [loadingParams, setLoadingParams] = useState(false);
   const [paramError, setParamError] = useState(false);
@@ -89,6 +91,8 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
   }, [programId, connectionState, updateParamValue]);
 
   const handleActivate = useCallback(async () => {
+    // Directly activating a program stops any playing playlist.
+    usePlaylistStore.getState().stop();
     if (connectionState === 'connected') {
       try {
         await setActiveProgram(programId);
@@ -102,27 +106,34 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
   if (!program) return null;
 
   const isActive = activeId === programId;
-  const isFavorite = variants.some((v) =>
-    v.slug && program.slug ? v.slug === program.slug : v.programId === program.id,
+  // Starred if this program is saved in any playlist (matched by slug, else id).
+  const isFavorite = playlists.some((pl) =>
+    pl.positions.some((pos) => (pos.slug && program.slug ? pos.slug === program.slug : pos.prog === program.id)),
   );
   const accent = program.pulse;
 
-  // Save the current program + its parameter values as a new favorite snapshot.
-  const handleSaveFavorite = () => {
-    addVariant({
-      programId: program.id,
-      slug: program.slug,
-      name: localized(program, 'name', program.name),
-      desc: program.desc,
-      cover: program.cover,
-      pulse: program.pulse,
-      i18n: program.i18n,
-      params: program.params.map((p) => ({ id: p.id, value: p.value, isFloat: p.type === 'float' })),
-    });
+  // Build a position snapshot of the current program + its parameter values.
+  const snapshot = () => ({
+    prog: program.id,
+    slug: program.slug,
+    name: localized(program, 'name', program.name),
+    params: program.params.map((p) => ({ id: p.id, value: p.value, f: p.type === 'float' })),
+  });
+
+  const addToPlaylist = async (pid: number) => {
+    setPickerOpen(false);
+    await addPosition(pid, snapshot());
+  };
+
+  const createAndAdd = async () => {
+    setPickerOpen(false);
+    const pid = await createPlaylist(t('playlistDefaultName', { n: playlists.length + 1 }));
+    if (pid != null) await addPosition(pid, snapshot());
   };
   const disabled = connectionState !== 'connected';
 
   return (
+    <>
     <ScrollView style={styles.container} bounces={false}>
       {/* Hero header */}
       <View style={styles.heroSection}>
@@ -142,7 +153,7 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
           <NavButton icon={<BackIcon />} onPress={() => navigation.goBack()} />
           <NavButton
             icon={isFavorite ? <StarFillIcon color="#0A0A08" /> : <StarOutlineIcon />}
-            onPress={handleSaveFavorite}
+            onPress={() => disabled ? Alert.alert(t('connectToManage')) : setPickerOpen(true)}
             active={isFavorite}
             accent="#FCD34D"
           />
@@ -248,8 +259,47 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
 
       <View style={{ height: 40 }} />
     </ScrollView>
+
+    <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
+      <Pressable style={pickerStyles.backdrop} onPress={() => setPickerOpen(false)}>
+        <Pressable style={pickerStyles.sheet} onPress={() => {}}>
+          <View style={pickerStyles.sheetHead}>
+            <Text style={pickerStyles.sheetTitle}>{t('addToPlaylist')}</Text>
+            <Pressable hitSlop={10} onPress={() => setPickerOpen(false)}><CloseIcon size={20} /></Pressable>
+          </View>
+          <ScrollView style={{ maxHeight: 320 }}>
+            {playlists.map((pl) => (
+              <Pressable key={pl.id} style={pickerStyles.item} onPress={() => addToPlaylist(pl.id)}>
+                <Text style={pickerStyles.itemName} numberOfLines={1}>{pl.name}</Text>
+                <Text style={pickerStyles.itemMeta}>{t('positionsCount', { n: pl.positions.length })}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          <Pressable style={pickerStyles.createRow} onPress={createAndAdd}>
+            <PlusIcon size={18} color="#0A0A08" />
+            <Text style={pickerStyles.createText}>{t('newPlaylist')}</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+    </>
   );
 }
+
+const pickerStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: '#16181F', borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 18, paddingBottom: 34 },
+  sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  sheetTitle: { fontSize: 17, fontWeight: '700', color: colors.text },
+  item: { paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.06)' },
+  itemName: { fontSize: 15, fontWeight: '600', color: colors.text },
+  itemMeta: { fontFamily: fonts.mono, fontSize: 11, color: 'rgba(250,250,247,0.45)', marginTop: 2 },
+  createRow: {
+    marginTop: 14, paddingVertical: 13, borderRadius: 14, backgroundColor: '#FCD34D',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  createText: { fontSize: 14, fontWeight: '700', color: '#0A0A08' },
+});
 
 function MetaCol({ label, value }: { label: string; value: string }) {
   return (

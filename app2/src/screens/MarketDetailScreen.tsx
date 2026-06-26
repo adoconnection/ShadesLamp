@@ -7,6 +7,7 @@ import { RootStackParamList } from '../types/navigation';
 import { useMarketStore } from '../store/useMarketStore';
 import { useBleStore } from '../store/useBleStore';
 import { useProgramStore } from '../store/useProgramStore';
+import { usePlaylistStore } from '../store/usePlaylistStore';
 import { uploadWasm, setMeta, setActiveProgram, deleteProgram as bleDeleteProgram } from '../ble/commands';
 import NavButton from '../components/NavButton';
 import { BackIcon, DownloadIcon, CheckIcon, TrashIcon, SettingsIcon } from '../components/Icon';
@@ -123,8 +124,9 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
         i18n: item!.i18n,
       });
 
-      // Auto-activate the new program
+      // Auto-activate the new program (and stop any playing playlist)
       try {
+        usePlaylistStore.getState().stop();
         await setActiveProgram(newId);
         setActiveId(newId);
       } catch {}

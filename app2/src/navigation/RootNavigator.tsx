@@ -4,7 +4,7 @@ import { RootStackParamList } from '../types/navigation';
 import LibraryScreen from '../screens/LibraryScreen';
 import ProgramDetailScreen from '../screens/ProgramDetailScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
-import RotationSettingsScreen from '../screens/RotationSettingsScreen';
+import PlaylistDetailScreen from '../screens/PlaylistDetailScreen';
 import MarketplaceScreen from '../screens/MarketplaceScreen';
 import MarketDetailScreen from '../screens/MarketDetailScreen';
 import BleConnectScreen from '../screens/BleConnectScreen';
@@ -24,7 +24,7 @@ export default function RootNavigator() {
       <Stack.Screen name="Library" component={LibraryScreen} />
       <Stack.Screen name="ProgramDetail" component={ProgramDetailScreen} />
       <Stack.Screen name="Favorites" component={FavoritesScreen} />
-      <Stack.Screen name="RotationSettings" component={RotationSettingsScreen} />
+      <Stack.Screen name="PlaylistDetail" component={PlaylistDetailScreen} />
       <Stack.Screen name="Marketplace" component={MarketplaceScreen} />
       <Stack.Screen name="MarketDetail" component={MarketDetailScreen} />
       <Stack.Screen name="BleConnect" component={BleConnectScreen} />

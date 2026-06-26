@@ -16,7 +16,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { Program } from '../types/program';
 import { useProgramStore } from '../store/useProgramStore';
-import { useFavoritesStore } from '../store/useFavoritesStore';
+import { usePlaylistStore } from '../store/usePlaylistStore';
 import { useBleStore } from '../store/useBleStore';
 import { setActiveProgram, setPower, setOrder } from '../ble/commands';
 import { refreshPrograms } from '../ble/connectFlow';
@@ -35,15 +35,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Library'>;
 export default function LibraryScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { programs, activeId, setActiveId, reorderPrograms } = useProgramStore();
-  const variants = useFavoritesStore((s) => s.variants);
   const { connectionState, deviceInfo, powerOn, setPowerOn } = useBleStore();
-
-  // Programs that have at least one saved favorite state (matched by slug/id).
-  const favMatch = useMemo(() => {
-    const slugs = new Set(variants.map((v) => v.slug).filter(Boolean) as string[]);
-    const ids = new Set(variants.map((v) => v.programId));
-    return (p: Program) => (p.slug ? slugs.has(p.slug) : false) || ids.has(p.id);
-  }, [variants]);
   const [category, setCategory] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -74,7 +66,30 @@ export default function LibraryScreen({ navigation }: Props) {
 
   const activeProgram = programs.find((p) => p.id === activeId);
 
+  // Playlist playback: when a playlist is playing, the hero becomes a playlist
+  // card and the swipe advances positions instead of programs.
+  const playingId = usePlaylistStore((s) => s.playingId);
+  const currentIndex = usePlaylistStore((s) => s.currentIndex);
+  const playlists = usePlaylistStore((s) => s.playlists);
+  const advancePlaylist = usePlaylistStore((s) => s.advance);
+  const playingPlaylist = playingId != null ? playlists.find((p) => p.id === playingId) : undefined;
+  const playing = !!playingPlaylist;
+  const posIndex = playing && currentIndex != null ? currentIndex : -1;
+
+  // Programs that appear in at least one playlist (for the star indicator).
+  const favMatch = useMemo(() => {
+    const slugs = new Set<string>();
+    const ids = new Set<number>();
+    for (const pl of playlists) for (const pos of pl.positions) {
+      if (pos.slug) slugs.add(pos.slug);
+      ids.add(pos.prog);
+    }
+    return (p: Program) => (p.slug ? slugs.has(p.slug) : false) || ids.has(p.id);
+  }, [playlists]);
+
   const handleActivate = useCallback(async (id: number) => {
+    // Directly picking a program stops any playing playlist (auto-rotation off).
+    usePlaylistStore.getState().stop();
     if (connectionState === 'connected') {
       try {
         await setActiveProgram(id);
@@ -113,6 +128,8 @@ export default function LibraryScreen({ navigation }: Props) {
   const heroAnimStyle = useAnimatedStyle(() => ({ transform: [{ translateX: heroDx.value }] }));
 
   const goRelative = useCallback((dir: number) => {
+    // While a playlist is playing, swipe steps through its positions.
+    if (playing) { advancePlaylist(dir); return; }
     if (programs.length === 0) return;
     const order = programs.slice().sort((a, b) =>
       a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
@@ -120,7 +137,7 @@ export default function LibraryScreen({ navigation }: Props) {
     const i = order.findIndex((p) => p.id === activeId);
     const ni = i < 0 ? 0 : (i + dir + order.length) % order.length;
     handleActivate(order[ni].id);
-  }, [programs, activeId, handleActivate]);
+  }, [playing, advancePlaylist, programs, activeId, handleActivate]);
 
   const heroSwipe = useMemo(() => Gesture.Pan()
     .activeOffsetX([-20, 20])
@@ -179,7 +196,9 @@ export default function LibraryScreen({ navigation }: Props) {
         <GestureDetector gesture={heroSwipe}>
         <Animated.View style={heroAnimStyle}>
         <Pressable
-          onPress={() => navigation.navigate('ProgramDetail', { programId: activeProgram.id })}
+          onPress={() => playing
+            ? navigation.navigate('PlaylistDetail', { playlistId: playingId! })
+            : navigation.navigate('ProgramDetail', { programId: activeProgram.id })}
           style={styles.heroWrap}
         >
           <View style={[styles.hero, {
@@ -211,16 +230,24 @@ export default function LibraryScreen({ navigation }: Props) {
               <View style={styles.heroTop}>
                 <View style={styles.nowRunning}>
                   <View style={styles.nowDot} />
-                  <Text style={styles.nowLabel}>{t('nowRunning')}</Text>
+                  <Text style={styles.nowLabel}>{playing ? t('nowPlayingPlaylist') : t('nowRunning')}</Text>
                 </View>
                 <View style={styles.idBadge}>
-                  <Text style={styles.idText}>ID {padId(activeProgram.id)}</Text>
+                  <Text style={styles.idText}>
+                    {playing ? `${posIndex + 1}/${playingPlaylist!.positions.length}` : `ID ${padId(activeProgram.id)}`}
+                  </Text>
                 </View>
               </View>
 
               <View style={styles.heroBottom}>
-                <Text style={styles.heroTitle}>{localized(activeProgram, 'name', activeProgram.name)}</Text>
-                <Text style={styles.heroDesc}>{localized(activeProgram, 'desc', activeProgram.desc)}</Text>
+                <Text style={styles.heroTitle}>
+                  {playing ? playingPlaylist!.name : localized(activeProgram, 'name', activeProgram.name)}
+                </Text>
+                <Text style={styles.heroDesc}>
+                  {playing
+                    ? localized(activeProgram, 'name', activeProgram.name)
+                    : localized(activeProgram, 'desc', activeProgram.desc)}
+                </Text>
                 <View style={styles.paramChips}>
                   {activeProgram.params.slice(0, 3).map((p) => (
                     <View key={p.id} style={styles.chip}>
@@ -254,8 +281,8 @@ export default function LibraryScreen({ navigation }: Props) {
         />
         <ActionTile
           icon={<StarOutlineIcon color="rgba(250,250,247,0.85)" />}
-          label={t('favorites')}
-          detail={variants.length > 0 ? String(variants.length) : null}
+          label={t('playlists')}
+          detail={playlists.length > 0 ? String(playlists.length) : null}
           onPress={() => navigation.navigate('Favorites')}
         />
         <ActionTile

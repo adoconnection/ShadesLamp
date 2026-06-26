@@ -12,6 +12,25 @@ export const BackIcon = ({ size = 22, color = '#FAFAF7' }: IconProps) => (
   </Svg>
 );
 
+export const PlusIcon = ({ size = 20, color = '#FAFAF7' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 5v14M5 12h14" stroke={color} strokeWidth={2} strokeLinecap="round" />
+  </Svg>
+);
+
+export const PlayIcon = ({ size = 18, color = '#FAFAF7' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M7 5l12 7-12 7V5z" fill={color} />
+  </Svg>
+);
+
+export const PauseIcon = ({ size = 18, color = '#FAFAF7' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Rect x="6" y="5" width="4" height="14" rx="1" fill={color} />
+    <Rect x="14" y="5" width="4" height="14" rx="1" fill={color} />
+  </Svg>
+);
+
 export const CloseIcon = ({ size = 22, color = '#FAFAF7' }: IconProps) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path d="M6 6l12 12M18 6l-12 12" stroke={color} strokeWidth={2} strokeLinecap="round" />

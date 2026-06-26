@@ -5,7 +5,7 @@ export type RootStackParamList = {
   Library: undefined;
   ProgramDetail: { programId: number };
   Favorites: undefined;
-  RotationSettings: undefined;
+  PlaylistDetail: { playlistId: number };
   Marketplace: undefined;
   MarketDetail: { itemId: string };
   BleConnect: undefined;

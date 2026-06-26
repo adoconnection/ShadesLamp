@@ -1,43 +1,41 @@
-import { useEffect, useRef } from 'react';
-import { useFavoritesStore } from '../store/useFavoritesStore';
+import { useEffect } from 'react';
+import { usePlaylistStore } from '../store/usePlaylistStore';
 import { useBleStore } from '../store/useBleStore';
-import { useProgramStore } from '../store/useProgramStore';
-import { buildFavoriteList } from '../utils/favorites';
-import { applyVariant } from '../ble/applyVariant';
+import { applyPosition } from '../ble/applyPosition';
 
-// Drives favorite rotation while the app is foregrounded and connected. When
-// rotationMode is 'next' it steps through the sorted favorites list; 'random'
-// picks a different variant each tick. Runs app-wide (mounted at the root) so
-// rotation keeps going after you leave the Favorites screen.
+// Drives playlist playback while one is playing and the lamp is connected.
+// The playing playlist's rotation mode governs auto-advance: 'off' stays on the
+// current position, 'next' steps sequentially, 'random' jumps around. Position
+// switches go through applyPosition -> setActiveProgram, which fades on-device.
 export function useRotationEngine() {
-  const rotationMode = useFavoritesStore((s) => s.rotationMode);
-  const intervalSec = useFavoritesStore((s) => s.rotationIntervalSec);
+  const playingId = usePlaylistStore((s) => s.playingId);
   const connectionState = useBleStore((s) => s.connectionState);
-  const idxRef = useRef(0);
+  const playing = usePlaylistStore((s) => s.playlists.find((p) => p.id === s.playingId));
+  const mode = playing?.mode;
+  const interval = playing?.interval;
 
   useEffect(() => {
-    if (rotationMode === 'off') return;
+    if (playingId == null || mode == null || mode === 'off') return;
     if (connectionState !== 'connected') return;
 
     const tick = () => {
-      const variants = useFavoritesStore.getState().variants;
-      if (variants.length === 0) return;
-      const order = buildFavoriteList(variants, useProgramStore.getState().programs);
-      if (order.length === 0) return;
+      const st = usePlaylistStore.getState();
+      const pl = st.playlists.find((p) => p.id === st.playingId);
+      if (!pl || pl.positions.length === 0) return;
 
+      let i = st.currentIndex ?? 0;
+      if (i < 0 || i >= pl.positions.length) i = 0;
       let next: number;
-      if (rotationMode === 'random' && order.length > 1) {
-        do {
-          next = Math.floor(Math.random() * order.length);
-        } while (next === idxRef.current);
+      if (pl.mode === 'random' && pl.positions.length > 1) {
+        do { next = Math.floor(Math.random() * pl.positions.length); } while (next === i);
       } else {
-        next = (idxRef.current + 1) % order.length;
+        next = (i + 1) % pl.positions.length;
       }
-      idxRef.current = next;
-      applyVariant(order[next].v);
+      st.setCurrentIndex(next);
+      applyPosition(pl.positions[next]);
     };
 
-    const id = setInterval(tick, Math.max(2, intervalSec) * 1000);
+    const id = setInterval(tick, Math.max(2, interval || 30) * 1000);
     return () => clearInterval(id);
-  }, [rotationMode, intervalSec, connectionState]);
+  }, [playingId, mode, interval, connectionState]);
 }

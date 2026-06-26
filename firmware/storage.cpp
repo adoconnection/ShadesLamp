@@ -416,4 +416,70 @@ String loadFile(const char* path) {
     return content;
 }
 
+// Create each intermediate directory of an absolute file path (e.g. for
+// "/playlists/1/0" creates "/playlists" and "/playlists/1").
+static void ensureParentDirs(const char* path) {
+    String p(path);
+    int idx = 1;  // skip leading '/'
+    while (true) {
+        int slash = p.indexOf('/', idx);
+        if (slash < 0) break;
+        String dir = p.substring(0, slash);
+        if (dir.length() > 0 && !LittleFS.exists(dir)) {
+            LittleFS.mkdir(dir);
+        }
+        idx = slash + 1;
+    }
+}
+
+bool writeFileEnsure(const char* path, const uint8_t* data, size_t len) {
+    ensureParentDirs(path);
+    File f = LittleFS.open(path, "w");
+    if (!f) {
+        Serial.printf("%s writeFileEnsure: cannot open %s\r\n", TAG, path);
+        return false;
+    }
+    size_t written = (len > 0) ? f.write(data, len) : 0;
+    f.close();
+    return written == len;
+}
+
+bool appendFileEnsure(const char* path, const uint8_t* data, size_t len) {
+    ensureParentDirs(path);
+    File f = LittleFS.open(path, "a");
+    if (!f) {
+        Serial.printf("%s appendFileEnsure: cannot open %s\r\n", TAG, path);
+        return false;
+    }
+    size_t written = (len > 0) ? f.write(data, len) : 0;
+    f.close();
+    return written == len;
+}
+
+bool deletePath(const char* path) {
+    if (!LittleFS.exists(path)) return true;
+
+    File f = LittleFS.open(path);
+    bool isDir = f && f.isDirectory();
+    if (f) f.close();
+
+    if (!isDir) return LittleFS.remove(path);
+
+    // Recursively remove directory contents, then the directory itself.
+    File d = LittleFS.open(path);
+    std::vector<String> children;
+    if (d && d.isDirectory()) {
+        File entry;
+        while ((entry = d.openNextFile())) {
+            String name = entry.name();
+            entry.close();
+            if (!name.startsWith("/")) name = String(path) + "/" + name;
+            children.push_back(name);
+        }
+    }
+    if (d) d.close();
+    for (const String& c : children) deletePath(c.c_str());
+    return LittleFS.rmdir(path);
+}
+
 } // namespace Storage

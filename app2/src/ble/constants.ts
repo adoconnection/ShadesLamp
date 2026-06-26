@@ -37,6 +37,18 @@ export const CMD = {
   CLEAR_STORAGE:   0x2C,
   GET_FILE:        0x2D,
   LIST_FILES:      0x2E,
+  WRITE_FILE:      0x2F,
+  DELETE_FILE:     0x30,
+  APPEND_FILE:     0x31,
+  PL_LIST:         0x32,
+  PL_GET:          0x33,
+  PL_CREATE:       0x34,
+  PL_RENAME:       0x35,
+  PL_DELETE:       0x36,
+  PL_SET_ROTATION: 0x37,
+  PL_ADD_POS:      0x38,
+  PL_DEL_POS:      0x39,
+  PL_REORDER:      0x3A,
 } as const;
 
 // Upload pipeline payload types (UPLOAD_START byte after the 4-byte size)

@@ -129,6 +129,27 @@ export const en = {
   rotationOnDesc: 'Switching every {t}.',
   secShort: '{n}s',
   minShort: '{n} min',
+
+  // Playlists
+  playlists: 'Playlists',
+  newPlaylist: 'New playlist',
+  addToPlaylist: 'Add to playlist',
+  play: 'Play',
+  stop: 'Stop',
+  positionsCount: '{n} positions',
+  emptyPlaylistsTitle: 'No playlists',
+  emptyPlaylistsDesc: 'Create a playlist, then open programs and tap the star to add saved states to it.',
+  emptyPlaylistTitle: 'Empty playlist',
+  emptyPlaylistDesc: 'Open a program, tune it and tap the star to add it here.',
+  reorderHint: 'Hold and drag to reorder · swipe a row to delete.',
+  nowPlayingPlaylist: 'PLAYING PLAYLIST',
+  playlistDefaultName: 'Playlist {n}',
+  deletePlaylistTitle: 'Delete playlist?',
+  deletePlaylistMsg: 'This removes the playlist and all its saved states from the lamp.',
+  delete: 'Delete',
+  connectToManage: 'Connect to the lamp to manage playlists.',
+  rename: 'Rename',
+  save: 'Save',
 } as const;
 
 export type StringKey = keyof typeof en;

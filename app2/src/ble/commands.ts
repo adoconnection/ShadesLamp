@@ -107,6 +107,41 @@ export async function listFiles(path: string): Promise<Array<{ name: string; siz
   });
 }
 
+// Write a text file to the device flash (parent dirs are created on the lamp).
+// Files larger than one BLE packet are split: first chunk truncates+writes via
+// WRITE_FILE, the rest is appended via APPEND_FILE. The whole sequence runs as
+// one queued task so chunks can't interleave with other commands.
+const FILE_CHUNK = 200; // conservative data bytes per BLE write
+export async function writeFile(path: string, data: string): Promise<any> {
+  const pathBytes = new TextEncoder().encode(path);
+  const dataBytes = new TextEncoder().encode(data);
+  return queue.enqueue(async () => {
+    let result: any;
+    let offset = 0;
+    let first = true;
+    do {
+      const chunk = dataBytes.slice(offset, offset + FILE_CHUNK);
+      const payload = new Uint8Array(2 + pathBytes.length + chunk.length);
+      payload[0] = first ? CMD.WRITE_FILE : CMD.APPEND_FILE;
+      payload[1] = pathBytes.length;
+      payload.set(pathBytes, 2);
+      payload.set(chunk, 2 + pathBytes.length);
+      result = await writeCommand(payload);
+      offset += FILE_CHUNK;
+      first = false;
+    } while (offset < dataBytes.length);
+    return result;
+  });
+}
+
+// Delete a file or (recursively) a directory on the device flash.
+export async function deleteFile(path: string): Promise<any> {
+  return queue.enqueue(() => {
+    const pathBytes = new TextEncoder().encode(path);
+    return writeCommand(new Uint8Array([CMD.DELETE_FILE, ...pathBytes]));
+  });
+}
+
 // Read a file off the device flash (text files like /config.json or
 // /programs/{id}/meta.json). Binary files (code.wasm) are not supported here —
 // the response path decodes as UTF-8/JSON.
@@ -115,6 +150,38 @@ export async function getFile(path: string): Promise<any> {
     const pathBytes = new TextEncoder().encode(path);
     return writeCommand(new Uint8Array([CMD.GET_FILE, ...pathBytes]));
   });
+}
+
+// ── Playlist commands (firmware owns /playlists/{id}.json) ──────────────────
+const te = new TextEncoder();
+
+export async function plList(): Promise<any[]> {
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.PL_LIST])));
+}
+export async function plGet(id: number): Promise<any> {
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.PL_GET, id])));
+}
+export async function plCreate(name: string): Promise<any> {
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.PL_CREATE, ...te.encode(name)])));
+}
+export async function plRename(id: number, name: string): Promise<any> {
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.PL_RENAME, id, ...te.encode(name)])));
+}
+export async function plDelete(id: number): Promise<any> {
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.PL_DELETE, id])));
+}
+export async function plSetRotation(id: number, mode: number, interval: number): Promise<any> {
+  return queue.enqueue(() =>
+    writeCommand(new Uint8Array([CMD.PL_SET_ROTATION, id, mode, interval & 0xff, (interval >> 8) & 0xff])));
+}
+export async function plAddPosition(id: number, posJson: string): Promise<any> {
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.PL_ADD_POS, id, ...te.encode(posJson)])));
+}
+export async function plRemovePosition(id: number, index: number): Promise<any> {
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.PL_DEL_POS, id, index])));
+}
+export async function plReorder(id: number, indices: number[]): Promise<any> {
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.PL_REORDER, id, ...te.encode(JSON.stringify(indices))])));
 }
 
 export async function deleteProgram(programId: number): Promise<any> {

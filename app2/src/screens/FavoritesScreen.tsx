@@ -1,199 +1,153 @@
-import React, { useMemo } from 'react';
-import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, ScrollView, Pressable, StyleSheet, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Swipeable } from 'react-native-gesture-handler';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
+import { Playlist } from '../types/playlist';
 import { useProgramStore } from '../store/useProgramStore';
-import { useFavoritesStore } from '../store/useFavoritesStore';
-import { FavoriteDisplay, buildFavoriteList } from '../utils/favorites';
-import { applyVariant } from '../ble/applyVariant';
+import { usePlaylistStore } from '../store/usePlaylistStore';
+import { useBleStore } from '../store/useBleStore';
+import { gradientColors } from '../utils/color';
 import Cover from '../components/Cover';
 import NavButton from '../components/NavButton';
-import { BackIcon, MarketIcon, StarFillIcon, StarOutlineIcon, ChevronIcon, TrashIcon } from '../components/Icon';
+import { BackIcon, StarFillIcon, TrashIcon, ChevronIcon, PlusIcon, PlayIcon, PauseIcon } from '../components/Icon';
 import { t } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Favorites'>;
 
-function formatInterval(sec: number): string {
-  if (sec >= 60 && sec % 60 === 0) return t('minShort', { n: sec / 60 });
-  return t('secShort', { n: sec });
-}
-
 export default function FavoritesScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { programs, activeId } = useProgramStore();
-  const variants = useFavoritesStore((s) => s.variants);
-  const removeVariant = useFavoritesStore((s) => s.removeVariant);
-  const rotationMode = useFavoritesStore((s) => s.rotationMode);
-  const rotationIntervalSec = useFavoritesStore((s) => s.rotationIntervalSec);
+  const { programs } = useProgramStore();
+  const playlists = usePlaylistStore((s) => s.playlists);
+  const playingId = usePlaylistStore((s) => s.playingId);
+  const { load, createPlaylist, deletePlaylist, play, stop } = usePlaylistStore();
+  const connected = useBleStore((s) => s.connectionState === 'connected');
 
-  const items = useMemo(() => buildFavoriteList(variants, programs), [variants, programs]);
+  useEffect(() => { load(); }, [load]);
 
-  const rotationLabel =
-    rotationMode === 'off' ? t('rotationOff')
-    : rotationMode === 'random' ? t('rotationRandom')
-    : t('rotationNext');
+  function coverFor(pl: Playlist) {
+    const first = pl.positions[0];
+    if (first) {
+      const prog = first.slug ? programs.find((p) => p.slug === first.slug) : programs.find((p) => p.id === first.prog);
+      if (prog) return { cover: prog.cover, pulse: prog.pulse };
+    }
+    return { cover: { from: '#FCD34D', to: '#B45309', angle: 135 }, pulse: '#FCD34D' };
+  }
+
+  const handleCreate = async () => {
+    if (!connected) { Alert.alert(t('connectToManage')); return; }
+    const id = await createPlaylist(t('playlistDefaultName', { n: playlists.length + 1 }));
+    if (id != null) navigation.navigate('PlaylistDetail', { playlistId: id });
+  };
+
+  const handleDelete = (pl: Playlist) => {
+    Alert.alert(t('deletePlaylistTitle'), t('deletePlaylistMsg'), [
+      { text: t('cancel'), style: 'cancel' },
+      { text: t('delete'), style: 'destructive', onPress: () => deletePlaylist(pl.id) },
+    ]);
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60 }}>
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <NavButton icon={<BackIcon />} onPress={() => navigation.goBack()} />
-        <Text style={styles.headerCount}>{t('savedCount', { n: items.length })}</Text>
+        <Text style={styles.headerCount}>{t('savedCount', { n: playlists.length })}</Text>
       </View>
 
       {/* Hero */}
       <View style={styles.heroWrap}>
         <View style={styles.hero}>
-          <LinearGradient
-            colors={['#FCD34D', '#F59E0B', '#B45309']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
+          <LinearGradient colors={['#FCD34D', '#F59E0B', '#B45309']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
           <View style={styles.heroRow}>
-            <View style={styles.starCircle}>
-              <StarFillIcon size={22} color="#FAFAF7" />
-            </View>
+            <View style={styles.starCircle}><StarFillIcon size={22} color="#FAFAF7" /></View>
             <View>
               <Text style={styles.heroLabel}>{t('yourCollection')}</Text>
-              <Text style={styles.heroTitle}>{t('favorites')}</Text>
+              <Text style={styles.heroTitle}>{t('playlists')}</Text>
             </View>
           </View>
-          <Text style={styles.heroDesc}>{t('favHeroDesc2')}</Text>
+          <Text style={styles.heroDesc}>{t('emptyPlaylistsDesc')}</Text>
         </View>
       </View>
 
-      {/* Rotation entry */}
-      <Pressable style={styles.rotationCard} onPress={() => navigation.navigate('RotationSettings')}>
-        <View style={[styles.rotationDot, rotationMode !== 'off' && styles.rotationDotOn]} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.rotationTitle}>{t('rotation')}</Text>
-          <Text style={styles.rotationSub}>
-            {rotationMode === 'off'
-              ? t('rotationOffDesc')
-              : `${rotationLabel} · ${t('rotationOnDesc', { t: formatInterval(rotationIntervalSec) })}`}
-          </Text>
-        </View>
-        <ChevronIcon size={16} color="rgba(250,250,247,0.4)" />
+      {/* Create */}
+      <Pressable style={styles.createBtn} onPress={handleCreate}>
+        <PlusIcon size={18} color={colors.text} />
+        <Text style={styles.createText}>{t('newPlaylist')}</Text>
       </Pressable>
 
-      {items.length === 0 ? (
+      {playlists.length === 0 ? (
         <View style={styles.empty}>
-          <View style={styles.emptyCircle}>
-            <StarOutlineIcon size={32} color="#FCD34D" />
-          </View>
-          <Text style={styles.emptyTitle}>{t('noFavoritesTitle')}</Text>
-          <Text style={styles.emptyDesc}>{t('noFavoritesDesc2')}</Text>
-          <Pressable onPress={() => navigation.navigate('Marketplace')} style={styles.browseBtn}>
-            <MarketIcon size={18} color={colors.text} />
-            <Text style={styles.browseText}>{t('browseMarketplace')}</Text>
-          </Pressable>
+          <Text style={styles.emptyTitle}>{t('emptyPlaylistsTitle')}</Text>
+          <Text style={styles.emptyDesc}>{connected ? t('emptyPlaylistsDesc') : t('connectToManage')}</Text>
         </View>
       ) : (
         <View style={styles.list}>
-          {items.map((d) => (
-            <FavoriteRow
-              key={d.v.key}
-              d={d}
-              active={resolveActive(d, programs, activeId)}
-              onTap={() => applyVariant(d.v)}
-              onDelete={() => removeVariant(d.v.key)}
-            />
-          ))}
-          <Text style={styles.hint}>{t('swipeToDelete')}</Text>
+          {playlists.map((pl) => {
+            const cd = coverFor(pl);
+            const isPlaying = playingId === pl.id;
+            return (
+              <Swipeable
+                key={pl.id}
+                renderRightActions={() => (
+                  <View style={styles.deleteAction}><TrashIcon size={18} color="#FAFAF7" /></View>
+                )}
+                rightThreshold={40}
+                onSwipeableOpen={() => handleDelete(pl)}
+              >
+                <Pressable style={styles.row} onPress={() => navigation.navigate('PlaylistDetail', { playlistId: pl.id })}>
+                  <Cover cover={cd.cover} pulse={cd.pulse} size={48} radius={12} animated={isPlaying} />
+                  <View style={styles.rowInfo}>
+                    <Text style={[styles.rowName, isPlaying && { color: cd.pulse }]} numberOfLines={1}>{pl.name}</Text>
+                    <Text style={styles.rowMeta} numberOfLines={1}>{t('positionsCount', { n: pl.positions.length })}</Text>
+                  </View>
+                  <Pressable
+                    hitSlop={10}
+                    style={[styles.playBtn, isPlaying && { backgroundColor: cd.pulse }]}
+                    onPress={() => (isPlaying ? stop() : play(pl.id))}
+                  >
+                    {isPlaying ? <PauseIcon size={16} color="#0A0A08" /> : <PlayIcon size={16} color={colors.text} />}
+                  </Pressable>
+                  <ChevronIcon size={16} color="rgba(250,250,247,0.4)" />
+                </Pressable>
+              </Swipeable>
+            );
+          })}
+          <Text style={styles.hint}>{t('reorderHint')}</Text>
         </View>
       )}
     </ScrollView>
   );
 }
 
-function resolveActive(d: FavoriteDisplay, programs: { id: number; slug?: string }[], activeId: number): boolean {
-  const p = d.v.slug ? programs.find((x) => x.slug === d.v.slug) : programs.find((x) => x.id === d.v.programId);
-  return (p ? p.id : d.v.programId) === activeId;
-}
-
-function FavoriteRow({ d, active, onTap, onDelete }: {
-  d: FavoriteDisplay; active: boolean; onTap: () => void; onDelete: () => void;
-}) {
-  return (
-    <Swipeable
-      renderRightActions={() => (
-        <View style={styles.deleteAction}>
-          <TrashIcon size={18} color="#FAFAF7" />
-        </View>
-      )}
-      rightThreshold={40}
-      onSwipeableOpen={onDelete}
-    >
-      <Pressable style={styles.row} onPress={onTap}>
-        <Cover cover={d.cover} pulse={d.pulse} size={48} radius={12} animated={active} />
-        <View style={styles.rowInfo}>
-          <Text style={[styles.rowName, active && { color: d.pulse }]} numberOfLines={1}>{d.label}</Text>
-          <Text style={styles.rowMeta} numberOfLines={1}>
-            {d.v.params.length > 0 ? `${d.v.params.length} params` : ''}
-          </Text>
-        </View>
-      </Pressable>
-    </Swipeable>
-  );
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    paddingHorizontal: 20, paddingBottom: 12,
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-  },
+  header: { paddingHorizontal: 20, paddingBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerCount: { fontFamily: fonts.mono, fontSize: 12, color: 'rgba(250,250,247,0.5)' },
   heroWrap: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16 },
   hero: { borderRadius: 28, overflow: 'hidden', padding: 28, paddingHorizontal: 22, minHeight: 140 },
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  starCircle: {
-    width: 56, height: 56, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.25)',
-    alignItems: 'center', justifyContent: 'center',
-  },
+  starCircle: { width: 56, height: 56, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.25)', alignItems: 'center', justifyContent: 'center' },
   heroLabel: { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1, color: 'rgba(0,0,0,0.65)', textTransform: 'uppercase' },
   heroTitle: { fontSize: 30, fontWeight: '800', color: '#0A0A08', letterSpacing: -0.7, marginTop: 2 },
   heroDesc: { fontSize: 13, color: 'rgba(0,0,0,0.7)', marginTop: 14, lineHeight: 19 },
-  rotationCard: {
-    marginHorizontal: 20, marginBottom: 18, padding: 16, borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.04)', borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.06)',
-    flexDirection: 'row', alignItems: 'center', gap: 14,
+  createBtn: {
+    marginHorizontal: 20, marginBottom: 16, paddingVertical: 13, borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.06)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
-  rotationDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(250,250,247,0.25)' },
-  rotationDotOn: { backgroundColor: colors.green },
-  rotationTitle: { fontSize: 15, fontWeight: '700', color: colors.text, letterSpacing: -0.2 },
-  rotationSub: { fontSize: 12, color: 'rgba(250,250,247,0.5)', marginTop: 2 },
-  empty: { paddingHorizontal: 24, paddingTop: 30, alignItems: 'center' },
-  emptyCircle: {
-    width: 72, height: 72, borderRadius: 36, backgroundColor: 'rgba(252,211,77,0.1)',
-    alignItems: 'center', justifyContent: 'center', marginBottom: 16,
-  },
+  createText: { fontSize: 14, fontWeight: '700', color: colors.text },
+  empty: { paddingHorizontal: 24, paddingTop: 10, alignItems: 'center' },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 6 },
-  emptyDesc: { fontSize: 13, color: 'rgba(250,250,247,0.5)', lineHeight: 19, textAlign: 'center', marginBottom: 18 },
-  browseBtn: {
-    backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 999, paddingVertical: 11, paddingHorizontal: 18,
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-  },
-  browseText: { fontSize: 13, fontWeight: '600', color: colors.text },
+  emptyDesc: { fontSize: 13, color: 'rgba(250,250,247,0.5)', lineHeight: 19, textAlign: 'center' },
   list: { paddingHorizontal: 12 },
-  row: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 10, paddingHorizontal: 8, backgroundColor: colors.bg,
-  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 8, backgroundColor: colors.bg },
   rowInfo: { flex: 1, minWidth: 0 },
   rowName: { fontSize: 16, fontWeight: '700', color: colors.text, letterSpacing: -0.3 },
   rowMeta: { fontFamily: fonts.mono, fontSize: 11, color: 'rgba(250,250,247,0.45)', marginTop: 2 },
-  deleteAction: {
-    width: 72, backgroundColor: '#DC2626', alignItems: 'center', justifyContent: 'center',
-    marginVertical: 4, borderRadius: 12,
-  },
-  hint: {
-    fontFamily: fonts.mono, fontSize: 11, color: 'rgba(250,250,247,0.35)',
-    textAlign: 'center', marginTop: 14,
-  },
+  playBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
+  deleteAction: { width: 72, backgroundColor: '#DC2626', alignItems: 'center', justifyContent: 'center', marginVertical: 4, borderRadius: 12 },
+  hint: { fontFamily: fonts.mono, fontSize: 11, color: 'rgba(250,250,247,0.35)', textAlign: 'center', marginTop: 14 },
 });

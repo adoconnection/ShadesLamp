@@ -136,6 +136,11 @@ export async function connectAndLoadDevice(
 
   setConnectionState('connected');
 
+  // Load playlists stored on the lamp (best-effort; don't block connection).
+  import('../store/usePlaylistStore')
+    .then((m) => m.usePlaylistStore.getState().load())
+    .catch(() => {});
+
   // Persist for auto-reconnect
   await saveLastDevice(deviceId);
 

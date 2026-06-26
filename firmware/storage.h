@@ -77,6 +77,16 @@ namespace Storage {
     bool saveFile(const char* path, const char* data);
     String loadFile(const char* path);
 
+    // Write raw bytes to an arbitrary path, creating parent directories first.
+    bool writeFileEnsure(const char* path, const uint8_t* data, size_t len);
+
+    // Append raw bytes to a path (creates parents/file). Used to write files
+    // larger than one BLE packet in successive chunks.
+    bool appendFileEnsure(const char* path, const uint8_t* data, size_t len);
+
+    // Delete a file, or recursively delete a directory and all its contents.
+    bool deletePath(const char* path);
+
 } // namespace Storage
 
 #endif // STORAGE_H
