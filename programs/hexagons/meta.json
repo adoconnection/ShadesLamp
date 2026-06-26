@@ -1,17 +1,51 @@
 {
   "guid": "a1f8091a-2132-4435-a6b7-c8d9e0f1324d",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Hexagons",
   "desc": "Hexagonal grid patterns",
   "author": "Shades",
   "category": "Streams",
-  "cover": {"from": "#1A1A2E", "to": "#F97316", "via": "#9333EA", "angle": 125},
+  "cover": {
+    "from": "#1A1A2E",
+    "to": "#F97316",
+    "via": "#9333EA",
+    "angle": 125
+  },
   "pulse": "#F97316",
-  "tags": ["hexagon", "grid", "geometric", "pattern"],
+  "tags": [
+    "hexagon",
+    "grid",
+    "geometric",
+    "pattern"
+  ],
   "i18n": {
     "ru": {
       "name": "Гексагоны",
-      "desc": "Узоры из шестиугольной сетки"
+      "desc": "Узоры из шестиугольной сетки",
+      "params": {
+        "0": {
+          "name": "Скорость",
+          "desc": "Скорость распространения волны"
+        },
+        "1": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        },
+        "2": {
+          "name": "Палитра",
+          "desc": "Цветовая палитра",
+          "options": [
+            "Радуга",
+            "Огонь",
+            "Океан",
+            "Лес"
+          ]
+        },
+        "3": {
+          "name": "Масштаб",
+          "desc": "Размер ячейки шестиугольника"
+        }
+      }
     }
   }
 }

@@ -47,49 +47,21 @@ static float random_float(void) {
     return (float)(rng_next() & 0xFFFF) / 65536.0f;
 }
 
-/* ---- HSV to RGB (hue 0-255, sat 0-255, val 0-255) ---- */
+/* ---- HSV to RGB (native host primitive) ---- */
 static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
-    if (s == 0) {
-        *r = *g = *b = v;
-        return;
-    }
-    h = h & 0xFF;
-    int region = h / 43;
-    int remainder = (h - region * 43) * 6;
-    int p = (v * (255 - s)) >> 8;
-    int q = (v * (255 - ((s * remainder) >> 8))) >> 8;
-    int t = (v * (255 - ((s * (255 - remainder)) >> 8))) >> 8;
-    switch (region) {
-        case 0:  *r = v; *g = t; *b = p; break;
-        case 1:  *r = q; *g = v; *b = p; break;
-        case 2:  *r = p; *g = v; *b = t; break;
-        case 3:  *r = p; *g = q; *b = v; break;
-        case 4:  *r = t; *g = p; *b = v; break;
-        default: *r = v; *g = p; *b = q; break;
-    }
+    int c = m_hsv(h, s, v);
+    *r = (c >> 16) & 255;
+    *g = (c >> 8) & 255;
+    *b = c & 255;
 }
 
-/* ---- Sin lookup table (16 entries for 0..2*PI) ---- */
-static const float SIN_TABLE[16] = {
-     0.0000f,  0.3827f,  0.7071f,  0.9239f,
-     1.0000f,  0.9239f,  0.7071f,  0.3827f,
-     0.0000f, -0.3827f, -0.7071f, -0.9239f,
-    -1.0000f, -0.9239f, -0.7071f, -0.3827f
-};
-
-/* angle: 0..15 maps to 0..2*PI, with linear interpolation for fractional part */
+/* ---- Sin/cos (native): angle 0..16 maps to 0..2*PI ---- */
 static float fast_sin(float angle_16) {
-    /* Normalize to 0..16 range */
-    while (angle_16 < 0.0f)  angle_16 += 16.0f;
-    while (angle_16 >= 16.0f) angle_16 -= 16.0f;
-    int idx = (int)angle_16;
-    float frac = angle_16 - (float)idx;
-    int next = (idx + 1) & 15;
-    return SIN_TABLE[idx] + frac * (SIN_TABLE[next] - SIN_TABLE[idx]);
+    return m_sin(angle_16 * (6.28318530f / 16.0f));
 }
 
 static float fast_cos(float angle_16) {
-    return fast_sin(angle_16 + 4.0f); /* cos = sin shifted by PI/2 = 4 entries */
+    return m_cos(angle_16 * (6.28318530f / 16.0f));
 }
 
 /* ---- Constants ---- */

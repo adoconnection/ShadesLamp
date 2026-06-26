@@ -35,31 +35,15 @@ int get_meta_len(void) {
  * Outputs r, g, b in 0-255 via pointers.
  */
 static void hsv_to_rgb(int hue, int sat, int val, int *r, int *g, int *b) {
-    if (sat == 0) {
-        *r = val; *g = val; *b = val;
-        return;
-    }
-
     /* Ensure hue is in 0-359 */
     while (hue < 0)   hue += 360;
     while (hue >= 360) hue -= 360;
 
-    int sector = hue / 60;          /* 0..5 */
-    int frac   = hue - sector * 60; /* remainder 0..59 */
-
-    /* Pre-compute common terms (all in 0-255 range) */
-    int p = (val * (255 - sat)) / 255;
-    int q = (val * (255 - (sat * frac) / 60)) / 255;
-    int t = (val * (255 - (sat * (60 - frac)) / 60)) / 255;
-
-    switch (sector) {
-        case 0:  *r = val; *g = t;   *b = p;   break;
-        case 1:  *r = q;   *g = val; *b = p;   break;
-        case 2:  *r = p;   *g = val; *b = t;   break;
-        case 3:  *r = p;   *g = q;   *b = val; break;
-        case 4:  *r = t;   *g = p;   *b = val; break;
-        default: *r = val; *g = p;   *b = q;   break; /* sector 5 */
-    }
+    /* m_hsv takes hue 0-255, so scale from degrees */
+    int c = m_hsv((hue * 255) / 360 & 255, sat, val);
+    *r = (c >> 16) & 255;
+    *g = (c >> 8) & 255;
+    *b = c & 255;
 }
 
 EXPORT(init)

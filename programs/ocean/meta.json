@@ -1,17 +1,40 @@
 {
   "guid": "4b92a3b4-cbdc-4ed5-a6b7-c8d9e0f1dce7",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "name": "Ocean",
   "desc": "Deep ocean waves",
   "author": "Gyver",
   "category": "Streams",
-  "cover": {"from": "#0C4A6E", "to": "#06B6D4", "via": "#0369A1", "angle": 210},
+  "cover": {
+    "from": "#0C4A6E",
+    "to": "#06B6D4",
+    "via": "#0369A1",
+    "angle": 210
+  },
   "pulse": "#06B6D4",
-  "tags": ["nature", "water", "calm"],
+  "tags": [
+    "nature",
+    "water",
+    "calm"
+  ],
   "i18n": {
     "ru": {
       "name": "Океан",
-      "desc": "Глубокие океанские волны"
+      "desc": "Глубокие океанские волны",
+      "params": {
+        "0": {
+          "name": "Скорость",
+          "desc": "Скорость волн"
+        },
+        "1": {
+          "name": "Масштаб",
+          "desc": "Масштаб волн"
+        },
+        "2": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        }
+      }
     }
   }
 }

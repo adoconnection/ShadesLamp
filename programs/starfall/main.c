@@ -46,24 +46,12 @@ static int random_range(int lo, int hi) {
     return lo + (int)(rng_next() % (uint32_t)(hi - lo));
 }
 
-/* ---- HSV to RGB ---- */
+/* ---- HSV to RGB (native host primitive) ---- */
 static void hsv2rgb(int hue, int sat, int val, int *r, int *g, int *b) {
-    if (val == 0) { *r = *g = *b = 0; return; }
-    if (sat == 0) { *r = *g = *b = val; return; }
-    int h = hue & 0xFF;
-    int region = h / 43;
-    int frac = (h - region * 43) * 6;
-    int p = (val * (255 - sat)) >> 8;
-    int q = (val * (255 - ((sat * frac) >> 8))) >> 8;
-    int t = (val * (255 - ((sat * (255 - frac)) >> 8))) >> 8;
-    switch (region) {
-        case 0:  *r = val; *g = t;   *b = p;   break;
-        case 1:  *r = q;   *g = val; *b = p;   break;
-        case 2:  *r = p;   *g = val; *b = t;   break;
-        case 3:  *r = p;   *g = q;   *b = val; break;
-        case 4:  *r = t;   *g = p;   *b = val; break;
-        default: *r = val; *g = p;   *b = q;   break;
-    }
+    int s = sat < 0 ? 0 : (sat > 255 ? 255 : sat);
+    int v = val < 0 ? 0 : (val > 255 ? 255 : val);
+    int c = m_hsv(hue & 0xFF, s, v);
+    *r = (c >> 16) & 255; *g = (c >> 8) & 255; *b = c & 255;
 }
 
 /* ---- Buffers ---- */

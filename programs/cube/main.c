@@ -32,42 +32,11 @@ EXPORT(get_meta_len)
 int get_meta_len(void) { return sizeof(META) - 1; }
 
 /* ---- Math helpers ---- */
-#define PI       3.14159265f
-#define TWO_PI   6.28318530f
-#define HALF_PI  1.57079632f
-
-static float fsin(float x) {
-    while (x < 0.0f) x += TWO_PI;
-    while (x >= TWO_PI) x -= TWO_PI;
-    float sign = 1.0f;
-    if (x > PI) { x -= PI; sign = -1.0f; }
-    float num = 16.0f * x * (PI - x);
-    float den = 5.0f * PI * PI - 4.0f * x * (PI - x);
-    if (den == 0.0f) return 0.0f;
-    return sign * num / den;
-}
-
-static float fcos(float x) { return fsin(x + HALF_PI); }
-
 static int iabs(int x) { return x < 0 ? -x : x; }
 
 /* ---- HSV to RGB ---- */
 static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
-    h = h & 255;
-    if (s == 0) { *r = v; *g = v; *b = v; return; }
-    int region = h / 43;
-    int remainder = (h - region * 43) * 6;
-    int p = (v * (255 - s)) >> 8;
-    int q = (v * (255 - ((s * remainder) >> 8))) >> 8;
-    int t = (v * (255 - ((s * (255 - remainder)) >> 8))) >> 8;
-    switch (region) {
-        case 0:  *r = v; *g = t; *b = p; break;
-        case 1:  *r = q; *g = v; *b = p; break;
-        case 2:  *r = p; *g = v; *b = t; break;
-        case 3:  *r = p; *g = q; *b = v; break;
-        case 4:  *r = t; *g = p; *b = v; break;
-        default: *r = v; *g = p; *b = q; break;
-    }
+    int c = m_hsv(h & 255, s, v); *r = (c>>16)&255; *g = (c>>8)&255; *b = c&255;
 }
 
 /* ---- Framebuffer ---- */
@@ -214,9 +183,9 @@ void update(int tick_ms) {
     float angle_z = t * 0.5f;
 
     /* Precompute sin/cos for each rotation axis */
-    float sx = fsin(angle_x), cx = fcos(angle_x);
-    float sy = fsin(angle_y), cy = fcos(angle_y);
-    float sz = fsin(angle_z), cz = fcos(angle_z);
+    float sx = m_sin(angle_x), cx = m_cos(angle_x);
+    float sy = m_sin(angle_y), cy = m_cos(angle_y);
+    float sz = m_sin(angle_z), cz = m_cos(angle_z);
 
     /* Scale factor based on size param and screen dimensions */
     float min_dim = (float)(cur_w < cur_h ? cur_w : cur_h);

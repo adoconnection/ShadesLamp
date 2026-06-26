@@ -61,39 +61,15 @@ static int random_range(int lo, int hi) {
 }
 static float random_float(void) { return (float)(rng_next() & 0xFFFF) / 65536.0f; }
 
-/* ---- HSV to RGB (hue 0-255, sat 0-255, val 0-255) ---- */
+/* ---- HSV to RGB (hue 0-255, sat 0-255, val 0-255) — native ---- */
 static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
-    if (s == 0) { *r = *g = *b = v; return; }
-    h = h & 0xFF;
-    int region = h / 43;
-    int remainder = (h - region * 43) * 6;
-    int p = (v * (255 - s)) >> 8;
-    int q = (v * (255 - ((s * remainder) >> 8))) >> 8;
-    int t = (v * (255 - ((s * (255 - remainder)) >> 8))) >> 8;
-    switch (region) {
-        case 0:  *r = v; *g = t; *b = p; break;
-        case 1:  *r = q; *g = v; *b = p; break;
-        case 2:  *r = p; *g = v; *b = t; break;
-        case 3:  *r = p; *g = q; *b = v; break;
-        case 4:  *r = t; *g = p; *b = v; break;
-        default: *r = v; *g = p; *b = q; break;
-    }
+    int c = m_hsv(h & 0xFF, s, v);
+    *r = (c >> 16) & 255; *g = (c >> 8) & 255; *b = c & 255;
 }
 
-/* ---- Sin lookup (16 entries over 0..2*PI) ---- */
-static const float SIN_TABLE[16] = {
-     0.0000f,  0.3827f,  0.7071f,  0.9239f,
-     1.0000f,  0.9239f,  0.7071f,  0.3827f,
-     0.0000f, -0.3827f, -0.7071f, -0.9239f,
-    -1.0000f, -0.9239f, -0.7071f, -0.3827f
-};
-static float fast_sin(float a) {
-    while (a < 0.0f) a += 16.0f;
-    while (a >= 16.0f) a -= 16.0f;
-    int idx = (int)a; float frac = a - (float)idx;
-    return SIN_TABLE[idx] + frac * (SIN_TABLE[(idx + 1) & 15] - SIN_TABLE[idx]);
-}
-static float fast_cos(float a) { return fast_sin(a + 4.0f); }
+/* ---- Sin/cos (native); arg is in turns/16 (16 == 2*PI) ---- */
+static float fast_sin(float a) { return m_sin(a * (6.28318530f / 16.0f)); }
+static float fast_cos(float a) { return m_cos(a * (6.28318530f / 16.0f)); }
 
 /* max horizontal slant (vx/|vy|) for a fall angle in degrees = tan(angle) */
 static float angle_to_slant(int deg) {
@@ -303,7 +279,7 @@ void update(int tick_ms) {
     for (int i = 0; i < count; i++) {
         if (m_phase[i] != PHASE_FALLING) continue;
 
-        float spd = __builtin_sqrtf(m_vx[i]*m_vx[i] + m_vy[i]*m_vy[i]);
+        float spd = m_hypot(m_vx[i], m_vy[i]);
         float dx = 0.0f, dy = -1.0f;
         if (spd > 0.001f) { dx = m_vx[i] / spd; dy = m_vy[i] / spd; }
 
@@ -357,7 +333,7 @@ void update(int tick_ms) {
 
         /* tail: dim streak trailing behind the spark's motion */
         if (btail > 0) {
-            float spd = __builtin_sqrtf(p_vx[i]*p_vx[i] + p_vy[i]*p_vy[i]);
+            float spd = m_hypot(p_vx[i], p_vy[i]);
             if (spd > 0.001f) {
                 float dx = p_vx[i] / spd, dy = p_vy[i] / spd;
                 for (int t = btail; t >= 1; t--) {

@@ -1,17 +1,40 @@
 {
   "guid": "d42b3c4d-5465-4768-a9b0-c1d2e3f46570",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Lava",
   "desc": "Molten lava flow",
   "author": "Gyver",
   "category": "Fire",
-  "cover": {"from": "#7F1D1D", "to": "#FF6B35", "via": "#B91C1C", "angle": 190},
+  "cover": {
+    "from": "#7F1D1D",
+    "to": "#FF6B35",
+    "via": "#B91C1C",
+    "angle": 190
+  },
   "pulse": "#FF6B35",
-  "tags": ["fire", "warm", "flowing"],
+  "tags": [
+    "fire",
+    "warm",
+    "flowing"
+  ],
   "i18n": {
     "ru": {
       "name": "Лава",
-      "desc": "Поток расплавленной лавы"
+      "desc": "Поток расплавленной лавы",
+      "params": {
+        "0": {
+          "name": "Скорость",
+          "desc": "Скорость потока"
+        },
+        "1": {
+          "name": "Масштаб",
+          "desc": "Уровень увеличения шума"
+        },
+        "2": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        }
+      }
     }
   }
 }

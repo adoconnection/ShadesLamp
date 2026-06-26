@@ -1,17 +1,40 @@
 {
   "guid": "e53c4d5e-6576-4879-a0b1-c2d3e4f57681",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Lava Lamp",
   "desc": "Retro lava lamp blobs",
   "author": "Gunner47",
   "category": "Fire",
-  "cover": {"from": "#4C1D95", "to": "#F472B6", "via": "#7C3AED", "angle": 170},
+  "cover": {
+    "from": "#4C1D95",
+    "to": "#F472B6",
+    "via": "#7C3AED",
+    "angle": 170
+  },
   "pulse": "#F472B6",
-  "tags": ["retro", "blobs", "colorful"],
+  "tags": [
+    "retro",
+    "blobs",
+    "colorful"
+  ],
   "i18n": {
     "ru": {
       "name": "Лава-лампа",
-      "desc": "Ретро лава-лампа с пузырями"
+      "desc": "Ретро лава-лампа с пузырями",
+      "params": {
+        "0": {
+          "name": "Количество",
+          "desc": "Число капель лавы"
+        },
+        "1": {
+          "name": "Скорость",
+          "desc": "Скорость подъёма и падения"
+        },
+        "2": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        }
+      }
     }
   }
 }

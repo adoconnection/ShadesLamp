@@ -44,17 +44,8 @@ int get_meta_len(void) { return sizeof(META) - 1; }
 #define TWO_PI 6.28318530f
 #define PI     3.14159265f
 
-static float fsin(float x) {
-    while (x < 0.0f) x += TWO_PI;
-    while (x >= TWO_PI) x -= TWO_PI;
-    float sign = 1.0f;
-    if (x > PI) { x -= PI; sign = -1.0f; }
-    float num = 16.0f * x * (PI - x);
-    float den = 5.0f * PI * PI - 4.0f * x * (PI - x);
-    if (den == 0.0f) return 0.0f;
-    return sign * num / den;
-}
-static float fcos(float x) { return fsin(x + PI * 0.5f); }
+static float fsin(float x) { return m_sin(x); }
+static float fcos(float x) { return m_cos(x); }
 static float fabsf2(float x) { return x < 0.0f ? -x : x; }
 static float fracf(float x)  { return x - (float)((int)x); }
 static int   clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
@@ -120,7 +111,7 @@ static void scene_news(float u, float v, float t, int *r, int *g, int *b) {
     if (v < 0.10f) { *r = 175; *g = 30; *b = 30; }   /* top banner */
 
     float dx = u - 0.5f, dy = v - 0.34f;
-    float d  = __builtin_sqrtf(dx*dx + dy*dy);
+    float d  = m_hypot(dx, dy);
     if (d < 0.125f) { *r = 205; *g = 160; *b = 120; }      /* head (skin) */
     if (d < 0.135f && v < 0.30f) { *r = 60; *g = 42; *b = 30; } /* hair */
 
@@ -139,7 +130,7 @@ static void scene_news(float u, float v, float t, int *r, int *g, int *b) {
 
 static void scene_ad(float u, float v, float t, int *r, int *g, int *b) {
     float dx = u - 0.5f, dy = v - 0.5f;
-    float d  = __builtin_sqrtf(dx*dx + dy*dy);
+    float d  = m_hypot(dx, dy);
     int phase = ((int)(t / 0.45f)) & 1;          /* colour blink */
     int c1r,c1g,c1b, c2r,c2g,c2b;
     if (phase) { c1r=255;c1g=210;c1b=40; c2r=220;c2g=30;c2b=40; }
@@ -169,7 +160,7 @@ static float seg_dist(float px, float py, float ax, float ay, float bx, float by
     float tt = (l2 > 0.0f) ? ((px-ax)*dx + (py-ay)*dy) / l2 : 0.0f;
     if (tt < 0.0f) tt = 0.0f; if (tt > 1.0f) tt = 1.0f;
     float ex = px - (ax + tt*dx), ey = py - (ay + tt*dy);
-    return __builtin_sqrtf(ex*ex + ey*ey);
+    return m_hypot(ex, ey);
 }
 static void addseg(float ax, float ay, float bx, float by) {
     if (seg_n >= MAXSEG) return;

@@ -1,17 +1,53 @@
 {
   "guid": "3a8192a3-bacb-4dca-a1b2-c3d4e5f6cbd6",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Vortex",
   "desc": "Swirling vortex effect",
   "author": "Shades",
   "category": "Streams",
-  "cover": {"from": "#0C0A09", "to": "#7C3AED", "via": "#312E81", "angle": 190},
+  "cover": {
+    "from": "#0C0A09",
+    "to": "#7C3AED",
+    "via": "#312E81",
+    "angle": 190
+  },
   "pulse": "#7C3AED",
-  "tags": ["vortex", "swirl", "rotation", "hypnotic"],
+  "tags": [
+    "vortex",
+    "swirl",
+    "rotation",
+    "hypnotic"
+  ],
   "i18n": {
     "ru": {
       "name": "Вихрь",
-      "desc": "Эффект закручивающегося вихря"
+      "desc": "Эффект закручивающегося вихря",
+      "params": {
+        "0": {
+          "name": "Оттенок",
+          "desc": "Базовый цвет (160=синий)"
+        },
+        "1": {
+          "name": "Частицы",
+          "desc": "Количество частиц"
+        },
+        "2": {
+          "name": "Скорость",
+          "desc": "Скорость закручивания"
+        },
+        "3": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        },
+        "4": {
+          "name": "Направление",
+          "desc": "Направление спирали",
+          "options": [
+            "Внутрь",
+            "Наружу"
+          ]
+        }
+      }
     }
   }
 }

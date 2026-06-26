@@ -32,32 +32,20 @@ static uint32_t rng_next(void) {
 }
 static int rand_range(int lo, int hi) { if (lo >= hi) return lo; return lo + (int)(rng_next() % (uint32_t)(hi - lo)); }
 
-/* ---- HSV to RGB ---- */
+/* ---- HSV to RGB (native, hue 0..255) ---- */
 static void hsv2rgb(int hue, int sat, int val, int *r, int *g, int *b) {
-    if (val == 0) { *r = *g = *b = 0; return; }
-    if (sat == 0) { *r = *g = *b = val; return; }
-    int h = hue & 0xFF; int region = h / 43; int frac = (h - region * 43) * 6;
-    int p = (val * (255 - sat)) >> 8; int q = (val * (255 - ((sat * frac) >> 8))) >> 8;
-    int t = (val * (255 - ((sat * (255 - frac)) >> 8))) >> 8;
-    switch (region) {
-        case 0: *r=val;*g=t;*b=p;break; case 1: *r=q;*g=val;*b=p;break;
-        case 2: *r=p;*g=val;*b=t;break; case 3: *r=p;*g=q;*b=val;break;
-        case 4: *r=t;*g=p;*b=val;break; default: *r=val;*g=p;*b=q;break;
-    }
+    int c = m_hsv(hue & 0xFF, sat, val);
+    *r = (c >> 16) & 255;
+    *g = (c >> 8) & 255;
+    *b = c & 255;
 }
 
 /* ---- Math helpers ---- */
 #define TWO_PI 6.28318530f
 #define PI 3.14159265f
 #define HALF_PI 1.57079632f
-static float fsin(float x) {
-    while (x < 0.0f) x += TWO_PI; while (x >= TWO_PI) x -= TWO_PI;
-    float sign = 1.0f; if (x > PI) { x -= PI; sign = -1.0f; }
-    float num = 16.0f * x * (PI - x);
-    float den = 5.0f * PI * PI - 4.0f * x * (PI - x);
-    if (den == 0.0f) return 0.0f; return sign * num / den;
-}
-static float fcos(float x) { return fsin(x + HALF_PI); }
+static float fsin(float x) { return m_sin(x); }
+static float fcos(float x) { return m_cos(x); }
 
 static float fabs_f(float x) { return x < 0.0f ? -x : x; }
 

@@ -32,37 +32,17 @@ static uint32_t rng_next(void) {
 }
 static int rand_range(int lo, int hi) { if (lo >= hi) return lo; return lo + (int)(rng_next() % (uint32_t)(hi - lo)); }
 
-/* ---- HSV to RGB ---- */
+/* ---- HSV to RGB (native host primitive) ---- */
 static void hsv2rgb(int hue, int sat, int val, int *r, int *g, int *b) {
-    if (val == 0) { *r = *g = *b = 0; return; }
-    if (sat == 0) { *r = *g = *b = val; return; }
-    int h = hue & 0xFF; int region = h / 43; int frac = (h - region * 43) * 6;
-    int p = (val * (255 - sat)) >> 8; int q = (val * (255 - ((sat * frac) >> 8))) >> 8;
-    int t = (val * (255 - ((sat * (255 - frac)) >> 8))) >> 8;
-    switch (region) {
-        case 0: *r=val;*g=t;*b=p;break; case 1: *r=q;*g=val;*b=p;break;
-        case 2: *r=p;*g=val;*b=t;break; case 3: *r=p;*g=q;*b=val;break;
-        case 4: *r=t;*g=p;*b=val;break; default: *r=val;*g=p;*b=q;break;
-    }
+    int s = sat < 0 ? 0 : (sat > 255 ? 255 : sat);
+    int v = val < 0 ? 0 : (val > 255 ? 255 : val);
+    int c = m_hsv(hue & 0xFF, s, v);
+    *r = (c >> 16) & 255; *g = (c >> 8) & 255; *b = c & 255;
 }
 
-/* ---- Math helpers ---- */
-#define TWO_PI 6.28318530f
-#define PI 3.14159265f
-#define HALF_PI 1.57079632f
-static float fsin(float x) {
-    while (x < 0.0f) x += TWO_PI; while (x >= TWO_PI) x -= TWO_PI;
-    float sign = 1.0f; if (x > PI) { x -= PI; sign = -1.0f; }
-    float num = 16.0f * x * (PI - x);
-    float den = 5.0f * PI * PI - 4.0f * x * (PI - x);
-    if (den == 0.0f) return 0.0f; return sign * num / den;
-}
-static float fcos(float x) { return fsin(x + HALF_PI); }
-
-static float fsqrt(float x) {
-    if (x <= 0.0f) return 0.0f;
-    float g = x * 0.5f; g = 0.5f*(g+x/g); g = 0.5f*(g+x/g); g = 0.5f*(g+x/g); return g;
-}
+/* ---- Math helpers (native host primitives) ---- */
+static float fsin(float x) { return m_sin(x); }
+static float fcos(float x) { return m_cos(x); }
 
 /* ---- Framebuffer ---- */
 #define MAX_W 64
@@ -143,7 +123,7 @@ void init(void) {
     for (int i = 0; i < MAX_STARS; i++) {
         spawn_star(i);
         /* Spread initial distances so they don't all start clumped */
-        float max_dist = fsqrt(cx * cx + cy * cy);
+        float max_dist = m_hypot(cx, cy);
         star_dist[i] = (float)rand_range(5, (int)(max_dist * 10.0f)) / 10.0f;
     }
 }
@@ -177,7 +157,7 @@ void update(int tick_ms) {
     float spd = (float)speed / 30.0f;  /* normalize: 60 -> 2.0 */
 
     /* Maximum distance a star can be from center before respawning */
-    float max_dist = fsqrt(cx * cx + cy * cy) + 2.0f;
+    float max_dist = m_hypot(cx, cy) + 2.0f;
 
     /* ---- Fade framebuffer for trail effect ---- */
     /* Trail param controls fade speed: higher trail = slower fade = longer streaks */
@@ -232,7 +212,7 @@ void update(int tick_ms) {
         /* Direction back toward center */
         float dx = cx - sx;
         float dy = cy - sy;
-        float len = fsqrt(dx * dx + dy * dy);
+        float len = m_hypot(dx, dy);
         if (len < 0.001f) len = 0.001f;
         float ndx = dx / len;
         float ndy = dy / len;

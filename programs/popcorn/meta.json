@@ -1,17 +1,40 @@
 {
   "guid": "7ec5d6e7-fe0f-4108-a9b0-c1d2e3f40f1a",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Popcorn",
   "desc": "Popping kernels with gravity",
   "author": "Gunner47",
   "category": "Particles",
-  "cover": {"from": "#292524", "to": "#FDE68A", "via": "#78350F", "angle": 175},
+  "cover": {
+    "from": "#292524",
+    "to": "#FDE68A",
+    "via": "#78350F",
+    "angle": 175
+  },
   "pulse": "#FDE68A",
-  "tags": ["popcorn", "gravity", "bounce"],
+  "tags": [
+    "popcorn",
+    "gravity",
+    "bounce"
+  ],
   "i18n": {
     "ru": {
       "name": "Попкорн",
-      "desc": "Лопающиеся зёрна с гравитацией"
+      "desc": "Лопающиеся зёрна с гравитацией",
+      "params": {
+        "0": {
+          "name": "Количество",
+          "desc": "Количество частиц попкорна"
+        },
+        "1": {
+          "name": "Гравитация",
+          "desc": "Сила гравитации (больше = быстрее падение)"
+        },
+        "2": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        }
+      }
     }
   }
 }

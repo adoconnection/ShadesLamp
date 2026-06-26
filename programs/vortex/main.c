@@ -46,46 +46,16 @@ static uint32_t rng_next(void) {
 #define PI       3.14159265f
 #define HALF_PI  1.57079632f
 
-static float fsin(float x) {
-    while (x < 0.0f) x += TWO_PI;
-    while (x >= TWO_PI) x -= TWO_PI;
-    float sign = 1.0f;
-    if (x > PI) { x -= PI; sign = -1.0f; }
-    float num = 16.0f * x * (PI - x);
-    float den = 5.0f * PI * PI - 4.0f * x * (PI - x);
-    if (den == 0.0f) return 0.0f;
-    return sign * num / den;
-}
+static float fsin(float x) { return m_sin(x); }
 
-static float fcos(float x) { return fsin(x + HALF_PI); }
+static float fcos(float x) { return m_cos(x); }
 
-static float fsqrt(float x) {
-    if (x <= 0.0f) return 0.0f;
-    float guess = x * 0.5f;
-    guess = 0.5f * (guess + x / guess);
-    guess = 0.5f * (guess + x / guess);
-    guess = 0.5f * (guess + x / guess);
-    return guess;
-}
-
-/* ---- HSV to RGB ---- */
+/* ---- HSV to RGB (native host primitive) ---- */
 static void hsv2rgb(int hue, int sat, int val, int *r, int *g, int *b) {
-    if (val == 0) { *r = *g = *b = 0; return; }
-    if (sat == 0) { *r = *g = *b = val; return; }
-    int h = hue & 0xFF;
-    int region = h / 43;
-    int frac = (h - region * 43) * 6;
-    int p = (val * (255 - sat)) >> 8;
-    int q = (val * (255 - ((sat * frac) >> 8))) >> 8;
-    int t = (val * (255 - ((sat * (255 - frac)) >> 8))) >> 8;
-    switch (region) {
-        case 0:  *r = val; *g = t;   *b = p;   break;
-        case 1:  *r = q;   *g = val; *b = p;   break;
-        case 2:  *r = p;   *g = val; *b = t;   break;
-        case 3:  *r = p;   *g = q;   *b = val; break;
-        case 4:  *r = t;   *g = p;   *b = val; break;
-        default: *r = val; *g = p;   *b = q;   break;
-    }
+    int s = sat < 0 ? 0 : (sat > 255 ? 255 : sat);
+    int v = val < 0 ? 0 : (val > 255 ? 255 : val);
+    int c = m_hsv(hue & 0xFF, s, v);
+    *r = (c >> 16) & 255; *g = (c >> 8) & 255; *b = c & 255;
 }
 
 /* ---- Framebuffer (HSV) ---- */
@@ -181,7 +151,7 @@ void init(void) {
 
     float cx = (float)cur_w / 2.0f;
     float cy = (float)cur_h / 2.0f;
-    float max_radius = fsqrt(cx * cx + cy * cy);
+    float max_radius = m_hypot(cx, cy);
 
     prev_tick = 0;
 
@@ -215,7 +185,7 @@ void update(int tick_ms) {
 
     float cx = (float)cur_w / 2.0f;
     float cy = (float)cur_h / 2.0f;
-    float max_radius = fsqrt(cx * cx + cy * cy);
+    float max_radius = m_hypot(cx, cy);
 
     int32_t delta_ms = tick_ms - prev_tick;
     if (delta_ms <= 0 || delta_ms > 200) delta_ms = 33;

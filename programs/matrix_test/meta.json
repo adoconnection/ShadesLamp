@@ -1,17 +1,36 @@
 {
   "guid": "075e6f70-8798-4a91-a2b3-c4d5e6f798a3",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Matrix Test",
   "desc": "Matrix LED test pattern",
   "author": "Shades",
   "category": "Effects",
-  "cover": {"from": "#1F2937", "to": "#9CA3AF", "via": "#4B5563", "angle": 135},
+  "cover": {
+    "from": "#1F2937",
+    "to": "#9CA3AF",
+    "via": "#4B5563",
+    "angle": 135
+  },
   "pulse": "#9CA3AF",
-  "tags": ["test", "diagnostic", "pattern"],
+  "tags": [
+    "test",
+    "diagnostic",
+    "pattern"
+  ],
   "i18n": {
     "ru": {
       "name": "Тест матрицы",
-      "desc": "Тестовый паттерн для LED-матрицы"
+      "desc": "Тестовый паттерн для LED-матрицы",
+      "params": {
+        "0": {
+          "name": "Скорость",
+          "desc": "Скорость анимации"
+        },
+        "1": {
+          "name": "Яркость",
+          "desc": "Яркость светодиодов"
+        }
+      }
     }
   }
 }

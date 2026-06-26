@@ -1,17 +1,44 @@
 {
   "guid": "b2091a2b-3243-4546-a7b8-c9d0e1f2435e",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "name": "Jellyfish",
   "desc": "Floating jellyfish drifting gracefully",
   "author": "Shades",
   "category": "Streams",
-  "cover": {"from": "#1E1B4B", "to": "#C084FC", "via": "#5B21B6", "angle": 195},
+  "cover": {
+    "from": "#1E1B4B",
+    "to": "#C084FC",
+    "via": "#5B21B6",
+    "angle": 195
+  },
   "pulse": "#C084FC",
-  "tags": ["organic", "floating", "calm"],
+  "tags": [
+    "organic",
+    "floating",
+    "calm"
+  ],
   "i18n": {
     "ru": {
       "name": "Медуза",
-      "desc": "Парящие медузы в глубине"
+      "desc": "Парящие медузы в глубине",
+      "params": {
+        "0": {
+          "name": "Оттенок",
+          "desc": "Базовый оттенок цвета (180=бирюзовый)"
+        },
+        "1": {
+          "name": "Количество",
+          "desc": "Число медуз"
+        },
+        "2": {
+          "name": "Скорость",
+          "desc": "Скорость всплытия"
+        },
+        "3": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        }
+      }
     }
   }
 }

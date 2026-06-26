@@ -1,17 +1,40 @@
 {
   "guid": "8fd6e7f8-0f10-4219-a0b1-c2d3e4f5102b",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Pulse",
   "desc": "Radial pulse expanding outward",
   "author": "Gunner47",
   "category": "Ambient",
-  "cover": {"from": "#1E1B4B", "to": "#818CF8", "via": "#4338CA", "angle": 160},
+  "cover": {
+    "from": "#1E1B4B",
+    "to": "#818CF8",
+    "via": "#4338CA",
+    "angle": 160
+  },
   "pulse": "#818CF8",
-  "tags": ["pulse", "radial", "expanding"],
+  "tags": [
+    "pulse",
+    "radial",
+    "expanding"
+  ],
   "i18n": {
     "ru": {
       "name": "Пульс",
-      "desc": "Радиальный пульс, расширяющийся наружу"
+      "desc": "Радиальный пульс, расширяющийся наружу",
+      "params": {
+        "0": {
+          "name": "Скорость",
+          "desc": "Скорость расширения и частота появления"
+        },
+        "1": {
+          "name": "Оттенок",
+          "desc": "Базовый оттенок (0 = радужный цикл)"
+        },
+        "2": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        }
+      }
     }
   }
 }

@@ -1,17 +1,40 @@
 {
   "guid": "07b8c9d0-e1f2-4a3b-4c5d-6e7f8091a2b3",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Comet",
   "desc": "Glowing comet tail streaking across the display",
   "author": "Gunner47",
   "category": "Particles",
-  "cover": {"from": "#1F2937", "to": "#FBBF24", "via": "#D97706", "angle": 130},
+  "cover": {
+    "from": "#1F2937",
+    "to": "#FBBF24",
+    "via": "#D97706",
+    "angle": 130
+  },
   "pulse": "#FBBF24",
-  "tags": ["comet", "tail", "streak"],
+  "tags": [
+    "comet",
+    "tail",
+    "streak"
+  ],
   "i18n": {
     "ru": {
       "name": "Комета",
-      "desc": "Светящийся хвост кометы"
+      "desc": "Светящийся хвост кометы",
+      "params": {
+        "0": {
+          "name": "Скорость",
+          "desc": "Скорость движения комет"
+        },
+        "1": {
+          "name": "Хвост",
+          "desc": "Длина затухающего хвоста"
+        },
+        "2": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        }
+      }
     }
   }
 }

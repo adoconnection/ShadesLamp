@@ -1,17 +1,52 @@
 {
   "guid": "c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "name": "Breathing",
   "desc": "Lifelike breathing or a heartbeat pulse",
   "author": "Shades",
   "category": "Ambient",
-  "cover": {"from": "#1a1a2e", "to": "#4a00e0", "via": "#3f37c9", "angle": 180},
+  "cover": {
+    "from": "#1a1a2e",
+    "to": "#4a00e0",
+    "via": "#3f37c9",
+    "angle": 180
+  },
   "pulse": "#4a00e0",
-  "tags": ["calm", "minimal", "pulsing"],
+  "tags": [
+    "calm",
+    "minimal",
+    "pulsing"
+  ],
   "i18n": {
     "ru": {
       "name": "Дыхание",
-      "desc": "Реалистичное дыхание или биение сердца"
+      "desc": "Реалистичное дыхание или биение сердца",
+      "params": {
+        "0": {
+          "name": "Оттенок",
+          "desc": "Оттенок цвета (140 — голубой)"
+        },
+        "1": {
+          "name": "Насыщенность",
+          "desc": "Насыщенность цвета (0 — белая пульсация)"
+        },
+        "2": {
+          "name": "Скорость",
+          "desc": "Частота дыхания или пульса"
+        },
+        "3": {
+          "name": "Макс. яркость",
+          "desc": "Пиковая яркость"
+        },
+        "4": {
+          "name": "Режим",
+          "desc": "Ритм дыхания или биение сердца",
+          "options": [
+            "Дыхание",
+            "Сердцебиение"
+          ]
+        }
+      }
     }
   }
 }

@@ -1,17 +1,40 @@
 {
   "guid": "7ec5d6e7-f809-4102-a3b4-c5d6e7f8091a",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Flame",
   "desc": "Realistic fire simulation",
   "author": "Gyver",
   "category": "Fire",
-  "cover": {"from": "#7F1D1D", "to": "#F59E0B", "via": "#DC2626", "angle": 175},
+  "cover": {
+    "from": "#7F1D1D",
+    "to": "#F59E0B",
+    "via": "#DC2626",
+    "angle": 175
+  },
   "pulse": "#F59E0B",
-  "tags": ["fire", "warm", "dynamic"],
+  "tags": [
+    "fire",
+    "warm",
+    "dynamic"
+  ],
   "i18n": {
     "ru": {
       "name": "Пламя",
-      "desc": "Реалистичная симуляция огня"
+      "desc": "Реалистичная симуляция огня",
+      "params": {
+        "0": {
+          "name": "Охлаждение",
+          "desc": "Насколько остывает воздух при подъёме (меньше = выше пламя)"
+        },
+        "1": {
+          "name": "Искры",
+          "desc": "Шанс появления новых искр (больше = бушующий огонь)"
+        },
+        "2": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        }
+      }
     }
   }
 }

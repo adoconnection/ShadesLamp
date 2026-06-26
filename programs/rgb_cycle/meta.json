@@ -1,17 +1,36 @@
 {
   "guid": "b2091a2b-3243-4542-a3b4-c5d6e7f8435e",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "RGB Cycle",
   "desc": "Pure R-G-B color rotation",
   "author": "Shades",
   "category": "Ambient",
-  "cover": {"from": "#FF3B5C", "to": "#3B82FF", "via": "#00DC82", "angle": 135},
+  "cover": {
+    "from": "#FF3B5C",
+    "to": "#3B82FF",
+    "via": "#00DC82",
+    "angle": 135
+  },
   "pulse": "#FF3B5C",
-  "tags": ["rgb", "cycle", "primary"],
+  "tags": [
+    "rgb",
+    "cycle",
+    "primary"
+  ],
   "i18n": {
     "ru": {
       "name": "Цикл RGB",
-      "desc": "Чистое вращение цветов R-G-B"
+      "desc": "Чистое вращение цветов R-G-B",
+      "params": {
+        "0": {
+          "name": "Скорость",
+          "desc": "Скорость цикла (1=медленно, 100=быстро)"
+        },
+        "1": {
+          "name": "Яркость",
+          "desc": "Яркость светодиодов"
+        }
+      }
     }
   }
 }

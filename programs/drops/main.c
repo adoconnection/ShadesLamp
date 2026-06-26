@@ -51,10 +51,7 @@ static float frand(void){ return (float)(rng_next()&0xFFFF)/65536.0f; }
 
 /* ---- HSV ---- */
 static void hsv_to_rgb(int h,int s,int v,int*r,int*g,int*b){
-    if(s==0){*r=*g=*b=v;return;} h&=0xFF; int reg=h/43, f=(h-reg*43)*6;
-    int p=(v*(255-s))>>8, q=(v*(255-((s*f)>>8)))>>8, t=(v*(255-((s*(255-f))>>8)))>>8;
-    switch(reg){case 0:*r=v;*g=t;*b=p;break;case 1:*r=q;*g=v;*b=p;break;case 2:*r=p;*g=v;*b=t;break;
-    case 3:*r=p;*g=q;*b=v;break;case 4:*r=t;*g=p;*b=v;break;default:*r=v;*g=p;*b=q;}
+    int c=m_hsv(h&0xFF,s,v); *r=(c>>16)&255; *g=(c>>8)&255; *b=c&255;
 }
 
 /* ---- framebuffer (intensity + hue per pixel) ---- */

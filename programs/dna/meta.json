@@ -1,17 +1,40 @@
 {
   "guid": "4bf2a3b4-c5d6-4e7f-8091-a2b3c4d5e6f7",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "name": "DNA",
   "desc": "Clean rotating double helix with base-pair rungs",
   "author": "Gunner47",
   "category": "Streams",
-  "cover": {"from": "#064E3B", "to": "#34D399", "via": "#10B981", "angle": 155},
+  "cover": {
+    "from": "#064E3B",
+    "to": "#34D399",
+    "via": "#10B981",
+    "angle": 155
+  },
   "pulse": "#34D399",
-  "tags": ["helix", "rotation", "science"],
+  "tags": [
+    "helix",
+    "rotation",
+    "science"
+  ],
   "i18n": {
     "ru": {
       "name": "ДНК",
-      "desc": "Чёткая вращающаяся двойная спираль с перекладинами"
+      "desc": "Чёткая вращающаяся двойная спираль с перекладинами",
+      "params": {
+        "0": {
+          "name": "Скорость",
+          "desc": "Скорость вращения спирали"
+        },
+        "1": {
+          "name": "Оттенок",
+          "desc": "Базовый оттенок (0=радужный цикл)"
+        },
+        "2": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        }
+      }
     }
   }
 }

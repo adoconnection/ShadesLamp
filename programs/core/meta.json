@@ -1,17 +1,43 @@
 {
   "guid": "29d0e1f2-a3b4-4c5d-6e7f-8091a2b3c4d5",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Core",
   "desc": "Particles orbiting around the equator with tilted orbits",
   "author": "Shades",
   "category": "Ambient",
-  "cover": {"from": "#FF4500", "to": "#FFD700", "angle": 180},
+  "cover": {
+    "from": "#FF4500",
+    "to": "#FFD700",
+    "angle": 180
+  },
   "pulse": "#FF6B00",
-  "tags": ["particles", "orbit", "fire"],
+  "tags": [
+    "particles",
+    "orbit",
+    "fire"
+  ],
   "i18n": {
     "ru": {
       "name": "Ядро",
-      "desc": "Частицы на орбитах вокруг экватора"
+      "desc": "Частицы на орбитах вокруг экватора",
+      "params": {
+        "0": {
+          "name": "Оттенок",
+          "desc": "Базовый оттенок (0=красный, 25=огненно-оранжевый)"
+        },
+        "1": {
+          "name": "Частицы",
+          "desc": "Количество частиц на орбите"
+        },
+        "2": {
+          "name": "Скорость",
+          "desc": "Средняя скорость орбиты"
+        },
+        "3": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        }
+      }
     }
   }
 }

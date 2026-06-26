@@ -22,35 +22,10 @@ int get_meta_ptr(void) { return (int)META; }
 EXPORT(get_meta_len)
 int get_meta_len(void) { return sizeof(META) - 1; }
 
-/* ---- Integer sine lookup table ---- */
-/* 64-entry quarter-wave sine table, values 0-255 */
-static const uint8_t sin_lut[65] = {
-    0,   6,  13,  19,  25,  31,  37,  44,
-   50,  56,  62,  68,  74,  80,  86,  92,
-   97, 103, 109, 114, 120, 125, 130, 136,
-  141, 146, 151, 155, 160, 165, 169, 173,
-  177, 181, 185, 189, 193, 196, 199, 202,
-  205, 208, 211, 213, 216, 218, 220, 222,
-  224, 226, 227, 229, 230, 231, 232, 233,
-  234, 234, 235, 235, 235, 235, 235, 235,
-  255  /* peak value at exactly 64 for quarter-wave */
-};
-
 /* Integer sine: input 0-255 (full cycle), output 0-255 (centered at 128) */
 static int isin8(int angle) {
-    angle = angle & 0xFF;
-    int quadrant = angle >> 6;       /* 0-3 */
-    int idx = angle & 0x3F;          /* 0-63 within quadrant */
-    int val;
-
-    switch (quadrant) {
-        case 0: val = sin_lut[idx]; break;
-        case 1: val = sin_lut[64 - idx]; break;
-        case 2: val = -((int)sin_lut[idx]); break;
-        case 3: val = -((int)sin_lut[64 - idx]); break;
-        default: val = 0; break;
-    }
-
+    float s = m_sin((float)(angle & 0xFF) * (6.28318530f / 256.0f));
+    int val = (int)(s * 255.0f);     /* -255..255 */
     /* Shift from -255..255 to 0..255 */
     return (val + 255) >> 1;
 }
@@ -60,41 +35,13 @@ static int icos8(int angle) {
     return isin8(angle + 64);
 }
 
-/* Integer square root approximation (for distance calculation) */
-static int isqrt(int val) {
-    if (val <= 0) return 0;
-    int x = val;
-    int y = (x + 1) >> 1;
-    while (y < x) {
-        x = y;
-        y = (x + val / x) >> 1;
-    }
-    return x;
-}
-
 /* ---- HSV to RGB conversion ---- */
 /* h: 0-255, s: 0-255, v: 0-255 */
 static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
-    if (s == 0) {
-        *r = *g = *b = v;
-        return;
-    }
-
-    int region = h / 43;
-    int remainder = (h - region * 43) * 6;
-
-    int p = (v * (255 - s)) >> 8;
-    int q = (v * (255 - ((s * remainder) >> 8))) >> 8;
-    int t = (v * (255 - ((s * (255 - remainder)) >> 8))) >> 8;
-
-    switch (region) {
-        case 0:  *r = v; *g = t; *b = p; break;
-        case 1:  *r = q; *g = v; *b = p; break;
-        case 2:  *r = p; *g = v; *b = t; break;
-        case 3:  *r = p; *g = q; *b = v; break;
-        case 4:  *r = t; *g = p; *b = v; break;
-        default: *r = v; *g = p; *b = q; break;
-    }
+    int c = m_hsv(h & 0xFF, s, v);
+    *r = (c >> 16) & 255;
+    *g = (c >> 8) & 255;
+    *b = c & 255;
 }
 
 #define MAX_W 64

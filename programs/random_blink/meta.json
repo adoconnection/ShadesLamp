@@ -1,17 +1,40 @@
 {
   "guid": "a1f8091a-2132-4431-a2b3-c4d5e6f7324d",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Random Blink",
   "desc": "Random pixel flashes",
   "author": "Shades",
   "category": "Ambient",
-  "cover": {"from": "#0F2027", "to": "#7DF9FF", "via": "#2C5364", "angle": 160},
+  "cover": {
+    "from": "#0F2027",
+    "to": "#7DF9FF",
+    "via": "#2C5364",
+    "angle": 160
+  },
   "pulse": "#7DF9FF",
-  "tags": ["random", "blink", "sparkle"],
+  "tags": [
+    "random",
+    "blink",
+    "sparkle"
+  ],
   "i18n": {
     "ru": {
       "name": "Случайное мерцание",
-      "desc": "Случайные вспышки пикселей"
+      "desc": "Случайные вспышки пикселей",
+      "params": {
+        "0": {
+          "name": "Время затухания",
+          "desc": "Длительность затухания (мс)"
+        },
+        "1": {
+          "name": "Время паузы",
+          "desc": "Тёмная пауза между вспышками (мс)"
+        },
+        "2": {
+          "name": "Яркость",
+          "desc": "Пиковая яркость"
+        }
+      }
     }
   }
 }

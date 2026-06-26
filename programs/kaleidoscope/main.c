@@ -35,42 +35,9 @@ int get_meta_len(void) { return sizeof(META) - 1; }
 #define PI       3.14159265f
 #define HALF_PI  1.57079632f
 
-static float fsin(float x) {
-    while (x < 0.0f) x += TWO_PI;
-    while (x >= TWO_PI) x -= TWO_PI;
-    float sign = 1.0f;
-    if (x > PI) { x -= PI; sign = -1.0f; }
-    float num = 16.0f * x * (PI - x);
-    float den = 5.0f * PI * PI - 4.0f * x * (PI - x);
-    if (den == 0.0f) return 0.0f;
-    return sign * num / den;
-}
+static float fsin(float x) { return m_sin(x); }
 
-static float fcos(float x) { return fsin(x + HALF_PI); }
-
-static float fsqrt(float x) {
-    if (x <= 0.0f) return 0.0f;
-    float guess = x * 0.5f;
-    guess = 0.5f * (guess + x / guess);
-    guess = 0.5f * (guess + x / guess);
-    guess = 0.5f * (guess + x / guess);
-    return guess;
-}
-
-static float fatan2(float y, float x) {
-    if (x == 0.0f && y == 0.0f) return 0.0f;
-    float abs_x = x < 0 ? -x : x;
-    float abs_y = y < 0 ? -y : y;
-    float a = abs_x < abs_y ? abs_x / abs_y : abs_y / abs_x;
-    float s = a * a;
-    float r = ((-0.0464964749f * s + 0.15931422f) * s - 0.327622764f) * s * a + a;
-    if (abs_y > abs_x) r = HALF_PI - r;
-    if (x < 0.0f) r = PI - r;
-    if (y < 0.0f) r = -r;
-    return r;
-}
-
-static float fabs_f(float x) { return x < 0.0f ? -x : x; }
+static float fcos(float x) { return m_cos(x); }
 
 static float fmod_f(float x, float m) {
     if (m == 0.0f) return 0.0f;
@@ -79,24 +46,12 @@ static float fmod_f(float x, float m) {
     return x;
 }
 
-/* ---- HSV to RGB ---- */
+/* ---- HSV to RGB (native, hue 0..255) ---- */
 static void hsv2rgb(int hue, int sat, int val, int *r, int *g, int *b) {
-    if (val == 0) { *r = *g = *b = 0; return; }
-    if (sat == 0) { *r = *g = *b = val; return; }
-    int h = hue & 0xFF;
-    int region = h / 43;
-    int frac = (h - region * 43) * 6;
-    int p = (val * (255 - sat)) >> 8;
-    int q = (val * (255 - ((sat * frac) >> 8))) >> 8;
-    int t = (val * (255 - ((sat * (255 - frac)) >> 8))) >> 8;
-    switch (region) {
-        case 0:  *r = val; *g = t;   *b = p;   break;
-        case 1:  *r = q;   *g = val; *b = p;   break;
-        case 2:  *r = p;   *g = val; *b = t;   break;
-        case 3:  *r = p;   *g = q;   *b = val; break;
-        case 4:  *r = t;   *g = p;   *b = val; break;
-        default: *r = val; *g = p;   *b = q;   break;
-    }
+    int c = m_hsv(hue & 0xFF, sat, val);
+    *r = (c >> 16) & 255;
+    *g = (c >> 8) & 255;
+    *b = c & 255;
 }
 
 /* ---- State ---- */
@@ -183,7 +138,7 @@ void update(int tick_ms) {
 
     float cx = (float)cur_w / 2.0f;
     float cy = (float)cur_h / 2.0f;
-    float max_dist = fsqrt(cx * cx + cy * cy);
+    float max_dist = m_hypot(cx, cy);
     if (max_dist < 1.0f) max_dist = 1.0f;
 
     /* Angular size of one segment */
@@ -195,11 +150,11 @@ void update(int tick_ms) {
             float dy = (float)y - cy;
 
             /* Distance from center, normalized 0-1 */
-            float dist = fsqrt(dx * dx + dy * dy);
+            float dist = m_hypot(dx, dy);
             float norm_dist = dist / max_dist;
 
             /* Angle from center: -PI to PI -> 0 to TWO_PI */
-            float angle = fatan2(dy, dx);
+            float angle = m_atan2(dy, dx);
             if (angle < 0.0f) angle += TWO_PI;
 
             /* Fold angle into a single segment for mirror symmetry */

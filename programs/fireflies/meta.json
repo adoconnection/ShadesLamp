@@ -1,17 +1,40 @@
 {
   "guid": "6db4c5d6-e7f8-4091-a2b3-c4d5e6f70819",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Fireflies",
   "desc": "Flickering fireflies in the dark",
   "author": "Gyver",
   "category": "Particles",
-  "cover": {"from": "#1A2E05", "to": "#A3E635", "via": "#365314", "angle": 175},
+  "cover": {
+    "from": "#1A2E05",
+    "to": "#A3E635",
+    "via": "#365314",
+    "angle": 175
+  },
   "pulse": "#A3E635",
-  "tags": ["fireflies", "flicker", "nature"],
+  "tags": [
+    "fireflies",
+    "flicker",
+    "nature"
+  ],
   "i18n": {
     "ru": {
       "name": "Светлячки",
-      "desc": "Мерцающие светлячки в темноте"
+      "desc": "Мерцающие светлячки в темноте",
+      "params": {
+        "0": {
+          "name": "Количество",
+          "desc": "Количество светлячков"
+        },
+        "1": {
+          "name": "Скорость",
+          "desc": "Скорость движения"
+        },
+        "2": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        }
+      }
     }
   }
 }

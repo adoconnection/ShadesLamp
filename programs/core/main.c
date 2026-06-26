@@ -41,40 +41,10 @@ static uint32_t rng_next(void) {
 
 /* ---- HSV -> RGB (same as flame_particle) ---- */
 static void hsv2rgb(int hue, int sat, int val, int *r, int *g, int *b) {
-    if (val == 0) { *r = *g = *b = 0; return; }
-    if (sat == 0) { *r = *g = *b = val; return; }
-    int h = hue & 0xFF;
-    int region = h / 43;
-    int frac = (h - region * 43) * 6;
-    int p = (val * (255 - sat)) >> 8;
-    int q = (val * (255 - ((sat * frac) >> 8))) >> 8;
-    int t = (val * (255 - ((sat * (255 - frac)) >> 8))) >> 8;
-    switch (region) {
-        case 0:  *r = val; *g = t;   *b = p;   break;
-        case 1:  *r = q;   *g = val; *b = p;   break;
-        case 2:  *r = p;   *g = val; *b = t;   break;
-        case 3:  *r = p;   *g = q;   *b = val; break;
-        case 4:  *r = t;   *g = p;   *b = val; break;
-        default: *r = val; *g = p;   *b = q;   break;
-    }
+    int c = m_hsv(hue & 0xFF, sat, val); *r = (c>>16)&255; *g = (c>>8)&255; *b = c&255;
 }
 
-/* ---- Sine approximation (Bhaskara I's formula, max error ~0.2%) ---- */
 #define TWO_PI  6.28318530f
-#define PI      3.14159265f
-#define HALF_PI 1.57079632f
-
-static float fsin(float x) {
-    /* Normalize to [0, 2pi] */
-    while (x < 0.0f) x += TWO_PI;
-    while (x >= TWO_PI) x -= TWO_PI;
-    float sign = 1.0f;
-    if (x > PI) { x -= PI; sign = -1.0f; }
-    float num = 16.0f * x * (PI - x);
-    float den = 5.0f * PI * PI - 4.0f * x * (PI - x);
-    if (den == 0.0f) return 0.0f;
-    return sign * num / den;
-}
 
 /* ---- Particle state ---- */
 #define MAX_PARTICLES 30
@@ -204,7 +174,7 @@ void update(int tick_ms) {
         float x = p_angle[i] / TWO_PI * (float)cur_w;
 
         /* Y offset from equator: sinusoidal, amplitude depends on inclination */
-        float y = equator + fsin(p_angle[i]) * max_amp * fsin(p_incl[i]);
+        float y = equator + m_sin(p_angle[i]) * max_amp * m_sin(p_incl[i]);
 
         /* Clamp */
         if (x >= (float)cur_w) x -= (float)cur_w;

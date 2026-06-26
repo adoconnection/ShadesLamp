@@ -47,18 +47,11 @@ static float frand(void) { return (float)(rng_next() & 0xFFFF) / 65536.0f; }
 
 /* ---- math ---- */
 #define TWO_PI 6.28318530f
-#define PI     3.14159265f
-static float fsin(float x){ while(x<0)x+=TWO_PI; while(x>=TWO_PI)x-=TWO_PI; float s=1; if(x>PI){x-=PI;s=-1;}
-    float n=16*x*(PI-x); return s*n/(5*PI*PI-4*x*(PI-x)); }
-static float fcos(float x){ return fsin(x+PI*0.5f); }
 static float fabsf2(float x){ return x<0?-x:x; }
 
 /* ---- HSV ---- */
 static void hsv(int h,int s,int v,int*r,int*g,int*b){
-    if(s==0){*r=*g=*b=v;return;} h&=0xFF; int reg=h/43, f=(h-reg*43)*6;
-    int p=(v*(255-s))>>8, q=(v*(255-((s*f)>>8)))>>8, t=(v*(255-((s*(255-f))>>8)))>>8;
-    switch(reg){case 0:*r=v;*g=t;*b=p;break;case 1:*r=q;*g=v;*b=p;break;case 2:*r=p;*g=v;*b=t;break;
-    case 3:*r=p;*g=q;*b=v;break;case 4:*r=t;*g=p;*b=v;break;default:*r=v;*g=p;*b=q;}
+    int c=m_hsv(h&0xFF,s,v); *r=(c>>16)&255; *g=(c>>8)&255; *b=c&255;
 }
 
 /* ---- state ---- */
@@ -107,7 +100,7 @@ static void spawn(int i, int W, int H) {
     p_x[i] = frand() * (float)W;
     p_y[i] = frand() * (float)H;
     float a = frand() * TWO_PI;
-    p_vx[i] = fcos(a); p_vy[i] = fsin(a);
+    p_vx[i] = m_cos(a); p_vy[i] = m_sin(a);
     p_hue[i] = (uint8_t)(rng_next() & 0xFF);
 }
 
@@ -179,7 +172,7 @@ void update(int tick_ms) {
             if (ddx < -(float)W * 0.5f) ddx += (float)W;
             float ddy = p_y[j] - p_y[i];
             if (ddx*ddx + ddy*ddy >= linkf*linkf) continue;
-            float strength = 1.0f - __builtin_sqrtf(ddx*ddx + ddy*ddy) / linkf;
+            float strength = 1.0f - m_hypot(ddx, ddy) / linkf;
             glow[i] += strength; glow[j] += strength;
             uf_union(i, j);
         }
@@ -198,7 +191,7 @@ void update(int tick_ms) {
             if (ddx >  (float)W * 0.5f) ddx -= (float)W;
             if (ddx < -(float)W * 0.5f) ddx += (float)W;
             float ddy = p_y[j] - p_y[i];
-            float dist = __builtin_sqrtf(ddx*ddx + ddy*ddy);
+            float dist = m_hypot(ddx, ddy);
             if (dist >= linkf) continue;
 
             float strength = 1.0f - dist / linkf;

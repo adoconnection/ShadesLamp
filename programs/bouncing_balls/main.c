@@ -61,39 +61,16 @@ static float random_signed(void) {
     return random_float() * 2.0f - 1.0f;
 }
 
-/* ---- HSV to RGB ---- */
+/* ---- HSV to RGB (native host primitive) ---- */
 static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
-    if (s == 0) {
-        *r = *g = *b = v;
-        return;
-    }
-    h &= 0xFF;
-    int region = h / 43;
-    int remainder = (h - region * 43) * 6;
-
-    int p = (v * (255 - s)) >> 8;
-    int q = (v * (255 - ((s * remainder) >> 8))) >> 8;
-    int t = (v * (255 - ((s * (255 - remainder)) >> 8))) >> 8;
-
-    switch (region) {
-        case 0:  *r = v; *g = t; *b = p; break;
-        case 1:  *r = q; *g = v; *b = p; break;
-        case 2:  *r = p; *g = v; *b = t; break;
-        case 3:  *r = p; *g = q; *b = v; break;
-        case 4:  *r = t; *g = p; *b = v; break;
-        default: *r = v; *g = p; *b = q; break;
-    }
+    int c = m_hsv(h & 0xFF, s, v);
+    *r = (c >> 16) & 255;
+    *g = (c >> 8) & 255;
+    *b = c & 255;
 }
 
-/* ---- Light square root (Newton, few iters; inputs are small distances) ---- */
-static float f_sqrt(float x) {
-    if (x <= 0.0f) return 0.0f;
-    float guess = x > 1.0f ? x * 0.5f : 1.0f;
-    for (int i = 0; i < 5; i++) {
-        guess = 0.5f * (guess + x / guess);
-    }
-    return guess;
-}
+/* ---- Square root (native host primitive) ---- */
+static float f_sqrt(float x) { return m_sqrt(x); }
 
 /* ---- Ball state (all in pixel space; Y=0 is the bottom) ---- */
 #define MAX_BALLS 16
@@ -324,7 +301,7 @@ void update(int tick_ms) {
             for (int px = x0; px <= x1; px++) {
                 float dx = ((float)px - cx) / rx;
                 float dy = ((float)py - cy) / (ry < 0.5f ? 0.5f : ry);
-                float d = f_sqrt(dx * dx + dy * dy);   /* normalized distance */
+                float d = m_hypot(dx, dy);   /* normalized distance */
                 float cov = (1.0f - d) * 1.4f;          /* soft edge + bright core */
                 if (cov <= 0.0f) continue;
                 if (cov > 1.0f) cov = 1.0f;

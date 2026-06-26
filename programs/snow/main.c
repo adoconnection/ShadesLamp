@@ -77,13 +77,9 @@ static uint8_t qadd(uint8_t a, uint8_t b) {
     return (s > 255) ? 255 : (uint8_t)s;
 }
 
-/* Simple sine approximation for wobble: returns -1, 0, or 1 */
-static int wobble_offset(int phase) {
-    int p = phase & 15;
-    if (p < 4)  return 0;
-    if (p < 8)  return 1;
-    if (p < 12) return 0;
-    return -1;
+/* Smooth horizontal wobble (native sine, 16-step period, -1..1) */
+static float wobble_offset(int phase) {
+    return m_sin((float)phase * (6.28318530f / 16.0f));
 }
 
 EXPORT(update)
@@ -134,8 +130,8 @@ void update(int tick_ms) {
 
         /* Wobble horizontally */
         flake_wobble[i]++;
-        int wx = wobble_offset(flake_wobble[i]);
-        flake_x[i] += wx * 40;
+        float wx = wobble_offset(flake_wobble[i]);
+        flake_x[i] += (int)(wx * 40.0f);
 
         /* Wrap X horizontally (cylinder) */
         int ix = flake_x[i] >> 8;

@@ -4,14 +4,49 @@
   "desc": "Field of grass blades swaying in the wind with gusts",
   "author": "Shades",
   "category": "Nature",
-  "version": "1.0.0",
-  "cover": { "from": "#1f6b1f", "to": "#a8e063", "angle": 90 },
+  "version": "1.0.1",
+  "cover": {
+    "from": "#1f6b1f",
+    "to": "#a8e063",
+    "angle": 90
+  },
   "pulse": "#7ed957",
-  "tags": ["grass", "nature", "wind", "field", "meadow", "sway"],
+  "tags": [
+    "grass",
+    "nature",
+    "wind",
+    "field",
+    "meadow",
+    "sway"
+  ],
   "i18n": {
     "ru": {
       "name": "Трава",
-      "desc": "Поле травы, колышущееся на ветру с порывами"
+      "desc": "Поле травы, колышущееся на ветру с порывами",
+      "params": {
+        "0": {
+          "name": "Плотность",
+          "desc": "Процент колонок с травинками"
+        },
+        "1": {
+          "name": "Ветер",
+          "desc": "Сила фонового ветра"
+        },
+        "2": {
+          "name": "Порывы",
+          "desc": "Частота и сила порывов ветра"
+        },
+        "3": {
+          "name": "Цвет",
+          "desc": "Палитра травы",
+          "options": [
+            "Весна",
+            "Лето",
+            "Осень",
+            "Луг"
+          ]
+        }
+      }
     }
   }
 }

@@ -1,17 +1,41 @@
 {
   "guid": "d42b3c4d-5465-4764-a5b6-c7d8e9f06570",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Snow",
   "desc": "Gently falling snowflakes",
   "author": "Gyver",
   "category": "Particles",
-  "cover": {"from": "#0C4A6E", "to": "#E0F2FE", "via": "#0EA5E9", "angle": 200},
+  "cover": {
+    "from": "#0C4A6E",
+    "to": "#E0F2FE",
+    "via": "#0EA5E9",
+    "angle": 200
+  },
   "pulse": "#E0F2FE",
-  "tags": ["snow", "winter", "falling", "gentle"],
+  "tags": [
+    "snow",
+    "winter",
+    "falling",
+    "gentle"
+  ],
   "i18n": {
     "ru": {
       "name": "Снег",
-      "desc": "Плавно падающие снежинки"
+      "desc": "Плавно падающие снежинки",
+      "params": {
+        "0": {
+          "name": "Плотность",
+          "desc": "Сколько снежинок появляется (больше=сильнее снегопад)"
+        },
+        "1": {
+          "name": "Скорость",
+          "desc": "Как быстро падают снежинки"
+        },
+        "2": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        }
+      }
     }
   }
 }

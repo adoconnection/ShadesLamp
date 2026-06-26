@@ -51,20 +51,10 @@ static uint32_t rng_next(void) {
     rng = x; return x;
 }
 
-/* ---- Sine (Bhaskara I), bounded input expected (a few periods) ---- */
+/* ---- Sine (native host primitive, radians) ---- */
 #define TWO_PI 6.28318530f
-#define PI     3.14159265f
 
-static float fsin(float x) {
-    while (x < 0.0f) x += TWO_PI;
-    while (x >= TWO_PI) x -= TWO_PI;
-    float sign = 1.0f;
-    if (x > PI) { x -= PI; sign = -1.0f; }
-    float num = 16.0f * x * (PI - x);
-    float den = 5.0f * PI * PI - 4.0f * x * (PI - x);
-    if (den == 0.0f) return 0.0f;
-    return sign * num / den;
-}
+static float fsin(float x) { return m_sin(x); }
 
 /* ---- Candle palette: heat 0..1 -> warm RGB ----
  * Red saturates fast (flame is red even at the cool tip), green grows with

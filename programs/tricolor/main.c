@@ -35,20 +35,10 @@ static uint32_t rng_next(void) {
     uint32_t x = rng; x ^= x << 13; x ^= x >> 17; x ^= x << 5; rng = x; return x;
 }
 
-/* ---- Sine (Bhaskara I) ---- */
+/* ---- Sine (native host primitive) ---- */
 #define TWO_PI 6.28318530f
-#define PI     3.14159265f
 
-static float fsin(float x) {
-    while (x < 0.0f) x += TWO_PI;
-    while (x >= TWO_PI) x -= TWO_PI;
-    float sign = 1.0f;
-    if (x > PI) { x -= PI; sign = -1.0f; }
-    float num = 16.0f * x * (PI - x);
-    float den = 5.0f * PI * PI - 4.0f * x * (PI - x);
-    if (den == 0.0f) return 0.0f;
-    return sign * num / den;
-}
+static float fsin(float x) { return m_sin(x); }
 
 /* Per-column phase offsets for more organic wave */
 #define MAX_W 64

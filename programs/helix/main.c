@@ -22,7 +22,10 @@ static const char META[] =
          "\"desc\":\"Base colour hue\"},"
         "{\"id\":5,\"name\":\"Twist\",\"type\":\"int\","
          "\"min\":1,\"max\":20,\"default\":1,"
-         "\"desc\":\"How tightly wound the helix is\"}"
+         "\"desc\":\"How tightly wound the helix is\"},"
+        "{\"id\":6,\"name\":\"Rotation\",\"type\":\"int\","
+         "\"min\":0,\"max\":200,\"default\":40,"
+         "\"desc\":\"Rotate the helix around the lamp\"}"
     "]}";
 
 EXPORT(get_meta_ptr)
@@ -36,43 +39,16 @@ int get_meta_len(void) { return sizeof(META) - 1; }
 #define PI 3.14159265f
 #define TWO_PI 6.28318530f
 
-/* Bhaskara I sine approximation */
-static float fsin(float x) {
-    while (x < 0.0f) x += TWO_PI;
-    while (x >= TWO_PI) x -= TWO_PI;
-    float sign = 1.0f;
-    if (x > PI) { x -= PI; sign = -1.0f; }
-    float num = 16.0f * x * (PI - x);
-    float den = 5.0f * PI * PI - 4.0f * x * (PI - x);
-    if (den == 0.0f) return 0.0f;
-    return sign * num / den;
-}
+/* Sine/cosine (native, radians) */
+static float fsin(float x) { return m_sin(x); }
+static float fcos(float x) { return m_cos(x); }
 
-static float fcos(float x) {
-    return fsin(x + PI * 0.5f);
-}
-
-static float fabsf_(float x) {
-    return x < 0.0f ? -x : x;
-}
-
-/* ---- HSV to RGB ---- */
+/* ---- HSV to RGB (native, hue 0..255) ---- */
 static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
-    h = h & 255;
-    if (s == 0) { *r = v; *g = v; *b = v; return; }
-    int region = h / 43;
-    int remainder = (h - region * 43) * 6;
-    int p = (v * (255 - s)) >> 8;
-    int q = (v * (255 - ((s * remainder) >> 8))) >> 8;
-    int t = (v * (255 - ((s * (255 - remainder)) >> 8))) >> 8;
-    switch (region) {
-        case 0:  *r = v; *g = t; *b = p; break;
-        case 1:  *r = q; *g = v; *b = p; break;
-        case 2:  *r = p; *g = v; *b = t; break;
-        case 3:  *r = p; *g = q; *b = v; break;
-        case 4:  *r = t; *g = p; *b = v; break;
-        default: *r = v; *g = p; *b = q; break;
-    }
+    int c = m_hsv(h & 255, s, v);
+    *r = (c >> 16) & 255;
+    *g = (c >> 8) & 255;
+    *b = c & 255;
 }
 
 /* ---- State ---- */
@@ -115,6 +91,7 @@ void update(int tick_ms) {
     int bright   = get_param_i32(3);
     int hue      = get_param_i32(4);
     int twist    = get_param_i32(5);
+    int rotation = get_param_i32(6);
     int W = get_width();
     int H = get_height();
 
@@ -123,6 +100,15 @@ void update(int tick_ms) {
     if (W < 1) W = 1;
     if (H < 1) H = 1;
     if (twist < 1) twist = 1;
+    if (rotation < 0) rotation = 0;
+    if (rotation > 200) rotation = 200;
+
+    /* Circular rotation around the lamp (like Electrons): a horizontal column
+     * offset that advances over time and wraps. Applied to every drawn pixel,
+     * so the whole helix spins around the lamp axis while still scrolling. */
+    float turns = (float)tick_ms * (float)rotation * 0.0000025f;
+    turns = turns - (float)(long)turns;          /* fractional turn 0..1 */
+    int xoff = (int)(turns * (float)W);
 
     /* hue spacing between strands/colours: opposite = far on the wheel,
      * adjacent = close. Two colours can spread to full complementary (128);
@@ -184,8 +170,8 @@ void update(int tick_ms) {
         /* X positions of each strand (float, then round to int) */
         float fx1 = half_w + amplitude * sin1;
         float fx2 = half_w + amplitude * sin2;
-        int x1 = (int)(fx1 + 0.5f);
-        int x2 = (int)(fx2 + 0.5f);
+        int x1 = (int)(fx1 + 0.5f) + xoff;
+        int x2 = (int)(fx2 + 0.5f) + xoff;
 
         /* Depth effect: cosine gives z-depth (front vs back of cylinder).
            cos > 0 means strand is in front, cos < 0 means behind. */

@@ -1,17 +1,46 @@
 {
   "guid": "6db4c5d6-edfe-40f7-a8b9-c0d1e2f3fe09",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Police",
   "desc": "Red-blue police lights flashing",
   "author": "Shades",
   "category": "Ambient",
-  "cover": {"from": "#1E3A8A", "to": "#EF4444", "via": "#1E40AF", "angle": 90},
+  "cover": {
+    "from": "#1E3A8A",
+    "to": "#EF4444",
+    "via": "#1E40AF",
+    "angle": 90
+  },
   "pulse": "#EF4444",
-  "tags": ["police", "flashing", "emergency"],
+  "tags": [
+    "police",
+    "flashing",
+    "emergency"
+  ],
   "i18n": {
     "ru": {
       "name": "Полиция",
-      "desc": "Мигающие красно-синие полицейские огни"
+      "desc": "Мигающие красно-синие полицейские огни",
+      "params": {
+        "0": {
+          "name": "Пресет",
+          "desc": "Цветовая схема мигалки",
+          "options": [
+            "Синий",
+            "Сине-белый",
+            "Красно-синий",
+            "Оранжевый"
+          ]
+        },
+        "1": {
+          "name": "Скорость",
+          "desc": "Скорость вспышек"
+        },
+        "2": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        }
+      }
     }
   }
 }

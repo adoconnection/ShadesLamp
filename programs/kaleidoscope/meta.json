@@ -1,17 +1,50 @@
 {
   "guid": "c31a2b3c-4354-4657-a8b9-c0d1e2f3546f",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Kaleidoscope",
   "desc": "Rotating kaleidoscope patterns",
   "author": "Shades",
   "category": "Streams",
-  "cover": {"from": "#4C1D95", "to": "#F59E0B", "via": "#EC4899", "angle": 120},
+  "cover": {
+    "from": "#4C1D95",
+    "to": "#F59E0B",
+    "via": "#EC4899",
+    "angle": 120
+  },
   "pulse": "#F59E0B",
-  "tags": ["geometric", "rotating", "colorful"],
+  "tags": [
+    "geometric",
+    "rotating",
+    "colorful"
+  ],
   "i18n": {
     "ru": {
       "name": "Калейдоскоп",
-      "desc": "Вращающиеся калейдоскопические узоры"
+      "desc": "Вращающиеся калейдоскопические узоры",
+      "params": {
+        "0": {
+          "name": "Скорость",
+          "desc": "Скорость вращения"
+        },
+        "1": {
+          "name": "Сегменты",
+          "desc": "Число сегментов симметрии"
+        },
+        "2": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        },
+        "3": {
+          "name": "Палитра",
+          "desc": "Цветовая палитра",
+          "options": [
+            "Радуга",
+            "Огонь",
+            "Океан",
+            "Лес"
+          ]
+        }
+      }
     }
   }
 }

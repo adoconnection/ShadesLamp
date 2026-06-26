@@ -1,17 +1,40 @@
 {
   "guid": "e5f6a7b8-c9d0-4e1f-2a3b-4c5d6e7f8091",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Clouds",
   "desc": "Soft drifting clouds",
   "author": "Gyver",
   "category": "Ambient",
-  "cover": {"from": "#1B2838", "to": "#6B7280", "via": "#374151", "angle": 160},
+  "cover": {
+    "from": "#1B2838",
+    "to": "#6B7280",
+    "via": "#374151",
+    "angle": 160
+  },
   "pulse": "#6B7280",
-  "tags": ["nature", "calm", "soft"],
+  "tags": [
+    "nature",
+    "calm",
+    "soft"
+  ],
   "i18n": {
     "ru": {
       "name": "Облака",
-      "desc": "Мягкие плывущие облака"
+      "desc": "Мягкие плывущие облака",
+      "params": {
+        "0": {
+          "name": "Скорость",
+          "desc": "Скорость анимации"
+        },
+        "1": {
+          "name": "Масштаб",
+          "desc": "Уровень приближения шума"
+        },
+        "2": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        }
+      }
     }
   }
 }

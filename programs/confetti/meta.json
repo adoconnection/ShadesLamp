@@ -1,17 +1,40 @@
 {
   "guid": "18c9d0e1-f2a3-4b4c-5d6e-7f8091a2b3c4",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "Confetti",
   "desc": "Random colored sparkles popping up",
   "author": "Gyver",
   "category": "Particles",
-  "cover": {"from": "#1E1B4B", "to": "#F472B6", "via": "#7C3AED", "angle": 110},
+  "cover": {
+    "from": "#1E1B4B",
+    "to": "#F472B6",
+    "via": "#7C3AED",
+    "angle": 110
+  },
   "pulse": "#F472B6",
-  "tags": ["sparkles", "random", "party"],
+  "tags": [
+    "sparkles",
+    "random",
+    "party"
+  ],
   "i18n": {
     "ru": {
       "name": "Конфетти",
-      "desc": "Случайные цветные вспышки"
+      "desc": "Случайные цветные вспышки",
+      "params": {
+        "0": {
+          "name": "Плотность",
+          "desc": "Сколько новых вспышек появляется за кадр"
+        },
+        "1": {
+          "name": "Затухание",
+          "desc": "Как быстро гаснут вспышки (больше — быстрее)"
+        },
+        "2": {
+          "name": "Яркость",
+          "desc": "Максимальная яркость вспышек"
+        }
+      }
     }
   }
 }
