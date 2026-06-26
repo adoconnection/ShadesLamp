@@ -42,40 +42,74 @@ int get_meta_len(void) { return sizeof(META) - 1; }
  * Columns: col 0 ≈ 180° (date line), increasing east. Authored north -> south. */
 
 #define SRC_W 32
-#define ART_H 27
+#define ART_H 28
 #define MAP_W 53
 #define MAP_H 32
 static uint8_t earth_map[MAP_W][MAP_H];
 
-/* rows[0] is the northernmost art line. */
+/* Base land/sea shape. col 0 ≈ 180°W (left), col 16 ≈ 0° (centre), col 31 ≈ 180°E.
+ * rows[0] is the northernmost art line. '#' = land. */
 static const char *const rows[ART_H] = {
-    "................................",  /* Arctic Ocean (open water margin)    */
-    "......##.....##........#.#.#.#...",  /* Arctic Ocean fringe (coast/islands) */
-    ".########...###..##.###########.",  /* N.Canada, Greenland, Scand, Siberia */
-    "..#######...#######.##########..",  /* Canada, Europe, Russia        */
-    "..#.#####...#.####..#########...",  /* Alaska, Canada, Europe, C.Asia */
-    "....#####......###..##########..",  /* USA, Europe, C.Asia/China     */
-    "....#####......##....########...",  /* USA, Iberia, China            */
-    ".....####......#....########....",  /* USA, Iberia, China/Japan      */
-    ".....####......#############....",  /* USA, N.Africa..China belt     */
-    "......###......############.#...",  /* Mexico, Sahara..China, Japan  */
-    ".......##.....########.####.#...",  /* Mexico, Sahara/Arabia, India, Japan */
-    "........##....#######..#.#..#...",  /* C.America, Africa, India, SEAsia, PH */
-    ".........####...#####....####...",  /* N.S.America, Africa, Indonesia */
-    "..........####..#####..######...",  /* Amazon, Africa, India/Indonesia */
-    "...........####.#####...#####...",  /* Brazil, Congo, Indonesia      */
-    "...........####..####....###....",  /* Brazil, Africa, Indonesia     */
-    "............###..####....##.....",  /* Brazil, Africa, Indonesia     */
-    "............###...#####.........",  /* Brazil, S.Africa, Madagascar  */
-    "...........###....####...#####..",  /* Argentina, S.Africa, Australia */
-    "...........###....##.....#####..",  /* Argentina, S.Africa, Australia */
-    "...........##.....##.....#####..",  /* Argentina, S.Africa, Australia */
-    "..........###.....#.......###...",  /* Argentina, S.Afr tip, Australia */
-    "..........##..............##..##",  /* Patagonia, S.Australia, NZ    */
-    "..........##...............#..##",  /* Patagonia, Tasmania, NZ       */
-    "..........#...................#.",  /* Patagonia tip, NZ             */
-    "..........#.....................",  /* Patagonia tip                 */
-    "................................",  /* Southern Ocean (margin)       */
+    "................................",  /* Arctic Ocean (open water)        */
+    "......#.#...#.........#..#..#....",  /* Arctic islands / Greenland tip   */
+    "..#.######.###......##########..",  /* N.Canada, Greenland, Siberia     */
+    "..############...##############.",  /* Canada, Scandinavia, Russia      */
+    "#############...###############.",  /* Canada, Europe, Siberia          */
+    "#..#########...################.",  /* Alaska, Canada, Europe, Russia   */
+    "....#######....###############..",  /* USA, Europe, C.Asia              */
+    "....#######.....###.#########...",  /* USA, Europe, C.Asia/China        */
+    ".....######....###...########...",  /* USA, Iberia, C.Asia/China/Japan  */
+    ".....######....#......#######...",  /* USA, Iberia, China/Japan         */
+    "......#####....###..####.###....",  /* USA, N.Africa, MidEast, China    */
+    "......###......############.....",  /* Mexico, Sahara..China belt       */
+    "......###......############.....",  /* Mexico, Sahara/Arabia/India belt */
+    ".......###.....#########.##.#...",  /* C.America, Africa, India, SEA,PH */
+    "........##....########.#.##.#...",  /* C.America, Africa, India, SEA,PH */
+    ".........##....#######.#.#..#...",  /* Colombia, Africa, India, SEA,PH  */
+    ".........####...#####.....#####.",  /* N.S.America, Africa, Indonesia   */
+    "..........####..#####.....#####.",  /* Amazon, Congo, Indonesia         */
+    "...........####.#####......###..",  /* Brazil, Congo, Indonesia         */
+    "...........####..#####.....##...",  /* Brazil, S.Africa, Madagascar     */
+    "...........###...###.#.....####.",  /* Brazil, S.Africa, Madag, Australia */
+    "..........####...###......#####.",  /* Argentina, S.Africa, Australia   */
+    "..........###.....##......#####.",  /* Argentina, S.Africa, Australia   */
+    "..........###.....#........###.#",  /* Argentina, S.Afr tip, Australia, NZ */
+    "..........##...............##..#",  /* Patagonia, Australia, NZ         */
+    "..........##...................#",  /* Patagonia, NZ                    */
+    "..........#.....................",  /* Patagonia tip                    */
+    "................................",  /* Southern Ocean                   */
+};
+
+/* Desert overlay (same grid): '#' marks desert where the base has land. */
+static const char *const desert[ART_H] = {
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "........................###.....",  /* Gobi / Central Asia              */
+    "................................",
+    "......#........###......###.....",  /* SW US, Sahara N, Gobi            */
+    "......#........#######...##.....",  /* Mexico, Sahara, Arabia, Gobi     */
+    "...............########.........",  /* Sahara, Arabia                   */
+    "................###.............",  /* Sahel edge                       */
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "..................##.......##...",  /* Kalahari, Australia              */
+    "..................#.......####..",  /* Kalahari, Australia outback      */
+    "...........................##...",  /* Australia                        */
+    "................................",
+    "................................",
+    "................................",
+    "................................",
+    "................................",
 };
 
 EXPORT(init)
@@ -88,9 +122,16 @@ void init(void) {
         int ai = (t * ART_H) / MAP_H;        /* nearest art row */
         if (ai >= ART_H) ai = ART_H - 1;
         const char *s = rows[ai];
+        const char *d = desert[ai];
         for (int dx = 0; dx < MAP_W; dx++) {
             int sx = (dx * SRC_W) / MAP_W;   /* nearest art column 0..SRC_W-1 */
-            earth_map[dx][y] = (s[sx] == '#') ? 1 : 0;
+            int v = 0;                       /* 0 sea, 1 forest, 2 desert, 3 ice */
+            if (s[sx] == '#') {
+                v = 1;
+                if (d[sx] == '#') v = 2;
+                if (ai <= 4)      v = 3;     /* northern rows -> snow/ice */
+            }
+            earth_map[dx][y] = (uint8_t)v;
         }
     }
 }
@@ -172,24 +213,37 @@ void update(int tick_ms) {
             if (sy < 0) sy = 0;
             if (sy >= MAP_H) sy = MAP_H - 1;
 
-            int lLo = earth_map[sx_lo][sy];
-            int lHi = earth_map[sx_hi][sy];
+            int tLo = earth_map[sx_lo][sy];   /* 0 sea, 1 forest, 2 desert, 3 ice */
+            int tHi = earth_map[sx_hi][sy];
+            int lLo = tLo ? 1 : 0;
+            int lHi = tHi ? 1 : 0;
             int wL = lLo * (256 - frac_x) + lHi * frac_x;
             int wS = 256 - wL;
 
-            int plr = lr, plg = lg, plb = lb;
-            if (night && wL > 0) {
-                /* city lights: skewed per-cell brightness + slow twinkle */
-                uint32_t h = hashu((uint32_t)(sx_lo * 131 + sy * 977));
-                int s8 = (int)(h & 255);
-                int f  = 45 + (s8 * s8) / 300;      /* mostly dim, a few bright */
-                if (f > 255) f = 255;
-                uint32_t h2 = hashu(h ^ (uint32_t)twk);
-                int tw = 205 + (int)(h2 & 50);      /* 205..255 shimmer */
-                f = (f * tw) / 255;
-                plr = (lr * f) / 255;
-                plg = (lg * f) / 255;
-                plb = (lb * f) / 255;
+            int plr, plg, plb;
+            if (style == 0) {
+                /* Map: multicolour by terrain type */
+                int tt = tLo ? tLo : tHi;
+                switch (tt) {
+                    case 2:  plr=(200*land_bright)/255; plg=(170*land_bright)/255; plb=(95 *land_bright)/255; break; /* desert */
+                    case 3:  plr=(225*land_bright)/255; plg=(228*land_bright)/255; plb=(245*land_bright)/255; break; /* ice    */
+                    default: plr=(60 *land_bright)/255; plg=(160*land_bright)/255; plb=(70 *land_bright)/255; break; /* forest */
+                }
+            } else {
+                plr = lr; plg = lg; plb = lb;
+                if (night && wL > 0) {
+                    /* city lights: skewed per-cell brightness + slow twinkle */
+                    uint32_t h = hashu((uint32_t)(sx_lo * 131 + sy * 977));
+                    int s8 = (int)(h & 255);
+                    int f  = 45 + (s8 * s8) / 300;      /* mostly dim, a few bright */
+                    if (f > 255) f = 255;
+                    uint32_t h2 = hashu(h ^ (uint32_t)twk);
+                    int tw = 205 + (int)(h2 & 50);      /* 205..255 shimmer */
+                    f = (f * tw) / 255;
+                    plr = (lr * f) / 255;
+                    plg = (lg * f) / 255;
+                    plb = (lb * f) / 255;
+                }
             }
 
             int r = (plr * wL + sr * wS) >> 8;
