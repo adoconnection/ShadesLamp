@@ -1,0 +1,28 @@
+{
+  "guid": "d4e6f8a0-3b5c-4d7e-9f01-a2b3c4d5e6f7",
+  "version": "1.0.0",
+  "name": "Constellation",
+  "desc": "Drifting particles link with glowing lines when they get close",
+  "author": "Shades",
+  "category": "Ambient",
+  "cover": {"from": "#020617", "to": "#22D3EE", "via": "#1E3A8A", "angle": 150},
+  "pulse": "#22D3EE",
+  "about": "Particles drift gently around the lamp; whenever two come within the link distance a glowing line connects them — the closer they are, the brighter the line, and busy nodes shine brighter. Pick an icy, neon, rainbow or mono palette.",
+  "tags": ["particles", "network", "plexus", "lines", "ambient"],
+  "i18n": {
+    "ru": {
+      "name": "Созвездие",
+      "desc": "Летающие частицы соединяются светящимися линиями при сближении",
+      "about": "Частицы плавно дрейфуют по лампе; когда две сближаются до заданного расстояния, между ними загорается линия — чем ближе, тем ярче, а узлы с множеством связей светятся сильнее. Палитры: лёд, неон, радуга, моно.",
+      "params": {
+        "0": {"name": "Размер", "desc": "Размер частицы", "options": ["Маленькая", "Большая"]},
+        "1": {"name": "Количество", "desc": "Число частиц"},
+        "2": {"name": "Яркость", "desc": "Общая яркость"},
+        "3": {"name": "Скорость", "desc": "Скорость дрейфа"},
+        "4": {"name": "Дистанция связи", "desc": "Макс. расстояние для линии"},
+        "5": {"name": "Яркость связей", "desc": "0 = как было, 100 = звёзды и линии на максимуме"},
+        "6": {"name": "Цвет", "desc": "Цветовая палитра", "options": ["Лёд", "Неон", "Радуга", "Моно"]}
+      }
+    }
+  }
+}
