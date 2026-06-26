@@ -1,8 +1,8 @@
 {
   "guid": "9b3f1c20-7d4e-4a5b-9c1f-2e3a4b5c6d7e",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "name": "Earth",
-  "desc": "Detailed 32x32 world map slowly rotating across the display",
+  "desc": "Detailed proportional world map slowly rotating across the display",
   "author": "Gunner47",
   "category": "Patterns",
   "cover": {
@@ -23,7 +23,7 @@
   "i18n": {
     "ru": {
       "name": "Земля",
-      "desc": "Детальная карта мира 32x32, медленно вращающаяся по дисплею",
+      "desc": "Детальная пропорциональная карта мира, медленно вращающаяся по дисплею",
       "params": {
         "0": {
           "name": "Скорость",

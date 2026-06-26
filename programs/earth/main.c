@@ -27,9 +27,9 @@ static const char META[] =
          "\"options\":[\"West to East\",\"East to West\"],"
          "\"desc\":\"Rotation direction\"},"
         "{\"id\":6,\"name\":\"Fit\",\"type\":\"select\","
-         "\"default\":0,"
+         "\"default\":1,"
          "\"options\":[\"Stretch\",\"Native\"],"
-         "\"desc\":\"Stretch map to display, or 1:1 native pixels (window over the map)\"}"
+         "\"desc\":\"1:1 native pixels (window over the map), or stretch whole map to display\"}"
     "]}";
 
 EXPORT(get_meta_ptr)
@@ -38,12 +38,15 @@ int get_meta_ptr(void) { return (int)META; }
 EXPORT(get_meta_len)
 int get_meta_len(void) { return sizeof(META) - 1; }
 
-/* ---- Earth bitmap (32 cols × 32 rows), equirectangular, cylindrical wrap. ----
- * Columns: col 0 ≈ 180° (date line), col 16 ≈ 0° (Greenwich), increasing east.
+/* ---- Earth bitmap, equirectangular, cylindrical wrap. ----
+ * The art below is 32 wide; it is expanded to 64 wide at load so the map keeps
+ * the true 2:1 world proportions (360° x 180°) instead of looking squished.
+ * Columns: col 0 ≈ 180° (date line), col 32 ≈ 0° (Greenwich), increasing east.
  * Rows in earth_map: y=31 = Arctic (north), y=0 = Antarctic (south).
- * Authored below as ASCII art, north (top) -> south (bottom); '#' = land. */
+ * Authored as ASCII art, north (top) -> south (bottom); '#' = land. */
 
-#define MAP_W 32
+#define SRC_W 32
+#define MAP_W 64
 #define MAP_H 32
 static uint8_t earth_map[MAP_W][MAP_H];
 
@@ -89,12 +92,18 @@ void init(void) {
         for (int y = 0; y < MAP_H; y++)
             earth_map[x][y] = 0;
 
-    /* rows[i] is north->south; map row i to y = (MAP_H-1 - i). */
+    /* rows[i] is north->south; map row i to y = (MAP_H-1 - i).
+     * Each source column is written to two map columns so the 32-wide art
+     * fills the 64-wide map at true 2:1 world proportions. */
     for (int i = 0; i < MAP_H; i++) {
         const char *s = rows[i];
         int y = MAP_H - 1 - i;
-        for (int x = 0; s[x] && x < MAP_W; x++) {
-            if (s[x] == '#') earth_map[x][y] = 1;
+        for (int x = 0; s[x] && x < SRC_W; x++) {
+            if (s[x] == '#') {
+                int dx = x * 2;
+                earth_map[dx][y] = 1;
+                if (dx + 1 < MAP_W) earth_map[dx + 1][y] = 1;
+            }
         }
     }
 }
