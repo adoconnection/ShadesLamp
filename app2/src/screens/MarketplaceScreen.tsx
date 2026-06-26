@@ -131,7 +131,13 @@ export default function MarketplaceScreen({ navigation }: Props) {
   const filtered = catalog
     .filter((item) => {
       if (category !== 'All' && item.category !== category) return false;
-      if (search && !item.name.toLowerCase().includes(search.toLowerCase()) && !item.author.toLowerCase().includes(search.toLowerCase())) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        // Match the English name, the localized name, and the author.
+        const enName = item.name.toLowerCase();
+        const locName = localized(item, 'name', item.name).toLowerCase();
+        if (!enName.includes(q) && !locName.includes(q) && !item.author.toLowerCase().includes(q)) return false;
+      }
       return true;
     })
     // Sort by the displayed (localized) name, same as the Library screen.

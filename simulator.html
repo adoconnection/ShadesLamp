@@ -141,6 +141,8 @@
         <button data-c="16" data-r="16">16×16</button>
         <button data-c="16" data-r="32" class="on">16×32</button>
         <button data-c="16" data-r="48">16×48</button>
+        <button data-c="20" data-r="20">20×20</button>
+        <button data-c="40" data-r="20">40×20</button>
         <button data-c="32" data-r="32">32×32</button>
         <button data-c="32" data-r="48">32×48</button>
         <button data-c="48" data-r="32">48×32</button>
@@ -209,6 +211,12 @@
               <input type="checkbox" id="opaque"><span class="track"></span>
             </label>
             <div class="v" style="margin-top:6px">Непрозрачный корпус</div>
+          </div>
+          <div class="ctl">
+            <label class="switch">
+              <input type="checkbox" id="flatBright"><span class="track"></span>
+            </label>
+            <div class="v" style="margin-top:6px">Прозрачный · равная яркость</div>
           </div>
         </div>
         <div class="ctl" style="margin-top:9px">
@@ -426,6 +434,7 @@ let yaw = 0.6, pitch = 0.12;       // углы обзора
 let zoom = 1.0;
 let glowMul = 1.0, ambient = 0.12;
 let opaque = false;                 // непрозрачный корпус — скрывать задние LED
+let flatBright = false;             // прозрачный цилиндр: все LED видны с равной яркостью
 
 // предрасчёт позиций LED: угол и высота
 let ledA = new Float32Array(NPIX);  // угол вокруг оси
@@ -502,9 +511,10 @@ function renderLamp(){
     const sy = cy - Y2*f*pxScale;
     // нормаль (наружу) для определения лицевых/задних LED
     const nz2 = cosA*cP;             // Z-компонента нормали после наклона
-    if (opaque && nz2 <= 0) continue; // непрозрачный корпус — задние LED не видны
+    if (opaque && !flatBright && nz2 <= 0) continue; // непрозрачный корпус — задние LED не видны
     const front = Math.max(0, nz2);  // >0 — смотрит на камеру
-    const vis = 0.12 + 0.88*front;   // задние тускнеют (свет сквозь корпус)
+    // прозрачный режим: все LED с равной яркостью; иначе задние тускнеют
+    const vis = flatBright ? 1 : (0.12 + 0.88*front);
 
     const r=frame[i*3], g=frame[i*3+1], b=frame[i*3+2];
     sp.push({ sx, sy, z:Z2, scale:f*pxScale, r, g, b, vis });
@@ -721,6 +731,7 @@ wrap.addEventListener("wheel",e=>{e.preventDefault();zoom=Math.max(0.4,Math.min(
 document.getElementById("glow").oninput=e=>{glowMul=+e.target.value;document.getElementById("glowV").textContent=glowMul.toFixed(2);};
 document.getElementById("amb").oninput=e=>{ambient=+e.target.value;document.getElementById("ambV").textContent=ambient.toFixed(2);};
 document.getElementById("opaque").onchange=e=>{opaque=e.target.checked;};
+document.getElementById("flatBright").onchange=e=>{flatBright=e.target.checked;};
 
 // ── Список встроенных программ (работает при запуске через http-сервер) ──
 const PRESETS = ["rainbow","plasma","aurora","ocean","lava","lava_lamp","flame","flame_particle","candle",
