@@ -43,8 +43,8 @@ m3ApiRawFunction(host_set_pixel) {
 }
 
 m3ApiRawFunction(host_draw) {
-    if (g_wasmEngine && g_wasmEngine->getLedDriver()) {
-        g_wasmEngine->getLedDriver()->show();
+    if (g_wasmEngine) {
+        g_wasmEngine->present();   // FB-mode copy (bounds-checked) + show
     }
     m3ApiSuccess();
 }
@@ -158,6 +158,91 @@ m3ApiRawFunction(host_m_hsv) {
     m3ApiReturn((int32_t)((r << 16) | (g << 8) | b));
 }
 
+// ── Batch operations over a buffer in the program's linear memory ───────────
+// One host call does W*H work natively. The host bounds-checks the whole region
+// against linear-memory size, so a bad pointer can never read/write out of bounds.
+
+m3ApiRawFunction(host_m_fade) {
+    m3ApiGetArg(int32_t, ptr);
+    m3ApiGetArg(int32_t, len);
+    m3ApiGetArg(int32_t, keep);     // 0..256, fraction of brightness kept
+    uint32_t memSize = 0;
+    uint8_t* mem = m3_GetMemory(runtime, &memSize, 0);
+    if (mem && ptr >= 0 && len > 0 && (uint32_t)ptr + (uint32_t)len <= memSize) {
+        if (keep < 0) keep = 0; if (keep > 256) keep = 256;
+        uint8_t* b = mem + ptr;
+        for (int32_t i = 0; i < len; i++) b[i] = (uint8_t)(((uint32_t)b[i] * (uint32_t)keep) >> 8);
+    }
+    m3ApiSuccess();
+}
+
+m3ApiRawFunction(host_m_fill) {
+    m3ApiGetArg(int32_t, ptr);
+    m3ApiGetArg(int32_t, npix);
+    m3ApiGetArg(int32_t, rgb);      // packed 0xRRGGBB
+    uint32_t memSize = 0;
+    uint8_t* mem = m3_GetMemory(runtime, &memSize, 0);
+    if (mem && ptr >= 0 && npix > 0 && (uint32_t)ptr + (uint32_t)npix * 3 <= memSize) {
+        uint8_t r = (rgb >> 16) & 0xFF, g = (rgb >> 8) & 0xFF, bl = rgb & 0xFF;
+        uint8_t* b = mem + ptr;
+        for (int32_t i = 0; i < npix; i++) { b[i*3] = r; b[i*3+1] = g; b[i*3+2] = bl; }
+    }
+    m3ApiSuccess();
+}
+
+// ── Value-noise (fbm) — matches the simulator implementation exactly ────────
+static int nz_hash2d(int x, int y) {
+    int h = x * 374761393 + y * 668265263 + 1274126177;
+    h = (h ^ (int)((uint32_t)h >> 13)) * 1274126177;
+    return (int)(((uint32_t)h >> 16) & 0xFF);
+}
+static float nz_value(int fx, int fy) {       /* fx,fy in 8.8 fixed point */
+    int ix = fx >> 8, iy = fy >> 8;
+    float tx = (float)(fx & 255) / 255.0f;
+    float ty = (float)(fy & 255) / 255.0f;
+    tx = tx * tx * (3.0f - 2.0f * tx);
+    ty = ty * ty * (3.0f - 2.0f * ty);
+    float v00 = nz_hash2d(ix, iy),     v10 = nz_hash2d(ix + 1, iy);
+    float v01 = nz_hash2d(ix, iy + 1), v11 = nz_hash2d(ix + 1, iy + 1);
+    float top = v00 + (v10 - v00) * tx;
+    float bot = v01 + (v11 - v01) * tx;
+    return top + (bot - top) * ty;            /* 0..255 */
+}
+static float nz_fbm(int fx, int fy, int octaves) {
+    if (octaves < 1) octaves = 1; if (octaves > 4) octaves = 4;
+    float sum = 0.0f, amp = 1.0f, norm = 0.0f;
+    int freq = 1;
+    for (int o = 0; o < octaves; o++) {
+        sum += nz_value(fx * freq, fy * freq) * amp;
+        norm += amp; amp *= 0.5f; freq *= 2;
+    }
+    return sum / norm;                        /* 0..255 */
+}
+
+m3ApiRawFunction(host_m_noise_fill) {
+    m3ApiGetArg(int32_t, ptr);
+    m3ApiGetArg(int32_t, w);
+    m3ApiGetArg(int32_t, h);
+    m3ApiGetArg(int32_t, scale);    // 8.8 fixed step per cell
+    m3ApiGetArg(int32_t, ox);       // 8.8 offset (pan/time)
+    m3ApiGetArg(int32_t, oy);
+    m3ApiGetArg(int32_t, octaves);
+    uint32_t memSize = 0;
+    uint8_t* mem = m3_GetMemory(runtime, &memSize, 0);
+    if (mem && ptr >= 0 && w > 0 && h > 0 &&
+        (uint32_t)ptr + (uint32_t)w * (uint32_t)h <= memSize) {
+        uint8_t* b = mem + ptr;
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int v = (int)(nz_fbm(x * scale + ox, y * scale + oy, octaves) + 0.5f);
+                if (v < 0) v = 0; if (v > 255) v = 255;
+                b[y * w + x] = (uint8_t)v;
+            }
+        }
+    }
+    m3ApiSuccess();
+}
+
 // ── WasmEngine class implementation ────────────────────────────────────────
 
 WasmEngine::WasmEngine(LedDriver* ledDriver, ParamStore* paramStore)
@@ -169,6 +254,8 @@ WasmEngine::WasmEngine(LedDriver* ledDriver, ParamStore* paramStore)
     , _funcUpdate(nullptr)
     , _loaded(false)
     , _paramsChanged(false)
+    , _fbMode(false)
+    , _fbPtr(0)
 {
     _mutex = xSemaphoreCreateMutex();
     g_wasmEngine = this;
@@ -272,6 +359,9 @@ bool WasmEngine::load(const uint8_t* wasmData, size_t wasmSize) {
         _funcUpdate = nullptr;
     }
 
+    // Detect optional framebuffer fast-path export
+    detectFramebuffer();
+
     _loaded = true;
     Serial.printf("%s Program loaded successfully\r\n", TAG);
 
@@ -319,10 +409,40 @@ void WasmEngine::unload() {
     _funcUpdate = nullptr;
     _metaJson = "";
     _loaded = false;
+    _fbMode = false;
+    _fbPtr = 0;
 
     Serial.printf("%s Program unloaded\r\n", TAG);
 
     xSemaphoreGive(_mutex);
+}
+
+void WasmEngine::detectFramebuffer() {
+    _fbMode = false;
+    _fbPtr = 0;
+    IM3Function f;
+    if (m3_FindFunction(&f, _runtime, "get_framebuffer")) return;  // not exported
+    if (m3_CallV(f)) return;
+    int32_t ptr = 0;
+    m3_GetResultsV(f, &ptr);
+    if (ptr < 0) return;
+    _fbPtr = ptr;
+    _fbMode = true;
+    Serial.printf("%s Framebuffer mode (ptr=%d)\r\n", TAG, ptr);
+}
+
+void WasmEngine::present() {
+    if (!_ledDriver) return;
+    if (_fbMode && _runtime) {
+        uint32_t memSize = 0;
+        uint8_t* mem = m3_GetMemory(_runtime, &memSize, 0);
+        uint32_t need = _ledDriver->bufferBytes();
+        if (mem && _fbPtr >= 0 && (uint32_t)_fbPtr + need <= memSize) {
+            _ledDriver->commit(mem + _fbPtr);
+        }
+        // invalid pointer -> keep previous frame (no copy)
+    }
+    _ledDriver->show();
 }
 
 String WasmEngine::getMetaJson() const {
@@ -388,6 +508,11 @@ bool WasmEngine::linkHostFunctions() {
     m3_LinkRawFunction(_module, "env", "m_exp",   "f(f)",   &host_m_exp);
     m3_LinkRawFunction(_module, "env", "m_pow",   "f(ff)",  &host_m_pow);
     m3_LinkRawFunction(_module, "env", "m_hsv",   "i(iii)", &host_m_hsv);
+
+    // Batch operations over a memory buffer
+    m3_LinkRawFunction(_module, "env", "m_fade",       "v(iii)",     &host_m_fade);
+    m3_LinkRawFunction(_module, "env", "m_fill",       "v(iii)",     &host_m_fill);
+    m3_LinkRawFunction(_module, "env", "m_noise_fill", "v(iiiiiii)", &host_m_noise_fill);
 
     // Not a hard failure if individual links fail (function may not be imported)
     return true;
@@ -481,6 +606,9 @@ static void linkAllHostFunctions(IM3Module mod) {
     m3_LinkRawFunction(mod, "env", "m_exp",   "f(f)",   &host_m_exp);
     m3_LinkRawFunction(mod, "env", "m_pow",   "f(ff)",  &host_m_pow);
     m3_LinkRawFunction(mod, "env", "m_hsv",   "i(iii)", &host_m_hsv);
+    m3_LinkRawFunction(mod, "env", "m_fade",       "v(iii)",     &host_m_fade);
+    m3_LinkRawFunction(mod, "env", "m_fill",       "v(iii)",     &host_m_fill);
+    m3_LinkRawFunction(mod, "env", "m_noise_fill", "v(iiiiiii)", &host_m_noise_fill);
 }
 
 bool wasmValidate(const uint8_t* wasmData, size_t wasmSize) {

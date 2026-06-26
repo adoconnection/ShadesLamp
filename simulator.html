@@ -141,7 +141,11 @@
         <button data-c="16" data-r="16">16×16</button>
         <button data-c="16" data-r="32" class="on">16×32</button>
         <button data-c="16" data-r="48">16×48</button>
+        <button data-c="32" data-r="32">32×32</button>
         <button data-c="32" data-r="48">32×48</button>
+        <button data-c="48" data-r="32">48×32</button>
+        <button data-c="48" data-r="48">48×48</button>
+        <button data-c="56" data-r="48">56×48</button>
       </div>
     </div>
     <div id="canvasWrap">
@@ -248,6 +252,8 @@ let paramVals  = {};       // id -> число
 let startTime  = 0;
 let running    = false;
 let curName    = "";
+let fbMode     = false;    // программа экспортирует get_framebuffer()
+let fbPtr      = 0;        // смещение FB в linear memory
 
 // ── host-функции (точно как в wasm_engine.cpp) ──────────────────────────
 function host_get_width()  { return COLS; }
@@ -259,7 +265,13 @@ function host_set_pixel(x,y,r,g,b){
   frame[i+1] = g & 255;
   frame[i+2] = b & 255;
 }
-function host_draw(){ /* кадр читаем из frame в рендере */ }
+function host_draw(){
+  if (!fbMode) return;   // set_pixel-режим: frame уже заполнен
+  // FB-режим: копируем W*H*3 байт из памяти программы (перечитываем — память могла вырасти)
+  const mem = new Uint8Array(exportsW.memory.buffer);
+  const n = COLS*ROWS*3;
+  if (fbPtr>=0 && fbPtr+n <= mem.length) frame.set(mem.subarray(fbPtr, fbPtr+n));
+}
 function host_get_param_i32(id){ const v = paramVals[id]; return v===undefined?0:(v|0); }
 function host_get_param_f32(id){ const v = paramVals[id]; return v===undefined?0:(+v); }
 function host_set_param_i32(id,val){
@@ -284,6 +296,48 @@ function host_m_hsv(h,s,v){
   return ((r<<16)|(g<<8)|b);
 }
 
+// ── Batch operations over a buffer in the program's linear memory ──────────
+function host_m_fade(ptr,len,keep){
+  const mem=new Uint8Array(exportsW.memory.buffer);
+  if(ptr<0||len<=0||ptr+len>mem.length)return;
+  keep = keep<0?0:(keep>256?256:keep);
+  for(let i=0;i<len;i++) mem[ptr+i]=(mem[ptr+i]*keep)>>8;
+}
+function host_m_fill(ptr,npix,rgb){
+  const mem=new Uint8Array(exportsW.memory.buffer);
+  if(ptr<0||npix<=0||ptr+npix*3>mem.length)return;
+  const r=(rgb>>16)&255,g=(rgb>>8)&255,b=rgb&255;
+  for(let i=0;i<npix;i++){const o=ptr+i*3;mem[o]=r;mem[o+1]=g;mem[o+2]=b;}
+}
+// value-noise (fbm) — побайтово совпадает с прошивкой
+function nz_hash2d(x,y){
+  let h=(Math.imul(x,374761393)+Math.imul(y,668265263)+1274126177)|0;
+  h=Math.imul(h^(h>>>13),1274126177)|0;
+  return (h>>>16)&0xFF;
+}
+function nz_value(fx,fy){
+  const ix=fx>>8, iy=fy>>8;
+  let tx=(fx&255)/255, ty=(fy&255)/255;
+  tx=tx*tx*(3-2*tx); ty=ty*ty*(3-2*ty);
+  const v00=nz_hash2d(ix,iy),v10=nz_hash2d(ix+1,iy),v01=nz_hash2d(ix,iy+1),v11=nz_hash2d(ix+1,iy+1);
+  const top=v00+(v10-v00)*tx, bot=v01+(v11-v01)*tx;
+  return top+(bot-top)*ty;
+}
+function nz_fbm(fx,fy,oct){
+  oct=oct<1?1:(oct>4?4:oct);
+  let sum=0,amp=1,norm=0,freq=1;
+  for(let o=0;o<oct;o++){ sum+=nz_value(fx*freq,fy*freq)*amp; norm+=amp; amp*=0.5; freq*=2; }
+  return sum/norm;
+}
+function host_m_noise_fill(ptr,w,h,scale,ox,oy,oct){
+  const mem=new Uint8Array(exportsW.memory.buffer);
+  if(ptr<0||w<=0||h<=0||ptr+w*h>mem.length)return;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    let v=(nz_fbm(x*scale+ox,y*scale+oy,oct)+0.5)|0;
+    mem[ptr+y*w+x]= v<0?0:(v>255?255:v);
+  }
+}
+
 const baseEnv = {
   get_width:host_get_width, get_height:host_get_height,
   set_pixel:host_set_pixel, draw:host_draw,
@@ -293,6 +347,8 @@ const baseEnv = {
   m_sin:Math.sin, m_cos:Math.cos, m_sqrt:Math.sqrt,
   m_hypot:(x,y)=>Math.sqrt(x*x+y*y), m_atan2:Math.atan2,
   m_exp:Math.exp, m_pow:Math.pow, m_hsv:host_m_hsv,
+  // batch operations
+  m_fade:host_m_fade, m_fill:host_m_fill, m_noise_fill:host_m_noise_fill,
 };
 // Proxy: любой неизвестный импорт → безопасная заглушка (как --allow-undefined)
 const envProxy = new Proxy(baseEnv, {
@@ -315,6 +371,13 @@ async function loadWasm(bytes, name){
     frame.fill(0);
 
     if (typeof exportsW.init === "function") exportsW.init();
+
+    // Detect optional framebuffer fast-path export
+    fbMode = false; fbPtr = 0;
+    if (typeof exportsW.get_framebuffer === "function") {
+      const p = exportsW.get_framebuffer() >>> 0;
+      if (p > 0) { fbPtr = p; fbMode = true; }
+    }
     if (typeof exportsW.update !== "function") throw new Error("нет экспорта update()");
 
     curName = name || (meta && meta.name) || "program";
@@ -660,7 +723,7 @@ document.getElementById("opaque").onchange=e=>{opaque=e.target.checked;};
 
 // ── Список встроенных программ (работает при запуске через http-сервер) ──
 const PRESETS = ["rainbow","plasma","aurora","ocean","lava","lava_lamp","flame","flame_particle","candle",
- "fireworks","fireflies","clouds","comet","confetti","colored_rain","matrix_rain","snow",
+ "fireworks","fireflies","clouds","comet","confetti","matrix_rain","snow",
  "metaballs","bouncing_balls","popcorn","pulse","sinusoid","spirals","twinkling","waves",
  "warp","vortex","kaleidoscope","jellyfish","helix","hexagons","dna","moire","morphing",
  "cube","electrons","core","breathing","police","forest","whirl","fountains","tricolor",

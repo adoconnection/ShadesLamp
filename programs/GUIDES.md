@@ -108,6 +108,41 @@ Unpack `m_hsv`: `r=(c>>16)&255, g=(c>>8)&255, b=c&255`.
 > the updated firmware before publishing such a program. Programs that don't
 > import them are unaffected. The simulator implements the same contract.
 
+### Batch operations (`api.h`)
+
+Do `W*H` work in a **single** native call (amortizes the host-call boundary,
+runs natively). The host bounds-checks the whole region against linear-memory
+size, so a bad pointer can never escape your program's memory.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `m_fade(buf, len, keep)` | `void (void*, int, int)` | Multiply `len` bytes by `keep/256` (trail fade). `keep` 0–256 |
+| `m_fill(buf, num_pixels, rgb)` | `void (void*, int, int)` | Fill RGB triplets with packed `0xRRGGBB` |
+| `m_noise_fill(buf, w, h, scale, ox, oy, octaves)` | `void (void*, int, int, int, int, int, int)` | Write a `w*h` grayscale value-noise (fbm) field, 1 byte/cell. `scale/ox/oy` are 8.8 fixed-point (256 = one cell), `octaves` 1–4 |
+
+### Framebuffer fast-path (optional)
+
+Instead of calling `set_pixel` per pixel (one host call each), export a
+`get_framebuffer()` that returns a pointer to your own RGB buffer; write pixels
+there and call `draw()` — the host copies `W*H*3` bytes in one go.
+
+```c
+#define MAX_W 64
+#define MAX_H 64
+static uint8_t FB[MAX_W * MAX_H * 3];          // row-major (y*W + x)*3, RGB
+EXPORT(get_framebuffer) int get_framebuffer(void) { return (int)FB; }
+
+EXPORT(update) void update(int tick_ms) {
+    int W = get_width(), H = get_height();
+    m_fade(FB, W*H*3, 200);                     // fade the trail
+    /* ... write into FB ... */
+    draw();                                     // host reads FB (bounds-checked)
+}
+```
+
+Size `FB` for the **largest** display you support. Programs that don't export
+`get_framebuffer` keep using `set_pixel` unchanged (both paths coexist).
+
 ## Coordinate System
 
 - **Y=0 is the BOTTOM** of the physical display, Y=H-1 is the top

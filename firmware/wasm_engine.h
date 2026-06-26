@@ -41,9 +41,14 @@ public:
     // Called by host_set_param_i32 to flag params as changed
     void flagParamsChanged() { _paramsChanged = true; }
 
+    // Called by host_draw: in framebuffer mode copy the program's FB into the
+    // LED buffer (bounds-checked), then push to the LEDs.
+    void present();
+
 private:
     bool linkHostFunctions();
     bool extractMeta();
+    void detectFramebuffer();
 
     LedDriver*   _ledDriver;
     ParamStore*  _paramStore;
@@ -56,6 +61,9 @@ private:
     String _metaJson;
     bool   _loaded;
     bool   _paramsChanged;
+
+    bool    _fbMode;     // program exports get_framebuffer()
+    int32_t _fbPtr;      // offset of the program's framebuffer in linear memory
 
     SemaphoreHandle_t _mutex;
 };

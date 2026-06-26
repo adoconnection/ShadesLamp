@@ -59,6 +59,32 @@ float m_pow(float base, float exponent);
 __attribute__((import_module("env"), import_name("m_hsv")))
 int m_hsv(int h, int s, int v);
 
+// ── Batch operations ────────────────────────────────────────────────────
+// Do W*H work in a single native call (the host bounds-checks the whole
+// region, so a bad pointer can never escape the program's memory).
+
+// Multiply `len` bytes at buf by keep/256 (trail fade). keep: 0..256.
+__attribute__((import_module("env"), import_name("m_fade")))
+void m_fade(void* buf, int len, int keep);
+
+// Fill num_pixels RGB triplets at buf with packed color 0xRRGGBB.
+__attribute__((import_module("env"), import_name("m_fill")))
+void m_fill(void* buf, int num_pixels, int rgb);
+
+// Write a w*h grayscale value-noise (fbm) field into buf (1 byte/cell, 0-255).
+// scale/ox/oy are 8.8 fixed-point (256 = one noise cell). octaves: 1..4.
+__attribute__((import_module("env"), import_name("m_noise_fill")))
+void m_noise_fill(void* buf, int w, int h, int scale, int ox, int oy, int octaves);
+
+// ── Framebuffer fast-path (optional) ─────────────────────────────────────
+// Instead of calling set_pixel per pixel, EXPORT a function named
+// "get_framebuffer" that returns a pointer to an RGB buffer in your own memory
+// (row-major (y*W + x)*3, sized for the largest display you support). Write
+// pixels there, then call draw() — the host copies W*H*3 bytes in one go.
+//
+//   static uint8_t FB[MAX_W * MAX_H * 3];
+//   EXPORT(get_framebuffer) int get_framebuffer(void) { return (int)FB; }
+
 // Export helpers
 #define EXPORT(name) __attribute__((export_name(#name)))
 

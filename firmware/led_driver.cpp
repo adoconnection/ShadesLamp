@@ -74,6 +74,13 @@ void LedDriver::setPixel(uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b
     xSemaphoreGive(_mutex);
 }
 
+void LedDriver::commit(const uint8_t* rgb) {
+    if (!rgb) return;
+    xSemaphoreTake(_mutex, portMAX_DELAY);
+    memcpy(_framebuffer, rgb, (size_t)_numPixels * 3);
+    xSemaphoreGive(_mutex);
+}
+
 void LedDriver::show() {
     xSemaphoreTake(_mutex, portMAX_DELAY);
 

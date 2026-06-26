@@ -24,8 +24,12 @@ public:
 
     void begin();
     void setPixel(uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b);
+    // Bulk-copy a full RGB frame (numPixels*3 bytes, row-major) into the buffer.
+    void commit(const uint8_t* rgb);
     void show();
     void clear();
+
+    uint32_t bufferBytes() const { return (uint32_t)_numPixels * 3; }
 
     uint16_t getWidth() const;
     uint16_t getHeight() const;
