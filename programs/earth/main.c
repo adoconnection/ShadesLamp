@@ -42,13 +42,15 @@ int get_meta_len(void) { return sizeof(META) - 1; }
  * Columns: col 0 ≈ 180° (date line), increasing east. Authored north -> south. */
 
 #define SRC_W 32
-#define ART_H 25
+#define ART_H 27
 #define MAP_W 53
 #define MAP_H 32
 static uint8_t earth_map[MAP_W][MAP_H];
 
 /* rows[0] is the northernmost art line. */
 static const char *const rows[ART_H] = {
+    "................................",  /* Arctic Ocean (open water margin)    */
+    "......##.....##........#.#.#.#...",  /* Arctic Ocean fringe (coast/islands) */
     ".########...###..##.###########.",  /* N.Canada, Greenland, Scand, Siberia */
     "..#######...#######.##########..",  /* Canada, Europe, Russia        */
     "..#.#####...#.####..#########...",  /* Alaska, Canada, Europe, C.Asia */
