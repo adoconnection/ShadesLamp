@@ -8,25 +8,21 @@ static const char META[] =
         "{\"id\":0,\"name\":\"Speed\",\"type\":\"int\","
          "\"min\":0,\"max\":100,\"default\":30,"
          "\"desc\":\"Rotation speed (0 stops the globe)\"},"
-        "{\"id\":1,\"name\":\"LandColor\",\"type\":\"select\","
+        "{\"id\":1,\"name\":\"Style\",\"type\":\"select\","
          "\"default\":0,"
-         "\"options\":[\"Forest\",\"Desert\",\"Sand\",\"Snow\",\"Neon\"],"
-         "\"desc\":\"Continents color palette\"},"
-        "{\"id\":2,\"name\":\"SeaColor\",\"type\":\"select\","
-         "\"default\":0,"
-         "\"options\":[\"Ocean\",\"Deep\",\"Teal\",\"Cyan\",\"Dark\"],"
-         "\"desc\":\"Oceans color palette\"},"
-        "{\"id\":3,\"name\":\"LandBrightness\",\"type\":\"int\","
+         "\"options\":[\"Map\",\"Satellite\",\"Night\",\"Neon\",\"Land only\",\"Water only\"],"
+         "\"desc\":\"Colour theme (land + sea together)\"},"
+        "{\"id\":2,\"name\":\"LandBrightness\",\"type\":\"int\","
          "\"min\":0,\"max\":255,\"default\":200,"
          "\"desc\":\"Brightness of land pixels\"},"
-        "{\"id\":4,\"name\":\"SeaBrightness\",\"type\":\"int\","
+        "{\"id\":3,\"name\":\"SeaBrightness\",\"type\":\"int\","
          "\"min\":0,\"max\":255,\"default\":80,"
          "\"desc\":\"Brightness of sea pixels\"},"
-        "{\"id\":5,\"name\":\"Direction\",\"type\":\"select\","
+        "{\"id\":4,\"name\":\"Direction\",\"type\":\"select\","
          "\"default\":0,"
          "\"options\":[\"West to East\",\"East to West\"],"
          "\"desc\":\"Rotation direction\"},"
-        "{\"id\":6,\"name\":\"Fit\",\"type\":\"select\","
+        "{\"id\":5,\"name\":\"Fit\",\"type\":\"select\","
          "\"default\":1,"
          "\"options\":[\"Stretch\",\"Native\"],"
          "\"desc\":\"1:1 native pixels (window over the map), or stretch whole map to display\"}"
@@ -38,21 +34,21 @@ int get_meta_ptr(void) { return (int)META; }
 EXPORT(get_meta_len)
 int get_meta_len(void) { return sizeof(META) - 1; }
 
-/* ---- Earth bitmap, equirectangular, cylindrical wrap. ----
- * The art below is 32 wide; it is expanded to 64 wide at load so the map keeps
- * the true 2:1 world proportions (360° x 180°) instead of looking squished.
- * Columns: col 0 ≈ 180° (date line), col 32 ≈ 0° (Greenwich), increasing east.
- * Rows in earth_map: y=31 = Arctic (north), y=0 = Antarctic (south).
- * Authored as ASCII art, north (top) -> south (bottom); '#' = land. */
+/* ---- Earth bitmap, cylindrical wrap. ----
+ * The art below is 32 wide x 25 tall; it is resampled at load to MAP_W x MAP_H.
+ * MAP_H = 32 matches the matrix height (no vertical scaling on a 32-row lamp),
+ * and MAP_W = 53 gives the classic world-map aspect ~1.65:1 (53/32 = 1.656).
+ * Polar caps (Arctic ice, Antarctica) are omitted — only the inhabited band.
+ * Columns: col 0 ≈ 180° (date line), increasing east. Authored north -> south. */
 
 #define SRC_W 32
-#define MAP_W 64
+#define ART_H 25
+#define MAP_W 53
 #define MAP_H 32
 static uint8_t earth_map[MAP_W][MAP_H];
 
-/* rows[0] is the northernmost line (maps to y=31). */
-static const char *const rows[MAP_H] = {
-    "......##.....##.......######....",  /* Arctic ice / N. islands       */
+/* rows[0] is the northernmost art line. */
+static const char *const rows[ART_H] = {
     ".########...###..##.###########.",  /* N.Canada, Greenland, Scand, Siberia */
     "..#######...#######.##########..",  /* Canada, Europe, Russia        */
     "..#.#####...#.####..#########...",  /* Alaska, Canada, Europe, C.Asia */
@@ -77,55 +73,39 @@ static const char *const rows[MAP_H] = {
     "..........##...............#..##",  /* Patagonia, Tasmania, NZ       */
     "..........#...................#.",  /* Patagonia tip, NZ             */
     "..........#.....................",  /* Patagonia tip                 */
-    "................................",  /* Southern Ocean                */
-    "................................",  /* Southern Ocean                */
-    "................................",  /* Southern Ocean                */
-    "#..#..#..#..#..#..#..#..#..#..#.",  /* Antarctic coast               */
-    "################################",  /* Antarctica                    */
-    "################################",  /* Antarctica                    */
-    "################################",  /* Antarctica                    */
+    "................................",  /* Southern Ocean (margin)       */
 };
 
 EXPORT(init)
 void init(void) {
-    for (int x = 0; x < MAP_W; x++)
-        for (int y = 0; y < MAP_H; y++)
-            earth_map[x][y] = 0;
-
-    /* rows[i] is north->south; map row i to y = (MAP_H-1 - i).
-     * Each source column is written to two map columns so the 32-wide art
-     * fills the 64-wide map at true 2:1 world proportions. */
-    for (int i = 0; i < MAP_H; i++) {
-        const char *s = rows[i];
-        int y = MAP_H - 1 - i;
-        for (int x = 0; s[x] && x < SRC_W; x++) {
-            if (s[x] == '#') {
-                int dx = x * 2;
-                earth_map[dx][y] = 1;
-                if (dx + 1 < MAP_W) earth_map[dx + 1][y] = 1;
-            }
+    /* Resample the 32x25 art to the MAP_W x MAP_H map (nearest neighbour).
+     * MAP_H matches the matrix height; MAP_W gives the ~1.65:1 world aspect.
+     * y = MAP_H-1 is north. */
+    for (int y = 0; y < MAP_H; y++) {
+        int t  = (MAP_H - 1) - y;            /* 0 = northernmost */
+        int ai = (t * ART_H) / MAP_H;        /* nearest art row */
+        if (ai >= ART_H) ai = ART_H - 1;
+        const char *s = rows[ai];
+        for (int dx = 0; dx < MAP_W; dx++) {
+            int sx = (dx * SRC_W) / MAP_W;   /* nearest art column 0..SRC_W-1 */
+            earth_map[dx][y] = (s[sx] == '#') ? 1 : 0;
         }
     }
 }
 
-/* ---- Color palettes ---- */
-static void pick_land_color(int palette, int *r, int *g, int *b) {
-    switch (palette) {
-        case 1: *r = 180; *g = 120; *b = 60;  break;  /* Desert */
-        case 2: *r = 220; *g = 200; *b = 120; break;  /* Sand */
-        case 3: *r = 220; *g = 220; *b = 240; break;  /* Snow */
-        case 4: *r = 80;  *g = 255; *b = 100; break;  /* Neon */
-        default: *r = 60; *g = 160; *b = 70;  break;  /* Forest */
-    }
+static uint32_t hashu(uint32_t a) {
+    a ^= a >> 16; a *= 0x7feb352du; a ^= a >> 15; a *= 0x846ca68bu; a ^= a >> 16; return a;
 }
 
-static void pick_sea_color(int palette, int *r, int *g, int *b) {
-    switch (palette) {
-        case 1: *r = 20;  *g = 40;  *b = 120; break;  /* Deep */
-        case 2: *r = 30;  *g = 130; *b = 130; break;  /* Teal */
-        case 3: *r = 60;  *g = 180; *b = 220; break;  /* Cyan */
-        case 4: *r = 8;   *g = 8;   *b = 24;  break;  /* Dark */
-        default: *r = 40; *g = 90;  *b = 200; break;  /* Ocean */
+/* ---- Colour themes: land + sea picked together ---- */
+static void pick_theme(int style, int *lr, int *lg, int *lb, int *sr, int *sg, int *sb) {
+    switch (style) {
+        case 1: *lr=70;  *lg=115; *lb=50;  *sr=6;  *sg=18; *sb=48;  break; /* Satellite */
+        case 2: *lr=255; *lg=185; *lb=80;  *sr=14; *sg=22; *sb=80;  break; /* Night (city lights) */
+        case 3: *lr=60;  *lg=255; *lb=130; *sr=10; *sg=12; *sb=40;  break; /* Neon */
+        case 4: *lr=80;  *lg=200; *lb=90;  *sr=0;  *sg=0;  *sb=0;   break; /* Land only */
+        case 5: *lr=0;   *lg=0;   *lb=0;   *sr=40; *sg=120;*sb=220; break; /* Water only */
+        default:*lr=60;  *lg=160; *lb=70;  *sr=40; *sg=90; *sb=200; break; /* Map */
     }
 }
 
@@ -136,12 +116,11 @@ static int32_t prev_tick = 0;
 EXPORT(update)
 void update(int tick_ms) {
     int speed       = get_param_i32(0);  /* 0..100 */
-    int land_pal    = get_param_i32(1);
-    int sea_pal     = get_param_i32(2);
-    int land_bright = get_param_i32(3);  /* 0..255 */
-    int sea_bright  = get_param_i32(4);  /* 0..255 */
-    int direction   = get_param_i32(5);  /* 0=W→E, 1=E→W */
-    int fit_mode    = get_param_i32(6);  /* 0=Stretch, 1=Native */
+    int style       = get_param_i32(1);  /* colour theme */
+    int land_bright = get_param_i32(2);  /* 0..255 */
+    int sea_bright  = get_param_i32(3);  /* 0..255 */
+    int direction   = get_param_i32(4);  /* 0=W→E, 1=E→W */
+    int fit_mode    = get_param_i32(5);  /* 0=Stretch, 1=Native */
 
     int W = get_width();
     int H = get_height();
@@ -161,8 +140,7 @@ void update(int tick_ms) {
 
     int land_r, land_g, land_b;
     int sea_r,  sea_g,  sea_b;
-    pick_land_color(land_pal, &land_r, &land_g, &land_b);
-    pick_sea_color(sea_pal,   &sea_r,  &sea_g,  &sea_b);
+    pick_theme(style, &land_r, &land_g, &land_b, &sea_r, &sea_g, &sea_b);
 
     int lr = (land_r * land_bright) / 255;
     int lg = (land_g * land_bright) / 255;
@@ -170,6 +148,9 @@ void update(int tick_ms) {
     int sr = (sea_r  * sea_bright)  / 255;
     int sg = (sea_g  * sea_bright)  / 255;
     int sb = (sea_b  * sea_bright)  / 255;
+
+    int night = (style == 2);            /* city-lights sparkle on land */
+    int twk   = tick_ms / 320;           /* slow twinkle bucket */
 
     for (int x = 0; x < W; x++) {
         int32_t src_x_q8;
@@ -194,9 +175,24 @@ void update(int tick_ms) {
             int wL = lLo * (256 - frac_x) + lHi * frac_x;
             int wS = 256 - wL;
 
-            int r = (lr * wL + sr * wS) >> 8;
-            int g = (lg * wL + sg * wS) >> 8;
-            int b = (lb * wL + sb * wS) >> 8;
+            int plr = lr, plg = lg, plb = lb;
+            if (night && wL > 0) {
+                /* city lights: skewed per-cell brightness + slow twinkle */
+                uint32_t h = hashu((uint32_t)(sx_lo * 131 + sy * 977));
+                int s8 = (int)(h & 255);
+                int f  = 45 + (s8 * s8) / 300;      /* mostly dim, a few bright */
+                if (f > 255) f = 255;
+                uint32_t h2 = hashu(h ^ (uint32_t)twk);
+                int tw = 205 + (int)(h2 & 50);      /* 205..255 shimmer */
+                f = (f * tw) / 255;
+                plr = (lr * f) / 255;
+                plg = (lg * f) / 255;
+                plb = (lb * f) / 255;
+            }
+
+            int r = (plr * wL + sr * wS) >> 8;
+            int g = (plg * wL + sg * wS) >> 8;
+            int b = (plb * wL + sb * wS) >> 8;
             if (r > 255) r = 255;
             if (g > 255) g = 255;
             if (b > 255) b = 255;
