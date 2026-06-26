@@ -5,19 +5,22 @@ static const char META[] =
     "{\"name\":\"Breathing\","
     "\"desc\":\"Lifelike breathing or a lub-dub heartbeat glow\","
     "\"params\":["
-        "{\"id\":0,\"name\":\"Hue\",\"type\":\"int\","
+        "{\"id\":0,\"name\":\"Inhale Hue\",\"type\":\"int\","
          "\"min\":0,\"max\":255,\"default\":140,"
-         "\"desc\":\"Color hue (140=cyan)\"},"
-        "{\"id\":1,\"name\":\"Saturation\",\"type\":\"int\","
+         "\"desc\":\"Color while inhaling (140=cyan)\"},"
+        "{\"id\":1,\"name\":\"Exhale Hue\",\"type\":\"int\","
+         "\"min\":0,\"max\":255,\"default\":20,"
+         "\"desc\":\"Color while exhaling (20=amber)\"},"
+        "{\"id\":2,\"name\":\"Saturation\",\"type\":\"int\","
          "\"min\":0,\"max\":255,\"default\":255,"
-         "\"desc\":\"Color saturation (0=white pulse)\"},"
-        "{\"id\":2,\"name\":\"Speed\",\"type\":\"int\","
+         "\"desc\":\"Color saturation (peak always goes white)\"},"
+        "{\"id\":3,\"name\":\"Speed\",\"type\":\"int\","
          "\"min\":1,\"max\":100,\"default\":30,"
          "\"desc\":\"Breathing / heart rate\"},"
-        "{\"id\":3,\"name\":\"Max Brightness\",\"type\":\"int\","
+        "{\"id\":4,\"name\":\"Max Brightness\",\"type\":\"int\","
          "\"min\":1,\"max\":255,\"default\":200,"
          "\"desc\":\"Peak brightness\"},"
-        "{\"id\":4,\"name\":\"Mode\",\"type\":\"select\","
+        "{\"id\":5,\"name\":\"Mode\",\"type\":\"select\","
          "\"options\":[\"Breath\",\"Heartbeat\"],"
          "\"default\":0,"
          "\"desc\":\"Breathing rhythm or a beating heart\"}"
@@ -87,13 +90,16 @@ void init(void) {
     /* Nothing to initialize */
 }
 
+static float prev_vc = 0.0f;   /* previous raw curve value, for inhale/exhale detection */
+
 EXPORT(update)
 void update(int tick_ms) {
-    int hue        = get_param_i32(0);
-    int sat        = get_param_i32(1);
-    int speed      = get_param_i32(2);
-    int max_bright = get_param_i32(3);
-    int mode       = get_param_i32(4);   /* 0 = breath, 1 = heartbeat */
+    int inhale_hue = get_param_i32(0);
+    int exhale_hue = get_param_i32(1);
+    int sat        = get_param_i32(2);
+    int speed      = get_param_i32(3);
+    int max_bright = get_param_i32(4);
+    int mode       = get_param_i32(5);   /* 0 = breath, 1 = heartbeat */
     int W = get_width();
     int H = get_height();
 
@@ -104,18 +110,30 @@ void update(int tick_ms) {
 
     float p = fracf((float)tick_ms * inc);
 
-    float v = (mode == 1) ? heart_curve(p) : breath_curve(p);
+    /* raw curve 0..1 — used for both brightness and the colour journey */
+    float vc = (mode == 1) ? heart_curve(p) : breath_curve(p);
+
+    /* inhale = rising, exhale = falling */
+    int rising = (vc >= prev_vc);
+    prev_vc = vc;
 
     /* Keep a faint glow at the trough so the lamp never goes fully black */
     const float floor_v = 0.05f;
-    v = floor_v + v * (1.0f - floor_v);
+    float v = floor_v + vc * (1.0f - floor_v);
 
     int val = (int)(v * (float)max_bright + 0.5f);
     if (val < 0)   val = 0;
     if (val > 255) val = 255;
 
+    /* Colour passes through three stops per cycle:
+       inhale colour -> white (at the peak) -> exhale colour.
+       Saturation falls to 0 as the breath nears its peak. */
+    int hue = rising ? inhale_hue : exhale_hue;
+    int sat_eff = (int)((float)sat * (1.0f - vc));
+    if (sat_eff < 0) sat_eff = 0;
+
     int r, g, b;
-    hsv2rgb(hue, sat, val, &r, &g, &b);
+    hsv2rgb(hue, sat_eff, val, &r, &g, &b);
 
     for (int x = 0; x < W; x++) {
         for (int y = 0; y < H; y++) {
