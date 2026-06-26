@@ -21,7 +21,10 @@ static const char META[] =
          "\"desc\":\"Number of flying sparks\"},"
         "{\"id\":3,\"name\":\"Brightness\",\"type\":\"int\","
          "\"min\":1,\"max\":255,\"default\":220,"
-         "\"desc\":\"Overall brightness\"}"
+         "\"desc\":\"Overall brightness\"},"
+        "{\"id\":4,\"name\":\"Speed\",\"type\":\"int\","
+         "\"min\":1,\"max\":100,\"default\":50,"
+         "\"desc\":\"Flame animation speed\"}"
     "]}";
 
 EXPORT(get_meta_ptr)
@@ -183,6 +186,10 @@ static void spark_draw(float fx, float fy, uint8_t bright, uint8_t hue_val, int 
     }
 }
 
+/* Time-step accumulator so the Speed param controls simulation rate */
+static int32_t prev_tick = 0;
+static float   step_acc = 0.0f;
+
 EXPORT(init)
 void init(void) {
     for (int i = 0; i < MAX_W * MAX_H; i++) {
@@ -195,36 +202,13 @@ void init(void) {
         spkTTL[i] = 0; spkBri[i] = 0;
     }
     rng = 48271;
+    prev_tick = 0;
+    step_acc = 0.0f;
 }
 
-EXPORT(update)
-void update(int tick_ms) {
-    int base_hue   = get_param_i32(0);
-    int intensity  = get_param_i32(1);
-    int num_sparks = get_param_i32(2);
-    int bright     = get_param_i32(3);
-
-    cur_w = get_width();
-    cur_h = get_height();
-    if (cur_w > MAX_W) cur_w = MAX_W;
-    if (cur_h > MAX_H) cur_h = MAX_H;
-    if (cur_w < 1) cur_w = 1;
-    if (cur_h < 1) cur_h = 1;
-
-    rng ^= (uint32_t)tick_ms;
-
-    int num_particles = (int)((float)cur_w * 2.4f * intensity / 100.0f);
-    if (num_particles < 2) num_particles = 2;
-    if (num_particles > MAX_PARTICLES) num_particles = MAX_PARTICLES;
-
-    if (num_sparks > MAX_SPARKS) num_sparks = MAX_SPARKS;
-
-    int min_ttl = cur_h / 4;
-    if (min_ttl < 3) min_ttl = 3;
-    int max_ttl = cur_h;
-    if (max_ttl < min_ttl + 2) max_ttl = min_ttl + 2;
-    if (max_ttl > 40) max_ttl = 40;
-
+/* One simulation step: fade + advance flame tongues + advance sparks */
+static void sim_step(int num_particles, int base_hue, int num_sparks,
+                     int min_ttl, int max_ttl) {
     /* ======== STEP 1: Fade previous frame (×237/256 ≈ 93%) ======== */
     for (int x = 0; x < cur_w; x++)
         for (int y = 0; y < cur_h; y++)
@@ -292,6 +276,52 @@ void update(int tick_ms) {
             spkBri[i] = (uint8_t)rand_range(200, 255);
             spkHue[i] = (uint8_t)(base_hue + 15 + rand8() % 20); /* slightly yellower than flame */
         }
+    }
+}
+
+EXPORT(update)
+void update(int tick_ms) {
+    int base_hue   = get_param_i32(0);
+    int intensity  = get_param_i32(1);
+    int num_sparks = get_param_i32(2);
+    int bright     = get_param_i32(3);
+    int speed      = get_param_i32(4);
+    if (speed < 1) speed = 50;   /* guard saves predating this param */
+
+    cur_w = get_width();
+    cur_h = get_height();
+    if (cur_w > MAX_W) cur_w = MAX_W;
+    if (cur_h > MAX_H) cur_h = MAX_H;
+    if (cur_w < 1) cur_w = 1;
+    if (cur_h < 1) cur_h = 1;
+
+    rng ^= (uint32_t)tick_ms;
+
+    int num_particles = (int)((float)cur_w * 2.4f * intensity / 100.0f);
+    if (num_particles < 2) num_particles = 2;
+    if (num_particles > MAX_PARTICLES) num_particles = MAX_PARTICLES;
+
+    if (num_sparks > MAX_SPARKS) num_sparks = MAX_SPARKS;
+
+    int min_ttl = cur_h / 4;
+    if (min_ttl < 3) min_ttl = 3;
+    int max_ttl = cur_h;
+    if (max_ttl < min_ttl + 2) max_ttl = min_ttl + 2;
+    if (max_ttl > 40) max_ttl = 40;
+
+    /* Advance the flame 0..N steps based on Speed (default 50 ≈ 30 steps/s). */
+    int32_t delta = tick_ms - prev_tick;
+    if (delta < 0 || delta > 200) delta = 33;
+    prev_tick = tick_ms;
+    float step_interval = 1000.0f / ((float)speed * 0.6f);
+    if (step_interval < 8.0f) step_interval = 8.0f;
+    step_acc += (float)delta;
+    if (step_acc > step_interval * 4.0f) step_acc = step_interval * 4.0f;
+    int steps = 0;
+    while (step_acc >= step_interval && steps < 4) {
+        sim_step(num_particles, base_hue, num_sparks, min_ttl, max_ttl);
+        step_acc -= step_interval;
+        steps++;
     }
 
     /* ======== STEP 4: Render flame from framebuffer ======== */

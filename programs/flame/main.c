@@ -13,7 +13,10 @@ static const char META[] =
          "\"desc\":\"Chance of new sparks (more=roaring fire)\"},"
         "{\"id\":2,\"name\":\"Brightness\",\"type\":\"int\","
          "\"min\":1,\"max\":255,\"default\":200,"
-         "\"desc\":\"Overall brightness\"}"
+         "\"desc\":\"Overall brightness\"},"
+        "{\"id\":3,\"name\":\"Speed\",\"type\":\"int\","
+         "\"min\":1,\"max\":100,\"default\":50,"
+         "\"desc\":\"Flame animation speed\"}"
     "]}";
 
 EXPORT(get_meta_ptr)
@@ -83,6 +86,10 @@ static int random_range(int lo, int hi) {
 #define MAX_H 64
 static uint8_t heat[MAX_W][MAX_H];
 
+/* Time-step accumulator so the Speed param controls simulation rate */
+static int32_t prev_tick = 0;
+static float   step_acc = 0.0f;
+
 EXPORT(init)
 void init(void) {
     /* Clear heat map */
@@ -92,6 +99,8 @@ void init(void) {
 
     /* Seed RNG with something */
     rng_state = 73541;
+    prev_tick = 0;
+    step_acc = 0.0f;
 }
 
 /* Saturating subtract */
@@ -105,29 +114,13 @@ static uint8_t qadd(uint8_t a, uint8_t b) {
     return (s > 255) ? 255 : (uint8_t)s;
 }
 
-EXPORT(update)
-void update(int tick_ms) {
-    int cooling  = get_param_i32(0);
-    int sparking = get_param_i32(1);
-    int bright   = get_param_i32(2);
-    int W = get_width();
-    int H = get_height();
-
-    if (W > MAX_W) W = MAX_W;
-    if (H > MAX_H) H = MAX_H;
-    if (W < 1) W = 1;
-    if (H < 1) H = 1;
-
-    /* Seed RNG a little with tick to add variety */
-    rng_state ^= (uint32_t)tick_ms;
-
+/* One simulation step: cool, drift, spark (advances the fire one tick) */
+static void fire_step(int W, int H, int cooling, int sparking) {
     int fire_base = H / 6;
     if (fire_base < 2) fire_base = 2;
     if (fire_base > 6) fire_base = 6;
 
-    /* Process each column independently */
     for (int x = 0; x < W; x++) {
-
         /* Step 1: Cool down every cell a little */
         for (int y = 0; y < H; y++) {
             int cooldown = random_range(0, ((cooling * 10) / H) + 2);
@@ -145,8 +138,42 @@ void update(int tick_ms) {
             heat[x][j] = qadd(heat[x][j], (uint8_t)random_range(160, 255));
         }
     }
+}
 
-    /* Step 4: Map heat to pixels with neighbor blending */
+EXPORT(update)
+void update(int tick_ms) {
+    int cooling  = get_param_i32(0);
+    int sparking = get_param_i32(1);
+    int bright   = get_param_i32(2);
+    int speed    = get_param_i32(3);
+    if (speed < 1) speed = 50;   /* guard saves predating this param */
+    int W = get_width();
+    int H = get_height();
+
+    if (W > MAX_W) W = MAX_W;
+    if (H > MAX_H) H = MAX_H;
+    if (W < 1) W = 1;
+    if (H < 1) H = 1;
+
+    /* Seed RNG a little with tick to add variety */
+    rng_state ^= (uint32_t)tick_ms;
+
+    /* Advance the fire 0..N steps based on Speed (default 50 ≈ 30 steps/s). */
+    int32_t delta = tick_ms - prev_tick;
+    if (delta < 0 || delta > 200) delta = 33;
+    prev_tick = tick_ms;
+    float step_interval = 1000.0f / ((float)speed * 0.6f);
+    if (step_interval < 8.0f) step_interval = 8.0f;
+    step_acc += (float)delta;
+    if (step_acc > step_interval * 4.0f) step_acc = step_interval * 4.0f;
+    int steps = 0;
+    while (step_acc >= step_interval && steps < 4) {
+        fire_step(W, H, cooling, sparking);
+        step_acc -= step_interval;
+        steps++;
+    }
+
+    /* Step 4: Map heat to pixels with neighbor blending (every frame) */
     for (int x = 0; x < W; x++) {
         int nx = (x + 1) % W; /* wrap horizontally (cylinder!) */
         for (int y = 0; y < H; y++) {
