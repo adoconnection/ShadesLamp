@@ -104,12 +104,31 @@ export async function getMeta(programId: number): Promise<any> {
 }
 
 export async function setMeta(programId: number, meta: object): Promise<any> {
-  return queue.enqueue(() => {
-    const encoder = new TextEncoder();
-    const jsonBytes = encoder.encode(JSON.stringify(meta));
-    const payload = new Uint8Array([CMD.SET_META, programId, ...jsonBytes]);
-    return writeCommand(payload);
+  // Meta JSON (now including i18n) easily exceeds a single BLE characteristic
+  // write, so stream it through the chunked upload path. The firmware's
+  // UPLOAD_START supports type=1 (META) with the target program id, then
+  // UPLOAD_FINISH writes it via setProgramMeta.
+  const data = new TextEncoder().encode(JSON.stringify(meta));
+
+  // UPLOAD_START: size(4 LE) + type(1)=META + progId(1)
+  await queue.enqueue(() => {
+    const sizeBytes = toLE32(data.length);
+    return writeCommand(new Uint8Array([CMD.UPLOAD_START, ...sizeBytes, 1, programId]));
   });
+
+  // Stream the JSON bytes in chunks
+  const totalChunks = Math.ceil(data.length / UPLOAD_CHUNK_SIZE);
+  for (let i = 0; i < totalChunks; i++) {
+    const start = i * UPLOAD_CHUNK_SIZE;
+    const end = Math.min(start + UPLOAD_CHUNK_SIZE, data.length);
+    await writeUploadChunk(data.slice(start, end));
+    if (i > 0 && i % 10 === 0) {
+      await new Promise(r => setTimeout(r, 20));
+    }
+  }
+
+  // UPLOAD_FINISH -> { ok: true }
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.UPLOAD_FINISH])));
 }
 
 export async function getPower(): Promise<boolean> {

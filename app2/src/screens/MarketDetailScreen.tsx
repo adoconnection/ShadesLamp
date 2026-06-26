@@ -11,6 +11,7 @@ import { uploadWasm, setMeta, setActiveProgram, deleteProgram as bleDeleteProgra
 import NavButton from '../components/NavButton';
 import { BackIcon, DownloadIcon, CheckIcon, TrashIcon, SettingsIcon } from '../components/Icon';
 import { gradientColors } from '../utils/color';
+import { isVersionNewer } from '../utils/format';
 import { t, tCategory, localized } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
@@ -43,6 +44,10 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
   const accent = item.pulse;
   const installing = phase === 'downloading' || phase === 'uploading' || phase === 'verifying';
   const connected = connectionState === 'connected';
+  // Update available when the catalog version is newer than the installed one
+  // (or the installed version is unknown — older installs without a version).
+  const updatable = installed && !!item.version &&
+    (existingProgram?.version ? isVersionNewer(item.version, existingProgram.version) : true);
 
   function handleRemove() {
     if (!connected || installedId == null) return;
@@ -75,6 +80,9 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
       setPhase('error');
       return;
     }
+
+    // When updating, the existing copy is removed after the new one uploads.
+    const oldId = installedId;
 
     try {
       // Phase 1: Download WASM from GitHub
@@ -110,6 +118,8 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
         pulse: item!.pulse,
         tags: item!.tags,
         slug: item!.slug,
+        version: item!.version,
+        guid: item!.guid,
         i18n: item!.i18n,
       });
 
@@ -126,6 +136,7 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
         desc: item!.desc,
         author: item!.author,
         size: '',
+        version: item!.version,
         cover: item!.cover,
         coverSvg: item!.coverSvg,
         pulse: item!.pulse,
@@ -134,6 +145,11 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
         slug: item!.slug,
         i18n: item!.i18n,
       });
+
+      // Updating: remove the previous copy from the device.
+      if (oldId != null && oldId !== newId) {
+        try { await bleDeleteProgram(oldId); removeProgram(oldId); } catch {}
+      }
 
       setInstalledId(newId);
       setProgress(1);
@@ -208,6 +224,18 @@ export default function MarketDetailScreen({ route, navigation }: Props) {
 
         {phase === 'done' && (
           <View style={{ gap: 10 }}>
+            {updatable && (
+              <Pressable
+                onPress={handleInstall}
+                style={[styles.installBtn, { backgroundColor: accent }]}
+                accessibilityRole="button"
+              >
+                <DownloadIcon color="#0A0A08" />
+                <Text style={styles.installText}>
+                  {t('update')}{item.version ? ` · v${item.version}` : ''}
+                </Text>
+              </Pressable>
+            )}
             <View style={styles.doneCard}>
               <View style={styles.doneCircle}>
                 <CheckIcon size={18} color="#0A0A08" />

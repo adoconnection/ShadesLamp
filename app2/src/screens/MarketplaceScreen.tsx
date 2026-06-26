@@ -6,7 +6,7 @@ import { RootStackParamList } from '../types/navigation';
 import { useMarketStore } from '../store/useMarketStore';
 import { useBleStore } from '../store/useBleStore';
 import { useProgramStore } from '../store/useProgramStore';
-import { uploadWasm, setMeta, setActiveProgram } from '../ble/commands';
+import { uploadWasm, setMeta, setActiveProgram, deleteProgram } from '../ble/commands';
 import { MarketItem } from '../types/marketplace';
 import NavButton from '../components/NavButton';
 import BleStatusPill from '../components/BleStatusPill';
@@ -15,6 +15,7 @@ import MarketRow from '../components/MarketRow';
 import Skeleton from '../components/Skeleton';
 import { BackIcon, SearchIcon } from '../components/Icon';
 import { t, tCategory, localized } from '../i18n';
+import { isVersionNewer } from '../utils/format';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -24,7 +25,8 @@ export default function MarketplaceScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { catalog, featured, installedSlugs, loading, error, fetchCatalog, markInstalled } = useMarketStore();
   const { connectionState, deviceInfo } = useBleStore();
-  const { addProgram, setActiveId } = useProgramStore();
+  const { addProgram, setActiveId, removeProgram } = useProgramStore();
+  const programs = useProgramStore((s) => s.programs);
   const [category, setCategory] = useState('All');
   const [search, setSearch] = useState('');
   const [installingSlug, setInstallingSlug] = useState<string | null>(null);
@@ -57,6 +59,9 @@ export default function MarketplaceScreen({ navigation }: Props) {
       return;
     }
     if (installingSlug) return;
+    // If this slug is already installed, we're updating: remember the old id so
+    // it can be removed once the new copy is uploaded.
+    const existing = useProgramStore.getState().programs.find((p) => p.slug === item.slug);
     setInstallingSlug(item.slug);
     try {
       const response = await fetch(item.wasmUrl);
@@ -74,6 +79,8 @@ export default function MarketplaceScreen({ navigation }: Props) {
         pulse: item.pulse,
         tags: item.tags,
         slug: item.slug,
+        version: item.version,
+        guid: item.guid,
         i18n: item.i18n,
       });
 
@@ -88,6 +95,7 @@ export default function MarketplaceScreen({ navigation }: Props) {
         desc: item.desc,
         author: item.author,
         size: '',
+        version: item.version,
         cover: item.cover,
         coverSvg: item.coverSvg,
         pulse: item.pulse,
@@ -97,6 +105,11 @@ export default function MarketplaceScreen({ navigation }: Props) {
         i18n: item.i18n,
       });
 
+      // Updating: drop the previous copy on the device.
+      if (existing && existing.id !== newId) {
+        try { await deleteProgram(existing.id); removeProgram(existing.id); } catch {}
+      }
+
       markInstalled(item.slug);
     } catch (err: any) {
       Alert.alert(t('installFailed'), err.message || t('unknownError'));
@@ -104,6 +117,16 @@ export default function MarketplaceScreen({ navigation }: Props) {
       setInstallingSlug(null);
     }
   }, [connected, installingSlug]);
+
+  // A program is updatable when it's installed and the catalog has a version
+  // that's newer than the installed one — or the installed version is unknown
+  // (older installs that predate version-stamping).
+  const isUpdatable = useCallback((item: MarketItem) => {
+    if (!item.version) return false;
+    const p = programs.find((pp) => pp.slug === item.slug);
+    if (!p) return false;
+    return p.version ? isVersionNewer(item.version, p.version) : true;
+  }, [programs]);
 
   const filtered = catalog
     .filter((item) => {
@@ -239,6 +262,7 @@ export default function MarketplaceScreen({ navigation }: Props) {
                 key={item.slug}
                 item={item}
                 installed={installedSlugs.includes(item.slug)}
+                updatable={isUpdatable(item)}
                 installing={installingSlug === item.slug}
                 onPress={() => navigation.navigate('MarketDetail', { itemId: item.slug })}
                 onAction={() => quickInstall(item)}
