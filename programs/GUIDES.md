@@ -85,6 +85,29 @@ void update(int tick_ms) {
 | `get_param_f32(id)` | `float (int)` | Read float parameter by id |
 | `set_param_i32(id, val)` | `void (int, int)` | Write parameter value (for linked params) |
 
+### Native math primitives (`api.h`)
+
+Heavy math runs **natively** on the host (firmware libm / JS `Math`) — far faster
+than the same code interpreted in WASM. Prefer these over hand-rolled sin tables,
+Newton sqrt, or inline HSV. Angles are in **radians**.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `m_sin(x)` | `float (float)` | Sine |
+| `m_cos(x)` | `float (float)` | Cosine |
+| `m_sqrt(x)` | `float (float)` | Square root (returns 0 for x ≤ 0) |
+| `m_hypot(x, y)` | `float (float, float)` | Vector length `sqrt(x*x+y*y)` |
+| `m_atan2(y, x)` | `float (float, float)` | Angle of (x, y), radians |
+| `m_exp(x)` | `float (float)` | e^x (glow falloff) |
+| `m_pow(base, exp)` | `float (float, float)` | base^exp |
+| `m_hsv(h, s, v)` | `int (int, int, int)` | HSV (0-255 each) → packed `0xRRGGBB` |
+
+Unpack `m_hsv`: `r=(c>>16)&255, g=(c>>8)&255, b=c&255`.
+
+> Note: a program that calls `m_*` requires firmware that provides them — flash
+> the updated firmware before publishing such a program. Programs that don't
+> import them are unaffected. The simulator implements the same contract.
+
 ## Coordinate System
 
 - **Y=0 is the BOTTOM** of the physical display, Y=H-1 is the top

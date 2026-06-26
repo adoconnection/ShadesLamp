@@ -1,6 +1,7 @@
 #include "wasm_engine.h"
 #include "led_driver.h"
 #include "param_store.h"
+#include <math.h>
 
 #define TAG "[WASM]"
 
@@ -77,6 +78,84 @@ m3ApiRawFunction(host_set_param_i32) {
         g_wasmEngine->flagParamsChanged();
     }
     m3ApiSuccess();
+}
+
+// ── Native math primitives ─────────────────────────────────────────────────
+// Heavy math runs natively (hardware FPU + libm) instead of interpreted WASM.
+
+m3ApiRawFunction(host_m_sin) {
+    m3ApiReturnType(float);
+    m3ApiGetArg(float, x);
+    m3ApiReturn(sinf(x));
+}
+
+m3ApiRawFunction(host_m_cos) {
+    m3ApiReturnType(float);
+    m3ApiGetArg(float, x);
+    m3ApiReturn(cosf(x));
+}
+
+m3ApiRawFunction(host_m_sqrt) {
+    m3ApiReturnType(float);
+    m3ApiGetArg(float, x);
+    m3ApiReturn(x > 0.0f ? sqrtf(x) : 0.0f);
+}
+
+m3ApiRawFunction(host_m_hypot) {
+    m3ApiReturnType(float);
+    m3ApiGetArg(float, x);
+    m3ApiGetArg(float, y);
+    m3ApiReturn(sqrtf(x * x + y * y));
+}
+
+m3ApiRawFunction(host_m_atan2) {
+    m3ApiReturnType(float);
+    m3ApiGetArg(float, y);
+    m3ApiGetArg(float, x);
+    m3ApiReturn(atan2f(y, x));
+}
+
+m3ApiRawFunction(host_m_exp) {
+    m3ApiReturnType(float);
+    m3ApiGetArg(float, x);
+    m3ApiReturn(expf(x));
+}
+
+m3ApiRawFunction(host_m_pow) {
+    m3ApiReturnType(float);
+    m3ApiGetArg(float, base);
+    m3ApiGetArg(float, exponent);
+    m3ApiReturn(powf(base, exponent));
+}
+
+m3ApiRawFunction(host_m_hsv) {
+    m3ApiReturnType(int32_t);
+    m3ApiGetArg(int32_t, h);
+    m3ApiGetArg(int32_t, s);
+    m3ApiGetArg(int32_t, v);
+
+    if (v < 0) v = 0; if (v > 255) v = 255;
+    if (s < 0) s = 0; if (s > 255) s = 255;
+    int r, g, b;
+    if (s == 0) {
+        r = g = b = v;
+    } else {
+        int hh = h & 0xFF;
+        int region = hh / 43;
+        int rem = (hh - region * 43) * 6;
+        int p = (v * (255 - s)) >> 8;
+        int q = (v * (255 - ((s * rem) >> 8))) >> 8;
+        int t = (v * (255 - ((s * (255 - rem)) >> 8))) >> 8;
+        switch (region) {
+            case 0:  r = v; g = t; b = p; break;
+            case 1:  r = q; g = v; b = p; break;
+            case 2:  r = p; g = v; b = t; break;
+            case 3:  r = p; g = q; b = v; break;
+            case 4:  r = t; g = p; b = v; break;
+            default: r = v; g = p; b = q; break;
+        }
+    }
+    m3ApiReturn((int32_t)((r << 16) | (g << 8) | b));
 }
 
 // ── WasmEngine class implementation ────────────────────────────────────────
@@ -300,6 +379,16 @@ bool WasmEngine::linkHostFunctions() {
         Serial.printf("%s Link set_param_i32: %s\r\n", TAG, result);
     }
 
+    // Native math primitives (links silently skipped if not imported)
+    m3_LinkRawFunction(_module, "env", "m_sin",   "f(f)",   &host_m_sin);
+    m3_LinkRawFunction(_module, "env", "m_cos",   "f(f)",   &host_m_cos);
+    m3_LinkRawFunction(_module, "env", "m_sqrt",  "f(f)",   &host_m_sqrt);
+    m3_LinkRawFunction(_module, "env", "m_hypot", "f(ff)",  &host_m_hypot);
+    m3_LinkRawFunction(_module, "env", "m_atan2", "f(ff)",  &host_m_atan2);
+    m3_LinkRawFunction(_module, "env", "m_exp",   "f(f)",   &host_m_exp);
+    m3_LinkRawFunction(_module, "env", "m_pow",   "f(ff)",  &host_m_pow);
+    m3_LinkRawFunction(_module, "env", "m_hsv",   "i(iii)", &host_m_hsv);
+
     // Not a hard failure if individual links fail (function may not be imported)
     return true;
 }
@@ -384,6 +473,14 @@ static void linkAllHostFunctions(IM3Module mod) {
     m3_LinkRawFunction(mod, "env", "get_param_i32", "i(i)",    &host_get_param_i32);
     m3_LinkRawFunction(mod, "env", "get_param_f32", "f(i)",    &host_get_param_f32);
     m3_LinkRawFunction(mod, "env", "set_param_i32", "v(ii)",   &host_set_param_i32);
+    m3_LinkRawFunction(mod, "env", "m_sin",   "f(f)",   &host_m_sin);
+    m3_LinkRawFunction(mod, "env", "m_cos",   "f(f)",   &host_m_cos);
+    m3_LinkRawFunction(mod, "env", "m_sqrt",  "f(f)",   &host_m_sqrt);
+    m3_LinkRawFunction(mod, "env", "m_hypot", "f(ff)",  &host_m_hypot);
+    m3_LinkRawFunction(mod, "env", "m_atan2", "f(ff)",  &host_m_atan2);
+    m3_LinkRawFunction(mod, "env", "m_exp",   "f(f)",   &host_m_exp);
+    m3_LinkRawFunction(mod, "env", "m_pow",   "f(ff)",  &host_m_pow);
+    m3_LinkRawFunction(mod, "env", "m_hsv",   "i(iii)", &host_m_hsv);
 }
 
 bool wasmValidate(const uint8_t* wasmData, size_t wasmSize) {

@@ -267,11 +267,32 @@ function host_set_param_i32(id,val){
   syncParamControl(id);
 }
 
+// Native math primitives — same contract as firmware (libm) / api.h
+function host_m_hsv(h,s,v){
+  v = v<0?0:(v>255?255:v); s = s<0?0:(s>255?255:s);
+  let r,g,b;
+  if (s===0){ r=g=b=v; }
+  else {
+    const hh=h&0xFF, region=(hh/43)|0, rem=(hh-region*43)*6;
+    const p=(v*(255-s))>>8, q=(v*(255-((s*rem)>>8)))>>8, t=(v*(255-((s*(255-rem))>>8)))>>8;
+    switch(region){
+      case 0: r=v;g=t;b=p;break; case 1: r=q;g=v;b=p;break;
+      case 2: r=p;g=v;b=t;break; case 3: r=p;g=q;b=v;break;
+      case 4: r=t;g=p;b=v;break; default: r=v;g=p;b=q;break;
+    }
+  }
+  return ((r<<16)|(g<<8)|b);
+}
+
 const baseEnv = {
   get_width:host_get_width, get_height:host_get_height,
   set_pixel:host_set_pixel, draw:host_draw,
   get_param_i32:host_get_param_i32, get_param_f32:host_get_param_f32,
   set_param_i32:host_set_param_i32,
+  // math primitives
+  m_sin:Math.sin, m_cos:Math.cos, m_sqrt:Math.sqrt,
+  m_hypot:(x,y)=>Math.sqrt(x*x+y*y), m_atan2:Math.atan2,
+  m_exp:Math.exp, m_pow:Math.pow, m_hsv:host_m_hsv,
 };
 // Proxy: любой неизвестный импорт → безопасная заглушка (как --allow-undefined)
 const envProxy = new Proxy(baseEnv, {
@@ -643,7 +664,7 @@ const PRESETS = ["rainbow","plasma","aurora","ocean","lava","lava_lamp","flame",
  "metaballs","bouncing_balls","popcorn","pulse","sinusoid","spirals","twinkling","waves",
  "warp","vortex","kaleidoscope","jellyfish","helix","hexagons","dna","moire","morphing",
  "cube","electrons","core","breathing","police","forest","whirl","fountains","tricolor",
- "flowers","grass","starfall","earth","rgb_cycle","random_blink","solid_color","matrix_test","tv","meteor_shower","trading"];
+ "flowers","grass","starfall","earth","rgb_cycle","random_blink","solid_color","matrix_test","tv","meteor_shower","trading","constellation"];
 
 (function initPresets(){
   const sel=document.getElementById("presetSel");
