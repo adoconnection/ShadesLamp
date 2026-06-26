@@ -146,6 +146,7 @@
         <button data-c="48" data-r="32">48×32</button>
         <button data-c="48" data-r="48">48×48</button>
         <button data-c="56" data-r="48">56×48</button>
+        <button data-c="64" data-r="48">64×48</button>
       </div>
     </div>
     <div id="canvasWrap">
@@ -723,7 +724,7 @@ document.getElementById("opaque").onchange=e=>{opaque=e.target.checked;};
 
 // ── Список встроенных программ (работает при запуске через http-сервер) ──
 const PRESETS = ["rainbow","plasma","aurora","ocean","lava","lava_lamp","flame","flame_particle","candle",
- "fireworks","fireflies","clouds","comet","confetti","matrix_rain","snow",
+ "fireworks","fireflies","clouds","comet","confetti","matrix_rain","drops","snow",
  "metaballs","bouncing_balls","popcorn","pulse","sinusoid","spirals","twinkling","waves",
  "warp","vortex","kaleidoscope","jellyfish","helix","hexagons","dna","moire","morphing",
  "cube","electrons","core","breathing","police","forest","whirl","fountains","tricolor",

@@ -5,17 +5,23 @@ static const char META[] =
     "{\"name\":\"Helix\","
     "\"desc\":\"Double helix (DNA-style) rotating around the cylindrical display\","
     "\"params\":["
-        "{\"id\":0,\"name\":\"Speed\",\"type\":\"int\","
+        "{\"id\":0,\"name\":\"Colours\",\"type\":\"select\","
+         "\"options\":[\"Rainbow\",\"2 Colours\",\"3 Colours\"],\"default\":1,"
+         "\"desc\":\"Colour scheme\"},"
+        "{\"id\":1,\"name\":\"Harmony\",\"type\":\"select\","
+         "\"options\":[\"Opposite\",\"Adjacent\"],\"default\":0,"
+         "\"desc\":\"Opposite (complementary) or adjacent (analogous) hues\"},"
+        "{\"id\":2,\"name\":\"Speed\",\"type\":\"int\","
          "\"min\":1,\"max\":100,\"default\":35,"
          "\"desc\":\"Vertical scroll speed\"},"
-        "{\"id\":1,\"name\":\"Brightness\",\"type\":\"int\","
+        "{\"id\":3,\"name\":\"Brightness\",\"type\":\"int\","
          "\"min\":1,\"max\":255,\"default\":220,"
          "\"desc\":\"Overall brightness\"},"
-        "{\"id\":2,\"name\":\"Hue\",\"type\":\"int\","
+        "{\"id\":4,\"name\":\"Hue\",\"type\":\"int\","
          "\"min\":0,\"max\":255,\"default\":85,"
-         "\"desc\":\"Base color hue for strand 1\"},"
-        "{\"id\":3,\"name\":\"Twist\",\"type\":\"int\","
-         "\"min\":1,\"max\":20,\"default\":6,"
+         "\"desc\":\"Base colour hue\"},"
+        "{\"id\":5,\"name\":\"Twist\",\"type\":\"int\","
+         "\"min\":1,\"max\":20,\"default\":1,"
          "\"desc\":\"How tightly wound the helix is\"}"
     "]}";
 
@@ -103,10 +109,12 @@ static void fb_add(int x, int y, int r, int g, int b, int W, int H) {
 
 EXPORT(update)
 void update(int tick_ms) {
-    int speed  = get_param_i32(0);
-    int bright = get_param_i32(1);
-    int hue    = get_param_i32(2);
-    int twist  = get_param_i32(3);
+    int colors   = get_param_i32(0);   /* 0 rainbow, 1 two, 2 three */
+    int harmony  = get_param_i32(1);   /* 0 opposite, 1 adjacent */
+    int speed    = get_param_i32(2);
+    int bright   = get_param_i32(3);
+    int hue      = get_param_i32(4);
+    int twist    = get_param_i32(5);
     int W = get_width();
     int H = get_height();
 
@@ -115,6 +123,14 @@ void update(int tick_ms) {
     if (W < 1) W = 1;
     if (H < 1) H = 1;
     if (twist < 1) twist = 1;
+
+    /* hue spacing between strands/colours: opposite = far on the wheel,
+     * adjacent = close. Two colours can spread to full complementary (128);
+     * three colours sit closer so all three fit. */
+    int spacing;
+    if (colors == 1) spacing = (harmony == 0) ? 128 : 30;   /* 2 colours */
+    else             spacing = (harmony == 0) ? 85  : 24;   /* 3 colours / rainbow */
+    int rainbow = (colors == 0);
 
     /* Fade framebuffer for glow trail */
     int fade = 40 + speed / 3;
@@ -136,9 +152,8 @@ void update(int tick_ms) {
        twist param (1-20) maps to spatial frequency. */
     float twist_freq = (float)twist * TWO_PI / (float)H;
 
-    /* Strand colors: strand 1 = base hue, strand 2 = base hue + 128 */
-    int hue1 = hue;
-    int hue2 = (hue + 128) & 255;
+    /* rainbow hue drift over time (only used in Rainbow mode) */
+    int htime = (int)(t * 30.0f);
 
     /* Rung spacing: one rung every N rows.
        More twist = can afford more rungs. Roughly every 3-5 rows. */
@@ -152,6 +167,12 @@ void update(int tick_ms) {
 
     for (int y = 0; y < H; y++) {
         float fy = (float)y;
+
+        /* per-row hues: in Rainbow mode the colour cycles up the helix and
+         * drifts over time; otherwise the strands are fixed hues */
+        int rshift = rainbow ? ((y * 256) / H + htime) : 0;
+        int hue1 = (hue + rshift) & 255;
+        int hue2 = (hue + spacing + rshift) & 255;
 
         /* Strand 1: phase = 0, Strand 2: phase = PI (180 degrees apart) */
         float angle1 = fy * twist_freq + t;
@@ -240,13 +261,20 @@ void update(int tick_ms) {
 
             /* Rung brightness: average the depth of both strands, desaturated */
             float rung_depth = (depth_scale1 + depth_scale2) * 0.5f;
-            int rung_v = (int)((float)bright * rung_depth * 0.4f);
+            float rung_mul = (colors == 2) ? 0.8f : 0.4f;   /* 3rd colour brighter */
+            int rung_v = (int)((float)bright * rung_depth * rung_mul);
             if (rung_v < 10) rung_v = 10;
             if (rung_v > 255) rung_v = 255;
 
-            /* Rung color: desaturated white-ish tint */
+            /* Rung colour: in 3-colour mode it's a distinct third hue;
+             * otherwise a desaturated white-ish tint */
             int rung_r, rung_g, rung_b;
-            hsv_to_rgb(hue, 60, rung_v, &rung_r, &rung_g, &rung_b);
+            if (colors == 2) {
+                int hue3 = (hue + 2 * spacing + rshift) & 255;
+                hsv_to_rgb(hue3, 230, rung_v, &rung_r, &rung_g, &rung_b);
+            } else {
+                hsv_to_rgb((hue + rshift) & 255, 60, rung_v, &rung_r, &rung_g, &rung_b);
+            }
 
             /* Draw rung pixels (skip the strand pixels themselves) */
             for (int rx = rx_start + 1; rx < rx_end; rx++) {

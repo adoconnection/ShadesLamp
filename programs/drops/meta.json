@@ -1,0 +1,29 @@
+{
+  "guid": "e5f7a9b1-4c6d-4e8f-a012-b3c4d5e6f708",
+  "version": "1.0.0",
+  "name": "Drops",
+  "desc": "Raindrops swell and trickle down a meandering path",
+  "author": "Shades",
+  "category": "Ambient",
+  "cover": {"from": "#020617", "to": "#38BDF8", "via": "#0C4A6E", "angle": 175},
+  "pulse": "#38BDF8",
+  "about": "Droplets swell up at random spots on the lamp and then trickle down, wiggling left and right as they go for a natural rain-on-glass look, each leaving a fading wet trail. Choose a calm water, desaturated storm or rainbow palette.",
+  "tags": ["rain", "drops", "water", "trickle", "ambient"],
+  "i18n": {
+    "ru": {
+      "name": "Капли",
+      "desc": "Капли набухают и стекают вниз извилистым путём",
+      "about": "Капли набухают в случайных местах на лампе и стекают вниз, виляя влево-вправо как настоящий дождь по стеклу, оставляя угасающий мокрый след. Палитры: спокойная вода, приглушённая гроза или радуга.",
+      "params": {
+        "0": {"name": "Цвет", "desc": "Цветовая палитра", "options": ["Вода", "Гроза", "Радуга"]},
+        "1": {"name": "Плотность", "desc": "Как часто появляются капли"},
+        "2": {"name": "Яркость", "desc": "Общая яркость"},
+        "3": {"name": "Скорость", "desc": "Скорость стекания"},
+        "4": {"name": "Виляние", "desc": "Случайный снос влево-вправо при падении"},
+        "5": {"name": "Хвост", "desc": "Длина мокрого следа"},
+        "6": {"name": "Размер", "desc": "Ширина капли (пиксели)"},
+        "7": {"name": "Замирания", "desc": "Как часто капля замирает при стекании"}
+      }
+    }
+  }
+}

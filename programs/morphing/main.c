@@ -23,7 +23,10 @@ static const char META[] =
         "{\"id\":3,\"name\":\"Fill\",\"type\":\"int\","
          "\"min\":0,\"max\":1,\"default\":1,"
          "\"options\":[\"Off\",\"On\"],"
-         "\"desc\":\"Fill shape interior\"}"
+         "\"desc\":\"Fill shape interior\"},"
+        "{\"id\":4,\"name\":\"Rotation\",\"type\":\"int\","
+         "\"min\":0,\"max\":200,\"default\":40,"
+         "\"desc\":\"Rotate the shape around the lamp\"}"
     "]}";
 
 EXPORT(get_meta_ptr)
@@ -386,6 +389,9 @@ void update(int tick_ms) {
     int bright = get_param_i32(1);
     int hue    = get_param_i32(2);
     int do_fill = get_param_i32(3);
+    int rotation = get_param_i32(4);
+    if (rotation < 0) rotation = 0;
+    if (rotation > 200) rotation = 200;
 
     cur_w = get_width();
     cur_h = get_height();
@@ -442,6 +448,13 @@ void update(int tick_ms) {
     float min_dim = (float)(cur_w < cur_h ? cur_w : cur_h);
     float scale = min_dim * 0.4f; /* shape fills ~80% of the smaller dimension */
 
+    /* Circular rotation around the lamp (like Electrons): shift the shape's
+     * column over time. The horizontal cylinder wrap in fb_plot/fb_set/draw_line
+     * carries the shape smoothly around the lamp. */
+    float turns = (float)tick_ms * (float)rotation * 0.0000025f;
+    turns = turns - (float)(long)turns;          /* fractional turn 0..1 */
+    float draw_cx = cx + turns * (float)cur_w;
+
     /* Determine color */
     int current_hue;
     if (hue == 0) {
@@ -460,7 +473,7 @@ void update(int tick_ms) {
         int fill_bright = bright / 3;  /* dimmer fill */
         int fr, fg, fb;
         hsv_to_rgb(fill_hue, 200, fill_bright, &fr, &fg, &fb);
-        fill_shape(N_VERTS, cx, cy, scale, fr, fg, fb);
+        fill_shape(N_VERTS, draw_cx, cy, scale, fr, fg, fb);
     }
 
     /* Draw outline: connect consecutive vertices with Bresenham lines */
@@ -470,9 +483,9 @@ void update(int tick_ms) {
     for (int i = 0; i < N_VERTS; i++) {
         int next = (i + 1) % N_VERTS;
 
-        int x0 = (int)(cx + cur_vx[i] * scale + 0.5f);
+        int x0 = (int)(draw_cx + cur_vx[i] * scale + 0.5f);
         int y0 = (int)(cy + cur_vy[i] * scale + 0.5f);
-        int x1 = (int)(cx + cur_vx[next] * scale + 0.5f);
+        int x1 = (int)(draw_cx + cur_vx[next] * scale + 0.5f);
         int y1 = (int)(cy + cur_vy[next] * scale + 0.5f);
 
         /* Per-edge hue variation for visual richness */
