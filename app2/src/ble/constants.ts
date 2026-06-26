@@ -12,6 +12,8 @@ export const CHAR = {
 export const EVT = {
   PROGRAM_ADDED:  0x01,
   PROGRAM_DELETED: 0x02,
+  PL_ADVANCE:     0x03,  // lamp auto-advanced a playlist; second byte = new index
+  PL_STOPPED:     0x04,  // lamp left playlist mode (manual/touch program switch)
 } as const;
 
 export const CMD = {
@@ -49,6 +51,10 @@ export const CMD = {
   PL_ADD_POS:      0x38,
   PL_DEL_POS:      0x39,
   PL_REORDER:      0x3A,
+  APPLY_POS:       0x3B,
+  PL_PLAY:         0x3C,
+  PL_STOP:         0x3D,
+  PL_STATE:        0x3E,
 } as const;
 
 // Upload pipeline payload types (UPLOAD_START byte after the 4-byte size)

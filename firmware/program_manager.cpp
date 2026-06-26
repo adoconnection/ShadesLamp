@@ -23,6 +23,7 @@ ProgramManager::ProgramManager(WasmEngine* engine, ParamStore* paramStore, LedDr
     , _pendingSwitchId(0xFF)
     , _pendingDeleteId(0xFF)
     , _pendingClearAll(false)
+    , _pendingTransientSwitch(false)
 {
     _mutex = xSemaphoreCreateMutex();
 }
@@ -546,6 +547,33 @@ void ProgramManager::requestSwitch(uint8_t programId) {
     _pendingSwitchId = programId;
 }
 
+void ProgramManager::requestSwitchTransient(uint8_t programId, const String& paramsJson) {
+    // Set the param overlay BEFORE the switch id so processPending() (same task)
+    // always sees a consistent pair.
+    _pendingTransientParams = paramsJson;
+    _pendingTransientSwitch = true;
+    _pendingSwitchId = programId;
+}
+
+void ProgramManager::applyTransientParams(const String& paramsJson) {
+    if (paramsJson.length() == 0) return;
+    JsonDocument doc;
+    if (deserializeJson(doc, paramsJson)) return;
+    JsonArray arr = doc.as<JsonArray>();
+    if (!arr) return;
+
+    xSemaphoreTake(_mutex, portMAX_DELAY);
+    for (JsonObject p : arr) {
+        int id = p["id"] | -1;
+        if (id < 0 || id >= MAX_PARAMS) continue;
+        if (p["f"].as<bool>()) _paramStore->setFloat((uint8_t)id, p["value"].as<float>());
+        else                   _paramStore->setInt((uint8_t)id, p["value"].as<int32_t>());
+    }
+    xSemaphoreGive(_mutex);
+    // Intentionally NOT requestParamSave(): playlist position params are an
+    // in-memory overlay; the program's stored /params/{id}.json stays untouched.
+}
+
 void ProgramManager::requestDelete(uint8_t programId) {
     _pendingDeleteId = programId;
 }
@@ -595,8 +623,18 @@ void ProgramManager::processPending() {
     uint8_t pendingId = _pendingSwitchId;
     if (pendingId != 0xFF) {
         _pendingSwitchId = 0xFF;
+        bool transient = _pendingTransientSwitch;
+        _pendingTransientSwitch = false;
+        String transientParams = _pendingTransientParams;
+        _pendingTransientParams = "";
         if (switchProgram(pendingId)) {
-            saveConfig();
+            if (transient) {
+                // Playlist position: overlay its params in memory and DON'T
+                // persist active program — rotation must not churn config.json.
+                applyTransientParams(transientParams);
+            } else {
+                saveConfig();
+            }
         }
     }
 

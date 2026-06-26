@@ -92,6 +92,12 @@ public:
     // Request async program switch (returns immediately, processed in processPending())
     void requestSwitch(uint8_t programId);
 
+    // Request async program switch that, after loading, overlays the given param
+    // values IN MEMORY ONLY (paramsJson = [{"id","value","f"}, ...]). Used by the
+    // playlist rotation engine: a position must not rewrite the program's stored
+    // /params/{id}.json, and must not re-save config.json on every rotation.
+    void requestSwitchTransient(uint8_t programId, const String& paramsJson);
+
     // True if a program switch is queued but not yet applied (for crossfade timing)
     bool hasPendingSwitch() const { return _pendingSwitchId != 0xFF; }
 
@@ -119,6 +125,9 @@ public:
 
 private:
     int findProgramIndex(uint8_t id) const;
+    // Overlay param values into the active ParamStore in memory only (no flash
+    // write, no deferred save). For transient playlist-position application.
+    void applyTransientParams(const String& paramsJson);
     void clearAllPrograms();   // actual wipe; runs on render task via processPending()
     void loadConfig();
     void loadProgramMeta(uint8_t id);
@@ -152,6 +161,12 @@ private:
     volatile uint8_t  _pendingSwitchId;  // 0xFF = none
     volatile uint8_t  _pendingDeleteId;  // 0xFF = none
     volatile bool     _pendingClearAll;  // wipe all programs on next processPending()
+
+    // Transient (playlist) switch: when set, the pending switch overlays these
+    // params in memory and skips the config.json save. Written/consumed on the
+    // render task only (the rotation engine ticks there), so no cross-task race.
+    volatile bool     _pendingTransientSwitch;
+    String            _pendingTransientParams;
 };
 
 #endif // PROGRAM_MANAGER_H

@@ -184,6 +184,28 @@ export async function plReorder(id: number, indices: number[]): Promise<any> {
   return queue.enqueue(() => writeCommand(new Uint8Array([CMD.PL_REORDER, id, ...te.encode(JSON.stringify(indices))])));
 }
 
+// Apply a position: switch to the program with these params using the same
+// on-device crossfade as a normal program switch.
+export async function applyPos(progId: number, params: { id: number; value: number; f: boolean }[]): Promise<any> {
+  return queue.enqueue(() =>
+    writeCommand(new Uint8Array([CMD.APPLY_POS, progId, ...te.encode(JSON.stringify(params))])));
+}
+
+// ── Lamp-driven playlist rotation ───────────────────────────────────────────
+// The lamp owns rotation: PL_PLAY starts it (and jumps to `index`), PL_STOP
+// halts it, PL_STATE reads back the live {playing, index}. The lamp advances
+// positions itself per the playlist file's mode/interval and notifies the app
+// via the PL_ADVANCE event.
+export async function plPlay(id: number, index = 0): Promise<any> {
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.PL_PLAY, id, index & 0xff])));
+}
+export async function plStop(): Promise<any> {
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.PL_STOP])));
+}
+export async function plGetState(): Promise<{ playing: number; index: number }> {
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.PL_STATE])));
+}
+
 export async function deleteProgram(programId: number): Promise<any> {
   return queue.enqueue(() =>
     writeCommand(new Uint8Array([CMD.DELETE_PROGRAM, programId])),

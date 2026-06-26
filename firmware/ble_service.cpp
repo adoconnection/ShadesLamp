@@ -278,6 +278,8 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                         }
 
                         // Show the freshly uploaded program, faded in from black.
+                        // A new program takes over the screen, so leave playlist mode.
+                        Playlists::stop();
                         pm->requestSwitch((uint8_t)newId);
                         g_bleService->requestFadeIn();
 
@@ -634,6 +636,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
             case CMD_PL_DELETE: {
                 if (payloadLen < 1) { g_bleService->sendResponse("{\"ok\":false,\"err\":\"id\"}", true); break; }
                 bool ok = Playlists::remove(payload[0]);
+                if (ok) Playlists::onDeleted(payload[0]);
                 g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false}", !ok);
                 break;
             }
@@ -641,6 +644,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 if (payloadLen < 4) { g_bleService->sendResponse("{\"ok\":false,\"err\":\"args\"}", true); break; }
                 uint16_t interval = (uint16_t)payload[2] | ((uint16_t)payload[3] << 8);
                 bool ok = Playlists::setRotation(payload[0], payload[1], interval);
+                if (ok) Playlists::onRotationChanged(payload[0], payload[1], interval);
                 g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false}", !ok);
                 break;
             }
@@ -648,6 +652,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 if (payloadLen < 2) { g_bleService->sendResponse("{\"ok\":false,\"err\":\"args\"}", true); break; }
                 String posJson((const char*)(payload + 1), payloadLen - 1);
                 int idx = Playlists::addPosition(payload[0], posJson);
+                if (idx >= 0) Playlists::onPositionsChanged(payload[0]);
                 char r[32]; snprintf(r, sizeof(r), "{\"ok\":%s,\"index\":%d}", idx >= 0 ? "true" : "false", idx);
                 g_bleService->sendResponse(r, idx < 0);
                 break;
@@ -655,6 +660,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
             case CMD_PL_DEL_POS: {
                 if (payloadLen < 2) { g_bleService->sendResponse("{\"ok\":false,\"err\":\"args\"}", true); break; }
                 bool ok = Playlists::removePosition(payload[0], payload[1]);
+                if (ok) Playlists::onPositionsChanged(payload[0]);
                 g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false}", !ok);
                 break;
             }
@@ -662,7 +668,62 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 if (payloadLen < 2) { g_bleService->sendResponse("{\"ok\":false,\"err\":\"args\"}", true); break; }
                 String idxJson((const char*)(payload + 1), payloadLen - 1);
                 bool ok = Playlists::reorder(payload[0], idxJson);
+                if (ok) Playlists::onPositionsChanged(payload[0]);
                 g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false}", !ok);
+                break;
+            }
+
+            case CMD_APPLY_POS: {
+                // Apply a playlist position: write the program's params to flash,
+                // then trigger the SAME crossfade as a normal program switch
+                // (requestSwitch -> render task fade-out -> switchProgram loads
+                // the params we just wrote -> fade-in). Works even when the
+                // position reuses the currently-active program.
+                if (payloadLen < 1) { g_bleService->sendResponse("{\"ok\":false,\"err\":\"args\"}", true); break; }
+                uint8_t progId = payload[0];
+                if (payloadLen > 1) {
+                    String arr((const char*)(payload + 1), payloadLen - 1);
+                    JsonDocument inDoc;
+                    if (deserializeJson(inDoc, arr) == DeserializationError::Ok) {
+                        JsonDocument outDoc;
+                        JsonArray a = inDoc.as<JsonArray>();
+                        if (a) {
+                            for (JsonObject p : a) {
+                                int id = p["id"] | -1;
+                                if (id < 0) continue;
+                                if (p["f"].as<bool>()) outDoc[String(id)] = p["value"].as<float>();
+                                else                   outDoc[String(id)] = p["value"].as<int32_t>();
+                            }
+                        }
+                        String outStr; serializeJson(outDoc, outStr);
+                        Storage::saveParamValues(progId, outStr.c_str());
+                    }
+                }
+                pm->requestSwitch(progId);
+                Serial.printf("%s CMD APPLY_POS prog=%u\r\n", TAG, progId);
+                g_bleService->sendResponse("{\"ok\":true}");
+                break;
+            }
+
+            case CMD_PL_PLAY: {
+                if (payloadLen < 1) { g_bleService->sendResponse("{\"ok\":false,\"err\":\"id\"}", true); break; }
+                int index = (payloadLen >= 2) ? payload[1] : 0;
+                Playlists::playStart(payload[0], index);
+                char r[40];
+                snprintf(r, sizeof(r), "{\"ok\":true,\"index\":%d}", Playlists::currentIndex());
+                g_bleService->sendResponse(r);
+                break;
+            }
+            case CMD_PL_STOP: {
+                Playlists::stop();
+                g_bleService->sendResponse("{\"ok\":true}");
+                break;
+            }
+            case CMD_PL_STATE: {
+                char r[48];
+                snprintf(r, sizeof(r), "{\"playing\":%d,\"index\":%d}",
+                         Playlists::playingId(), Playlists::currentIndex());
+                g_bleService->sendResponse(r);
                 break;
             }
 
@@ -706,6 +767,10 @@ class ActiveProgramCallbacks : public BLECharacteristicCallbacks {
         ProgramManager* pm = g_bleService->getProgramManager();
 
         Serial.printf("%s Active program write: %u\r\n", TAG, progId);
+
+        // Directly selecting a program leaves playlist mode, so the lamp won't
+        // override the choice on the next rotation tick.
+        Playlists::stop();
 
         // Queue async switch (processed in loop, BLE callback returns fast)
         pm->requestSwitch(progId);

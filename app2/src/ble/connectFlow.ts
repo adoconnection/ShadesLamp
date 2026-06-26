@@ -8,6 +8,7 @@ import { getCachedMeta, setCachedMeta, invalidateCache, CachedMeta } from '../st
 import { useBleStore } from '../store/useBleStore';
 import { useProgramStore } from '../store/useProgramStore';
 import { useMarketStore } from '../store/useMarketStore';
+import { usePlaylistStore } from '../store/usePlaylistStore';
 
 const LAST_DEVICE_KEY = '@lastDeviceMac';
 
@@ -57,6 +58,20 @@ export async function connectAndLoadDevice(
   setOnEvent((eventType, programId) => {
     const store = useProgramStore.getState();
     const marketStore = useMarketStore.getState();
+    if (eventType === EVT.PL_ADVANCE) {
+      // The lamp auto-advanced the playing playlist; programId carries the new
+      // position index. The active-program change arrives separately via the
+      // ACTIVE_PROGRAM characteristic.
+      usePlaylistStore.getState().setCurrentIndex(programId);
+      return;
+    }
+    if (eventType === EVT.PL_STOPPED) {
+      // The lamp left playlist mode on its own (e.g. the hardware touch button
+      // selected a program). Clear local playback state only — don't echo a
+      // PL_STOP back to the lamp.
+      usePlaylistStore.setState({ playingId: null });
+      return;
+    }
     if (eventType === EVT.PROGRAM_DELETED) {
       // Find slug before removing so we can unmark in marketplace
       const prog = store.programs.find((p) => p.id === programId);

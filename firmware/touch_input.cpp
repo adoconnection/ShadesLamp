@@ -1,6 +1,7 @@
 #include "touch_input.h"
 #include "ble_service.h"
 #include "program_manager.h"
+#include "playlists.h"
 
 #define TAG "[TOUCH]"
 
@@ -142,5 +143,7 @@ void TouchInput::switchRelative(int delta) {
 
     int n = (int)ids.size();
     int nextIdx = (curIdx < 0) ? 0 : ((curIdx + delta % n + n) % n);
+    // Hardware program change leaves playlist mode (no override on next tick).
+    Playlists::stop();
     _pm->requestSwitch(ids[nextIdx]);
 }

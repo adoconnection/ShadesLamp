@@ -23,6 +23,8 @@ class LedDriver;
 // Event types for CHAR_EVENTS notifications
 #define EVT_PROGRAM_ADDED   0x01
 #define EVT_PROGRAM_DELETED 0x02
+#define EVT_PL_ADVANCE      0x03   // lamp auto-advanced a playlist; byte = new index
+#define EVT_PL_STOPPED      0x04   // lamp left playlist mode (e.g. manual/touch switch)
 
 // Command codes
 #define CMD_GET_PROGRAMS    0x01
@@ -61,6 +63,10 @@ class LedDriver;
 #define CMD_PL_ADD_POS      0x38   // id(1)+position JSON -> {ok,index}
 #define CMD_PL_DEL_POS      0x39   // id(1)+index(1) -> {ok}
 #define CMD_PL_REORDER      0x3A   // id(1)+JSON array of indices -> {ok}
+#define CMD_APPLY_POS       0x3B   // progId(1)+params JSON [{id,value,f}] -> switch w/ crossfade + params
+#define CMD_PL_PLAY         0x3C   // id(1)[+index(1)] -> {ok,index}; lamp starts rotating
+#define CMD_PL_STOP         0x3D   // -> {ok}; lamp stops rotating (current program stays)
+#define CMD_PL_STATE        0x3E   // -> {playing:id|-1,index}; current rotation state
 // Firmware OTA is streamed over the existing upload pipeline (UPLOAD_START with
 // type=2), not a dedicated command.
 

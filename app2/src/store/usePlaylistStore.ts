@@ -3,8 +3,8 @@ import { Playlist, PlaylistPosition, RotationMode } from '../types/playlist';
 import { loadPlaylists, positionJson, newUid, MODE_TO_NUM } from '../ble/playlists';
 import {
   plCreate, plRename, plDelete, plSetRotation, plAddPosition, plRemovePosition, plReorder,
+  plPlay, plStop, plGetState,
 } from '../ble/commands';
-import { applyPosition } from '../ble/applyPosition';
 import { useBleStore } from './useBleStore';
 import { useFavoritesStore } from './useFavoritesStore';
 
@@ -64,7 +64,19 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       }
     }
 
-    set({ playlists: lists, loaded: true });
+    // The lamp owns rotation — sync which playlist (if any) it is already
+    // playing, so the UI reflects on-device state after a reconnect.
+    let playingId: number | null = null;
+    let currentIndex: number | null = null;
+    try {
+      const st = await plGetState();
+      if (st && typeof st.playing === 'number' && st.playing >= 0) {
+        playingId = st.playing;
+        currentIndex = typeof st.index === 'number' ? st.index : 0;
+      }
+    } catch { /* leave idle */ }
+
+    set({ playlists: lists, loaded: true, playingId, currentIndex });
   },
 
   createPlaylist: async (name) => {
@@ -122,22 +134,30 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     await plSetRotation(id, MODE_TO_NUM[mode], interval).catch(() => {});
   },
 
+  // Playback is driven by the lamp. The store only sends a semantic command and
+  // mirrors the resulting state locally for the UI; the lamp does the rotation.
   play: (id) => {
     const pl = get().playlists.find((p) => p.id === id);
     if (!pl || pl.positions.length === 0) { set({ playingId: id, currentIndex: null }); return; }
     set({ playingId: id, currentIndex: 0 });
-    applyPosition(pl.positions[0]);
+    if (connected()) plPlay(id, 0).catch(() => {});
   },
 
   playPosition: (id, index) => {
     const pl = get().playlists.find((p) => p.id === id);
     if (!pl || index < 0 || index >= pl.positions.length) return;
     set({ playingId: id, currentIndex: index });
-    applyPosition(pl.positions[index]);
+    if (connected()) plPlay(id, index).catch(() => {});
   },
 
-  stop: () => set({ playingId: null }),
+  stop: () => {
+    if (get().playingId == null) return;
+    set({ playingId: null });
+    if (connected()) plStop().catch(() => {});
+  },
 
+  // Manual swipe: jump to the neighbouring position and let the lamp keep
+  // rotating from there (PL_PLAY resets the interval at the new index).
   advance: (dir) => {
     const { playingId, currentIndex, playlists } = get();
     if (playingId == null) return;
@@ -147,7 +167,7 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     if (i < 0 || i >= pl.positions.length) i = 0;
     const ni = (i + dir + pl.positions.length) % pl.positions.length;
     set({ currentIndex: ni });
-    applyPosition(pl.positions[ni]);
+    if (connected()) plPlay(playingId, ni).catch(() => {});
   },
 
   setCurrentIndex: (currentIndex) => set({ currentIndex }),

@@ -14,6 +14,7 @@
 #include "ble_service.h"
 #include "storage.h"
 #include "touch_input.h"
+#include "playlists.h"
 
 #include <Update.h>
 
@@ -94,6 +95,11 @@ void renderTask(void* param) {
             now = millis();
             fadeStart = now;
         }
+
+        // Lamp-driven playlist rotation: applies a pending position and advances
+        // when the file's interval elapses. Runs here (render task) so it can
+        // request switches; the crossfade machine below picks them up.
+        Playlists::tickRotation(programManager, bleService, now);
 
         // ── Program-switch crossfade state machine ──
         if (fadeState == FADE_IDLE) {
@@ -200,6 +206,10 @@ void setup() {
 
     // Initialize program manager (loads programs from flash, activates saved program)
     programManager->begin();
+
+    // Resume a playlist that was rotating before the last reboot (the render task
+    // applies the saved position on its first tick).
+    Playlists::resumeFromState();
 
     // Initialize BLE service (use device name from config, default: "Shades LED Lamp")
     bleService->begin(programManager->getDeviceName().c_str());

@@ -8,7 +8,6 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import RootNavigator from './navigation/RootNavigator';
 import { useAutoReconnect } from './hooks/useAutoReconnect';
-import { useRotationEngine } from './hooks/useRotationEngine';
 
 if (Platform.OS !== 'web') {
   SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -16,7 +15,6 @@ if (Platform.OS !== 'web') {
 
 export default function App() {
   useAutoReconnect();
-  useRotationEngine();
 
   const [fontsLoaded, fontError] = useFonts({
     InterTight: require('../assets/fonts/InterTight-Regular.ttf'),
