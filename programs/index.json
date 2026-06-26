@@ -32,6 +32,7 @@
     {"slug": "kaleidoscope", "meta": "programs/kaleidoscope/meta.json", "wasm": "programs/kaleidoscope/main.wasm"},
     {"slug": "lava", "meta": "programs/lava/meta.json", "wasm": "programs/lava/main.wasm"},
     {"slug": "lava_lamp", "meta": "programs/lava_lamp/meta.json", "wasm": "programs/lava_lamp/main.wasm"},
+    {"slug": "lightning", "meta": "programs/lightning/meta.json", "wasm": "programs/lightning/main.wasm"},
     {"slug": "matrix_rain", "meta": "programs/matrix_rain/meta.json", "wasm": "programs/matrix_rain/main.wasm"},
     {"slug": "matrix_test", "meta": "programs/matrix_test/meta.json", "wasm": "programs/matrix_test/main.wasm"},
     {"slug": "metaballs", "meta": "programs/metaballs/meta.json", "wasm": "programs/metaballs/main.wasm"},

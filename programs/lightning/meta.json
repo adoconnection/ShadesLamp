@@ -1,0 +1,25 @@
+{
+  "guid": "e5f7a9b1-2c4d-4e6f-8a01-b3c5d7e9f1a2",
+  "version": "1.0.0",
+  "name": "Lightning",
+  "desc": "Huge electric bolts striking between top and bottom",
+  "author": "Shades",
+  "category": "Effects",
+  "cover": {"from": "#05060F", "to": "#9FE3FF", "via": "#2E6BFF", "angle": 90},
+  "pulse": "#6BD4FF",
+  "tags": ["electric", "lightning", "energy", "storm", "bolt"],
+  "i18n": {
+    "ru": {
+      "name": "Молнии",
+      "desc": "Огромные электрические разряды бьют между низом и верхом",
+      "params": {
+        "0": {"name": "Частота", "desc": "Как часто бьют молнии"},
+        "1": {"name": "Зазубренность", "desc": "Насколько ломаные разряды"},
+        "2": {"name": "Толщина", "desc": "Ширина свечения разряда"},
+        "3": {"name": "Ветвления", "desc": "Количество боковых ответвлений"},
+        "4": {"name": "Яркость", "desc": "Общая яркость"},
+        "5": {"name": "Оттенок", "desc": "Цвет разряда (150=электрический синий)"}
+      }
+    }
+  }
+}
