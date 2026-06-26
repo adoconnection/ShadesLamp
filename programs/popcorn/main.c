@@ -56,10 +56,10 @@ static void hsv2rgb(int h, int s, int v, int *r, int *g, int *b) {
 #define MAX_W 64
 #define MAX_H 64
 
-/* Pile: springy height field (accumulated popcorn that can wobble). */
-static float pileBase[MAX_W];   /* rest height (grows as popcorn lands) */
-static float pile[MAX_W];       /* live surface height (wobbles) */
-static float pileVel[MAX_W];    /* surface vertical velocity */
+/* Pile: rest height + a transient upward jostle that settles back. */
+static float pileBase[MAX_W];   /* rest height (grows as popcorn lands, self-levels) */
+static float bump[MAX_W];       /* transient upward jostle from pops (>=0), decays */
+static float tmpBuf[MAX_W];     /* scratch for diffusion passes */
 
 /* Flying popcorn particles */
 #define MAX_FLY 56
@@ -88,7 +88,7 @@ EXPORT(init)
 void init(void) {
     curW = get_width();  if (curW<1)curW=1; if(curW>MAX_W)curW=MAX_W;
     curH = get_height(); if (curH<1)curH=1; if(curH>MAX_H)curH=MAX_H;
-    for (int x=0;x<MAX_W;x++){ pileBase[x]=0; pile[x]=0; pileVel[x]=0; }
+    for (int x=0;x<MAX_W;x++){ pileBase[x]=0; bump[x]=0; }
     for (int i=0;i<MAX_FLY;i++) fl_on[i]=0;
     for (int i=0;i<MAX_KERN;i++){ k_x[i]=rnd()*(float)curW; k_timer[i]=rrange(10,60); }
     prev_tick = 0;
@@ -130,35 +130,39 @@ void update(int tick_ms) {
     float gravity = (float)curH * 1.3f;                 /* px/s^2, scales with height */
     float launchV = (4.0f + (float)force_p * 0.5f);     /* base launch speed */
     launchV *= (float)curH / 32.0f;                     /* scale to lamp height */
-    float jigF = (float)jig * 0.012f;                   /* pile impulse strength */
+    float jigBump = (float)jig * 0.035f;                /* px of upward jostle per pop (0..~3.5) */
 
-    /* ---- pile spring dynamics (wave-coupled height field) ---- */
+    /* ---- settle the heap so it rises evenly (angle of repose) ---- */
     for (int x=0;x<curW;x++){
-        float left  = pile[wrapc(x-1)];
-        float right = pile[wrapc(x+1)];
-        float coupling = ((left+right)*0.5f - pile[x]) * 0.30f;
-        float restore  = (pileBase[x] - pile[x]) * 0.20f;
-        pileVel[x] += coupling + restore;
-        pileVel[x] *= 0.82f;
-        pile[x]    += pileVel[x];
-        if (pile[x] < 0.0f) { pile[x]=0.0f; if(pileVel[x]<0)pileVel[x]=0; }
+        float left  = pileBase[wrapc(x-1)];
+        float right = pileBase[wrapc(x+1)];
+        tmpBuf[x] = pileBase[x] + 0.22f * ((left + right) * 0.5f - pileBase[x]);
     }
+    for (int x=0;x<curW;x++) pileBase[x] = tmpBuf[x];
+
+    /* ---- jostle: bump spreads to neighbours and decays (no overshoot) ---- */
+    for (int x=0;x<curW;x++){
+        float left  = bump[wrapc(x-1)];
+        float right = bump[wrapc(x+1)];
+        tmpBuf[x] = (bump[x] * 0.5f + (left + right) * 0.25f) * 0.86f;
+    }
+    for (int x=0;x<curW;x++) bump[x] = tmpBuf[x];
 
     /* ---- kernels: tick & pop ---- */
     for (int i=0;i<kerns;i++){
         k_timer[i]--;
         if (k_timer[i] <= 0){
             int kx = wrapc((int)k_x[i]);
-            float surf = pile[kx];
+            float surf = pileBase[kx] + bump[kx];
             /* fly the popped kernel up at a random angle */
             launch((float)kx + 0.5f, surf + 1.0f, launchV, 0.72f);
-            /* toss the settled pile: impulse spreads to neighbours (wave) */
-            pileVel[kx]          += jigF * launchV;
-            pileVel[wrapc(kx-1)] += jigF * launchV * 0.55f;
-            pileVel[wrapc(kx+1)] += jigF * launchV * 0.55f;
+            /* jostle the settled heap: a clean upward bump near the pop */
+            bump[kx]          += jigBump;
+            bump[wrapc(kx-1)] += jigBump * 0.5f;
+            bump[wrapc(kx+1)] += jigBump * 0.5f;
             /* sometimes knock a ready piece loose off the heap top */
-            if (pileBase[kx] > 2.0f && rnd() < 0.5f){
-                launch((float)kx + rnds()*0.5f, pile[kx], launchV*0.6f, 0.6f);
+            if (pileBase[kx] > 2.0f && rnd() < 0.4f){
+                launch((float)kx + rnds()*0.5f, surf, launchV*0.55f, 0.6f);
                 pileBase[kx] -= 0.8f; if (pileBase[kx]<0) pileBase[kx]=0;
             }
             reset_kernel(i, rate);
@@ -175,13 +179,16 @@ void update(int tick_ms) {
         if (fl_x[i] >= curW) fl_x[i] -= curW;
 
         int ix = wrapc((int)fl_x[i]);
-        if (fl_vy[i] < 0.0f && fl_y[i] <= pile[ix]){
+        float surf = pileBase[ix] + bump[ix];
+        if (fl_vy[i] < 0.0f && fl_y[i] <= surf){
             if (!emptying){
-                pileBase[ix]          += 1.1f;
-                pileBase[wrapc(ix-1)] += 0.3f;
-                pileBase[wrapc(ix+1)] += 0.3f;
+                /* deposit into the lowest of the nearby columns so valleys
+                   fill first -> the level rises evenly instead of in spikes */
+                int lo = ix;
+                if (pileBase[wrapc(ix-1)] < pileBase[lo]) lo = wrapc(ix-1);
+                if (pileBase[wrapc(ix+1)] < pileBase[lo]) lo = wrapc(ix+1);
+                pileBase[lo] += 1.0f;
             }
-            pileVel[ix] -= 0.8f;            /* impact dip */
             fl_on[i] = 0;
         } else if (fl_y[i] < -2.0f){
             fl_on[i] = 0;                   /* safety: fell off bottom */
@@ -206,7 +213,7 @@ void update(int tick_ms) {
 
     /* pile: lumpy warm popcorn from floor up to surface */
     for (int x=0;x<curW;x++){
-        int top = (int)(pile[x] + 0.5f);
+        int top = (int)(pileBase[x] + bump[x] + 0.5f);
         if (top > curH) top = curH;
         for (int y=0;y<top;y++){
             uint32_t hsh = hashu((uint32_t)x*131u + (uint32_t)y*977u);
@@ -223,7 +230,7 @@ void update(int tick_ms) {
     /* kernels: small dim orange dots on the surface */
     for (int i=0;i<kerns;i++){
         int kx = wrapc((int)k_x[i]);
-        int ky = (int)(pile[kx] + 0.5f);
+        int ky = (int)(pileBase[kx] + bump[kx] + 0.5f);
         if (ky >= curH) ky = curH-1;
         int r,g,b; hsv2rgb((hue+8)&0xFF, 220, bright/3, &r,&g,&b);
         set_pixel(kx, ky, r, g, b);
