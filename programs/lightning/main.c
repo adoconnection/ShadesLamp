@@ -22,7 +22,13 @@ static const char META[] =
          "\"desc\":\"Overall brightness\"},"
         "{\"id\":5,\"name\":\"Hue\",\"type\":\"int\","
          "\"min\":0,\"max\":255,\"default\":150,"
-         "\"desc\":\"Bolt color (150=electric blue)\"}"
+         "\"desc\":\"Bolt color (150=electric blue)\"},"
+        "{\"id\":6,\"name\":\"Power\",\"type\":\"int\","
+         "\"min\":1,\"max\":100,\"default\":50,"
+         "\"desc\":\"Low = quick spark, high = lingering high-voltage arc\"},"
+        "{\"id\":7,\"name\":\"Flash\",\"type\":\"int\","
+         "\"min\":0,\"max\":100,\"default\":30,"
+         "\"desc\":\"Background flash brightness on each strike\"}"
     "]}";
 
 EXPORT(get_meta_ptr)
@@ -133,10 +139,14 @@ void update(int tick_ms) {
     int branch = get_param_i32(3);
     int bright = get_param_i32(4);
     int hue    = get_param_i32(5);
+    int power  = get_param_i32(6);
+    int flashbg = get_param_i32(7);
 
     curW = get_width();  if (curW < 1) curW = 1; if (curW > MAX_W) curW = MAX_W;
     curH = get_height(); if (curH < 1) curH = 1; if (curH > MAX_H) curH = MAX_H;
     if (thick < 1) thick = 1; if (thick > 3) thick = 3;
+    if (power < 1) power = 1; if (power > 100) power = 100;
+    if (flashbg < 0) flashbg = 0; if (flashbg > 100) flashbg = 100;
 
     rng ^= (uint32_t)tick_ms;
 
@@ -144,11 +154,14 @@ void update(int tick_ms) {
     if (delta <= 0 || delta > 200) delta = 33;
     prev_tick = tick_ms;
 
-    /* ---- fade previous frame (afterglow) ---- */
+    /* ---- fade previous frame (afterglow). Power controls how long it lingers:
+           low power = fast fade (spark), high power = slow fade (arc). ---- */
+    int keep  = 80 + power * 140 / 100;          /* 80..220 of 256 kept */
+    int keepB = keep + 10; if (keepB > 255) keepB = 255;
     for (int i = 0; i < curW * curH; i++) {
-        fb_r[i] = (uint8_t)(fb_r[i] * 120 / 256);
-        fb_g[i] = (uint8_t)(fb_g[i] * 120 / 256);
-        fb_b[i] = (uint8_t)(fb_b[i] * 130 / 256);
+        fb_r[i] = (uint8_t)(fb_r[i] * keep  / 256);
+        fb_g[i] = (uint8_t)(fb_g[i] * keep  / 256);
+        fb_b[i] = (uint8_t)(fb_b[i] * keepB / 256);
     }
 
     /* ---- maybe spawn a new bolt ---- */
@@ -159,7 +172,7 @@ void update(int tick_ms) {
                 b_x0[i] = rrange(0, curW);
                 b_seed[i] = rng_next() | 1u;
                 b_age[i] = 0;
-                b_life[i] = rrange(4, 11);
+                b_life[i] = rrange(2, 5) + power * 12 / 100;   /* spark .. long arc */
                 flash += 0.5f; if (flash > 1.0f) flash = 1.0f;
                 break;
             }
@@ -168,9 +181,10 @@ void update(int tick_ms) {
 
     /* ---- ambient electric flash over the whole screen ---- */
     flash *= 0.80f;
-    if (flash > 0.02f) {
+    if (flash > 0.02f && flashbg > 0) {
         int fr, fg, fb;
-        hsv2rgb(hue, 255, (int)(flash * (float)bright * 0.12f), &fr, &fg, &fb);
+        float flash_factor = (float)flashbg * 0.004f;   /* 0..0.4 of brightness */
+        hsv2rgb(hue, 220, (int)(flash * (float)bright * flash_factor), &fr, &fg, &fb);
         for (int y = 0; y < curH; y++)
             for (int x = 0; x < curW; x++)
                 fb_add(x, y, fr, fg, fb);
