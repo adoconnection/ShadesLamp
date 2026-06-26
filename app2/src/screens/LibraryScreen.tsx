@@ -7,8 +7,10 @@ import Animated, {
   useAnimatedStyle,
   withRepeat,
   withTiming,
+  runOnJS,
   Easing,
 } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
@@ -33,8 +35,15 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Library'>;
 export default function LibraryScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { programs, activeId, setActiveId, reorderPrograms } = useProgramStore();
-  const { favorites } = useFavoritesStore();
+  const variants = useFavoritesStore((s) => s.variants);
   const { connectionState, deviceInfo, powerOn, setPowerOn } = useBleStore();
+
+  // Programs that have at least one saved favorite state (matched by slug/id).
+  const favMatch = useMemo(() => {
+    const slugs = new Set(variants.map((v) => v.slug).filter(Boolean) as string[]);
+    const ids = new Set(variants.map((v) => v.programId));
+    return (p: Program) => (p.slug ? slugs.has(p.slug) : false) || ids.has(p.id);
+  }, [variants]);
   const [category, setCategory] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -98,13 +107,38 @@ export default function LibraryScreen({ navigation }: Props) {
 
   const canDrag = category === 'All';
 
+  // Swipe the Now Playing hero left/right to switch to the next/previous program
+  // (in the same name order as the list, wrapping around).
+  const heroDx = useSharedValue(0);
+  const heroAnimStyle = useAnimatedStyle(() => ({ transform: [{ translateX: heroDx.value }] }));
+
+  const goRelative = useCallback((dir: number) => {
+    if (programs.length === 0) return;
+    const order = programs.slice().sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+    );
+    const i = order.findIndex((p) => p.id === activeId);
+    const ni = i < 0 ? 0 : (i + dir + order.length) % order.length;
+    handleActivate(order[ni].id);
+  }, [programs, activeId, handleActivate]);
+
+  const heroSwipe = useMemo(() => Gesture.Pan()
+    .activeOffsetX([-20, 20])
+    .onUpdate((e) => { heroDx.value = e.translationX * 0.25; })
+    .onEnd((e) => {
+      if (e.translationX <= -45) runOnJS(goRelative)(1);
+      else if (e.translationX >= 45) runOnJS(goRelative)(-1);
+      heroDx.value = withTiming(0, { duration: 160 });
+    }),
+    [goRelative, heroDx]);
+
   const renderItem = useCallback(({ item: p, drag, isActive: isDragging }: RenderItemParams<Program>) => (
     <ScaleDecorator>
       <View style={styles.listItem}>
         <ProgramRow
           program={p}
           active={p.id === activeId}
-          isFavorite={favorites.includes(p.id)}
+          isFavorite={favMatch(p)}
           onTap={() => handleActivate(p.id)}
           onOpen={() => navigation.navigate('ProgramDetail', { programId: p.id })}
           onLongPress={canDrag ? drag : undefined}
@@ -112,7 +146,7 @@ export default function LibraryScreen({ navigation }: Props) {
         />
       </View>
     </ScaleDecorator>
-  ), [activeId, favorites, handleActivate, navigation, canDrag]);
+  ), [activeId, favMatch, handleActivate, navigation, canDrag]);
 
   const keyExtractor = useCallback((p: Program) => String(p.id), []);
 
@@ -142,6 +176,8 @@ export default function LibraryScreen({ navigation }: Props) {
 
       {/* Now Playing Hero */}
       {activeProgram && (
+        <GestureDetector gesture={heroSwipe}>
+        <Animated.View style={heroAnimStyle}>
         <Pressable
           onPress={() => navigation.navigate('ProgramDetail', { programId: activeProgram.id })}
           style={styles.heroWrap}
@@ -205,6 +241,8 @@ export default function LibraryScreen({ navigation }: Props) {
             </View>
           </View>
         </Pressable>
+        </Animated.View>
+        </GestureDetector>
       )}
 
       {/* Quick Actions */}
@@ -217,7 +255,7 @@ export default function LibraryScreen({ navigation }: Props) {
         <ActionTile
           icon={<StarOutlineIcon color="rgba(250,250,247,0.85)" />}
           label={t('favorites')}
-          detail={favorites.length > 0 ? String(favorites.length) : null}
+          detail={variants.length > 0 ? String(variants.length) : null}
           onPress={() => navigation.navigate('Favorites')}
         />
         <ActionTile

@@ -24,7 +24,8 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { programId } = route.params;
   const { programs, activeId, setActiveId, updateParamValue, setProgramParams } = useProgramStore();
-  const { favorites, toggleFavorite } = useFavoritesStore();
+  const variants = useFavoritesStore((s) => s.variants);
+  const addVariant = useFavoritesStore((s) => s.addVariant);
   const { connectionState } = useBleStore();
   const [loadingParams, setLoadingParams] = useState(false);
   const [paramError, setParamError] = useState(false);
@@ -101,8 +102,24 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
   if (!program) return null;
 
   const isActive = activeId === programId;
-  const isFavorite = favorites.includes(programId);
+  const isFavorite = variants.some((v) =>
+    v.slug && program.slug ? v.slug === program.slug : v.programId === program.id,
+  );
   const accent = program.pulse;
+
+  // Save the current program + its parameter values as a new favorite snapshot.
+  const handleSaveFavorite = () => {
+    addVariant({
+      programId: program.id,
+      slug: program.slug,
+      name: localized(program, 'name', program.name),
+      desc: program.desc,
+      cover: program.cover,
+      pulse: program.pulse,
+      i18n: program.i18n,
+      params: program.params.map((p) => ({ id: p.id, value: p.value, isFloat: p.type === 'float' })),
+    });
+  };
   const disabled = connectionState !== 'connected';
 
   return (
@@ -125,7 +142,7 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
           <NavButton icon={<BackIcon />} onPress={() => navigation.goBack()} />
           <NavButton
             icon={isFavorite ? <StarFillIcon color="#0A0A08" /> : <StarOutlineIcon />}
-            onPress={() => toggleFavorite(programId)}
+            onPress={handleSaveFavorite}
             active={isFavorite}
             accent="#FCD34D"
           />

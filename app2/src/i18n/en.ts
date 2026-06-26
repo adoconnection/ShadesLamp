@@ -113,6 +113,22 @@ export const en = {
   clearMemoryTitle: 'Clear memory?',
   clearMemoryMsg: 'All uploaded programs will be erased from the lamp. The device name and settings are kept.',
   clear: 'Clear',
+
+  // Favorites variants + rotation
+  savedCount: '{n} saved',
+  favHeroDesc2: 'Saved states of your programs. Tap the star on a program to save its current settings here.',
+  noFavoritesDesc2: 'Open a program, tune its parameters and tap the star to save that state here.',
+  swipeToDelete: 'Swipe a row left to delete it.',
+  rotation: 'Rotation',
+  rotationOff: 'Off',
+  rotationNext: 'In order',
+  rotationRandom: 'Random',
+  rotationModeLabel: 'MODE',
+  rotationIntervalLabel: 'SWITCH EVERY',
+  rotationOffDesc: 'Rotation is off.',
+  rotationOnDesc: 'Switching every {t}.',
+  secShort: '{n}s',
+  minShort: '{n} min',
 } as const;
 
 export type StringKey = keyof typeof en;

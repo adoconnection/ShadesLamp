@@ -114,4 +114,20 @@ export const ru: Record<StringKey, string> = {
   clearMemoryTitle: 'Очистить память?',
   clearMemoryMsg: 'Все загруженные программы будут удалены с лампы. Имя и настройки устройства сохранятся.',
   clear: 'Очистить',
+
+  // Favorites variants + rotation
+  savedCount: 'сохранено: {n}',
+  favHeroDesc2: 'Сохранённые состояния программ. Нажмите звезду на программе, чтобы сохранить её текущие настройки сюда.',
+  noFavoritesDesc2: 'Откройте программу, настройте параметры и нажмите звезду, чтобы сохранить это состояние.',
+  swipeToDelete: 'Свайпните строку влево, чтобы удалить.',
+  rotation: 'Ротация',
+  rotationOff: 'Выкл',
+  rotationNext: 'По порядку',
+  rotationRandom: 'Случайно',
+  rotationModeLabel: 'РЕЖИМ',
+  rotationIntervalLabel: 'ПЕРЕКЛЮЧАТЬ КАЖДЫЕ',
+  rotationOffDesc: 'Ротация выключена.',
+  rotationOnDesc: 'Переключение каждые {t}.',
+  secShort: '{n} с',
+  minShort: '{n} мин',
 };

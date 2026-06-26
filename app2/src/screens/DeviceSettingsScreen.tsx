@@ -112,13 +112,10 @@ export default function DeviceSettingsScreen({ navigation }: Props) {
         </View>
         <View style={styles.statsGrid}>
           <StatBlock label={t('matrix')} value={deviceInfo.matrix} />
-          {typeof deviceInfo.temp === 'number' && (
-            <StatBlock label={t('temperature')} value={`${Math.round(deviceInfo.temp)}°C`} />
-          )}
           <StatBlock label={t('firmware')} value={deviceInfo.firmware} />
           <StatBlock
             label={t('storage')}
-            value={`${deviceInfo.storage.used} / ${deviceInfo.storage.total} KB`}
+            value={`${deviceInfo.storage.total > 0 ? Math.round((deviceInfo.storage.used / deviceInfo.storage.total) * 100) : 0}%`}
             bar={deviceInfo.storage.total > 0 ? deviceInfo.storage.used / deviceInfo.storage.total : 0}
           />
         </View>
@@ -172,7 +169,7 @@ function StatBlock({ label, value, bar }: { label: string; value: string; bar?: 
 }
 
 const statStyles = StyleSheet.create({
-  block: {},
+  block: { flex: 1, minWidth: 0 },
   label: { fontFamily: fonts.mono, fontSize: 10, letterSpacing: 1, color: 'rgba(250,250,247,0.4)' },
   value: { fontSize: 17, fontWeight: '700', color: colors.text, marginTop: 4, letterSpacing: -0.3 },
   barTrack: { marginTop: 6, height: 3, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' },
