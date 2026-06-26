@@ -151,4 +151,7 @@ export const ru: Record<StringKey, string> = {
   connectToManage: 'Подключитесь к лампе, чтобы управлять плейлистами.',
   rename: 'Переименовать',
   save: 'Сохранить',
+  positionParams: 'Параметры в этом плейлисте',
+  playThisPosition: 'Воспроизвести эту позицию',
+  editPositionHint: 'Изменения сохраняются только для этой позиции плейлиста.',
 };

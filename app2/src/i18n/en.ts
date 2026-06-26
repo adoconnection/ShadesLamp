@@ -150,6 +150,9 @@ export const en = {
   connectToManage: 'Connect to the lamp to manage playlists.',
   rename: 'Rename',
   save: 'Save',
+  positionParams: 'Parameters in this playlist',
+  playThisPosition: 'Play this position',
+  editPositionHint: 'Changes are saved to this playlist position only.',
 } as const;
 
 export type StringKey = keyof typeof en;

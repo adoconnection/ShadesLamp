@@ -10,7 +10,7 @@ import { useProgramStore } from '../store/useProgramStore';
 import { usePlaylistStore } from '../store/usePlaylistStore';
 import Cover from '../components/Cover';
 import NavButton from '../components/NavButton';
-import { BackIcon, TrashIcon, PlayIcon, PauseIcon } from '../components/Icon';
+import { BackIcon, TrashIcon, PlayIcon, PauseIcon, EditIcon } from '../components/Icon';
 import { t, localized } from '../i18n';
 import { Gradient } from '../types/program';
 import { fonts } from '../theme/typography';
@@ -72,6 +72,13 @@ export default function PlaylistDetailScreen({ route, navigation }: Props) {
               <Text style={[styles.rowName, isCurrent && { color: d.pulse }]} numberOfLines={1}>{d.name}</Text>
               <Text style={styles.rowMeta} numberOfLines={1}>{item.params.length} · {t('parameters').toLowerCase()}</Text>
             </View>
+            <Pressable
+              hitSlop={12}
+              onPress={() => navigation.navigate('PositionEdit', { playlistId: pl.id, index })}
+              style={styles.editBtn}
+            >
+              <EditIcon size={18} color="rgba(250,250,247,0.55)" />
+            </Pressable>
           </Pressable>
         </Swipeable>
       </ScaleDecorator>
@@ -214,6 +221,7 @@ const styles = StyleSheet.create({
   chipTextOn: { color: '#0A0A08' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9, paddingHorizontal: 8, backgroundColor: colors.bg },
   rowInfo: { flex: 1, minWidth: 0 },
+  editBtn: { padding: 8, borderRadius: 10 },
   rowName: { fontSize: 15, fontWeight: '700', color: colors.text, letterSpacing: -0.2 },
   rowMeta: { fontFamily: fonts.mono, fontSize: 11, color: 'rgba(250,250,247,0.45)', marginTop: 2 },
   deleteAction: { width: 72, backgroundColor: '#DC2626', alignItems: 'center', justifyContent: 'center', marginVertical: 4, borderRadius: 12 },

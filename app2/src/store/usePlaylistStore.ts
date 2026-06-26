@@ -3,7 +3,7 @@ import { Playlist, PlaylistPosition, RotationMode } from '../types/playlist';
 import { loadPlaylists, positionJson, newUid, MODE_TO_NUM } from '../ble/playlists';
 import {
   plCreate, plRename, plDelete, plSetRotation, plAddPosition, plRemovePosition, plReorder,
-  plPlay, plStop, plGetState,
+  plSetPosParams, plPlay, plStop, plGetState,
 } from '../ble/commands';
 import { useBleStore } from './useBleStore';
 import { useFavoritesStore } from './useFavoritesStore';
@@ -20,6 +20,7 @@ interface PlaylistState {
   deletePlaylist: (id: number) => Promise<void>;
   addPosition: (id: number, pos: PlaylistPosition) => Promise<void>;
   removePosition: (id: number, index: number) => Promise<void>;
+  updatePositionParams: (id: number, index: number, params: PlaylistPosition['params']) => Promise<void>;
   reorder: (id: number, newPositions: PlaylistPosition[]) => Promise<void>;
   setRotation: (id: number, mode: RotationMode, interval: number) => Promise<void>;
 
@@ -119,11 +120,31 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     await plRemovePosition(id, index).catch(() => {});
   },
 
+  updatePositionParams: async (id, index, params) => {
+    if (!connected()) return;
+    set({
+      playlists: get().playlists.map((p) =>
+        p.id === id
+          ? { ...p, positions: p.positions.map((pos, i) => (i === index ? { ...pos, params } : pos)) }
+          : p),
+    });
+    await plSetPosParams(id, index, params).catch(() => {});
+  },
+
   reorder: async (id, newPositions) => {
     if (!connected()) return;
     const pl = get().playlists.find((p) => p.id === id);
     if (!pl) return;
-    const indices = newPositions.map((np) => pl.positions.indexOf(np)).filter((i) => i >= 0);
+    // Map each dragged item back to its original index. Match by uid (stable per
+    // session) so it works even if the drag list hands back cloned objects;
+    // fall back to reference identity when a uid is somehow missing.
+    const indices = newPositions
+      .map((np) =>
+        np.uid != null ? pl.positions.findIndex((o) => o.uid === np.uid) : pl.positions.indexOf(np))
+      .filter((i) => i >= 0);
+    // Only persist a full, valid permutation; a short list would tell the lamp
+    // to drop positions.
+    if (indices.length !== pl.positions.length) return;
     set({ playlists: get().playlists.map((p) => (p.id === id ? { ...p, positions: newPositions } : p)) });
     await plReorder(id, indices).catch(() => {});
   },

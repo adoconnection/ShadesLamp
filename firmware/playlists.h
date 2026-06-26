@@ -40,6 +40,10 @@ namespace Playlists {
     // Remove the position at the given array index.
     bool removePosition(uint8_t id, uint8_t index);
 
+    // Replace the param snapshot of the position at `index`. paramsJson is a JSON
+    // array [{"id","value","f"}]. Order and program are kept; only params change.
+    bool setPositionParams(uint8_t id, uint8_t index, const String& paramsJson);
+
     // Reorder positions: indicesJson is a JSON array of current indices in the
     // new order, e.g. [2,0,1].
     bool reorder(uint8_t id, const String& indicesJson);

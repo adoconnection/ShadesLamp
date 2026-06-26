@@ -133,6 +133,23 @@ bool removePosition(uint8_t id, uint8_t index) {
     return save(id, doc);
 }
 
+bool setPositionParams(uint8_t id, uint8_t index, const String& paramsJson) {
+    JsonDocument doc;
+    if (!load(id, doc)) return false;
+    JsonArray pos = doc["positions"].as<JsonArray>();
+    if (!pos || index >= pos.size()) return false;
+    JsonObject o = pos[index].as<JsonObject>();
+    if (o.isNull()) return false;
+
+    JsonDocument pDoc;
+    if (deserializeJson(pDoc, paramsJson) != DeserializationError::Ok) return false;
+    JsonArray pa = pDoc.as<JsonArray>();
+    if (!pa) return false;
+
+    o["params"] = pa;   // deep-copies the new params array into the playlist doc
+    return save(id, doc);
+}
+
 bool reorder(uint8_t id, const String& indicesJson) {
     JsonDocument doc;
     if (!load(id, doc)) return false;

@@ -6,6 +6,7 @@ export type RootStackParamList = {
   ProgramDetail: { programId: number };
   Favorites: undefined;
   PlaylistDetail: { playlistId: number };
+  PositionEdit: { playlistId: number; index: number };
   Marketplace: undefined;
   MarketDetail: { itemId: string };
   BleConnect: undefined;

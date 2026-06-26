@@ -141,6 +141,12 @@ export const PowerIcon = ({ size = 22, color = '#FAFAF7' }: IconProps) => (
   </Svg>
 );
 
+export const EditIcon = ({ size = 18, color = '#FAFAF7' }: IconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path d="M14.5 5.5l4 4M4 20l1-4.5L16 4.5a2.1 2.1 0 013 3L8 18.5 4 20z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+);
+
 export const SignalIcon = ({ rssi, color = '#FAFAF7' }: { rssi: number; color?: string }) => {
   const bars = rssi > -55 ? 4 : rssi > -70 ? 3 : rssi > -85 ? 2 : 1;
   return (

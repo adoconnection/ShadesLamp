@@ -183,6 +183,15 @@ export async function plRemovePosition(id: number, index: number): Promise<any> 
 export async function plReorder(id: number, indices: number[]): Promise<any> {
   return queue.enqueue(() => writeCommand(new Uint8Array([CMD.PL_REORDER, id, ...te.encode(JSON.stringify(indices))])));
 }
+// Edit the param snapshot of the position at `index` in playlist `id`.
+export async function plSetPosParams(
+  id: number,
+  index: number,
+  params: { id: number; value: number; f: boolean }[],
+): Promise<any> {
+  return queue.enqueue(() =>
+    writeCommand(new Uint8Array([CMD.PL_SET_POS, id, index & 0xff, ...te.encode(JSON.stringify(params))])));
+}
 
 // Apply a position: switch to the program with these params using the same
 // on-device crossfade as a normal program switch.

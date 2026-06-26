@@ -672,6 +672,13 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false}", !ok);
                 break;
             }
+            case CMD_PL_SET_POS: {
+                if (payloadLen < 3) { g_bleService->sendResponse("{\"ok\":false,\"err\":\"args\"}", true); break; }
+                String paramsJson((const char*)(payload + 2), payloadLen - 2);
+                bool ok = Playlists::setPositionParams(payload[0], payload[1], paramsJson);
+                g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false}", !ok);
+                break;
+            }
 
             case CMD_APPLY_POS: {
                 // Apply a playlist position: write the program's params to flash,

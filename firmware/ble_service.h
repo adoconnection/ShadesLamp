@@ -67,6 +67,7 @@ class LedDriver;
 #define CMD_PL_PLAY         0x3C   // id(1)[+index(1)] -> {ok,index}; lamp starts rotating
 #define CMD_PL_STOP         0x3D   // -> {ok}; lamp stops rotating (current program stays)
 #define CMD_PL_STATE        0x3E   // -> {playing:id|-1,index}; current rotation state
+#define CMD_PL_SET_POS      0x3F   // id(1)+index(1)+params JSON [{id,value,f}] -> {ok}; edit a position's params
 // Firmware OTA is streamed over the existing upload pipeline (UPLOAD_START with
 // type=2), not a dedicated command.
 
