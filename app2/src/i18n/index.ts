@@ -1,25 +1,40 @@
 import { NativeModules, Platform } from 'react-native';
+import { getLocales } from 'expo-localization';
 import { en, StringKey } from './en';
 import { ru } from './ru';
 
 export type Lang = 'en' | 'ru';
 
-// Read the OS locale via core React Native modules (no extra native dependency).
-function detectLocale(): string {
+// Resolve the OS language code (e.g. "ru", "en"). Layered so it works under the
+// New Architecture / bridgeless, where legacy NativeModules access is unreliable:
+//   1) expo-localization (the supported, arch-safe source)
+//   2) Intl (pure JS, Hermes)
+//   3) legacy NativeModules (last resort)
+function detectLanguage(): string {
+  try {
+    const code = getLocales()?.[0]?.languageCode;
+    if (code) return code;
+  } catch {}
+
+  try {
+    const dtf: any = (Intl as any)?.DateTimeFormat;
+    const tag = dtf ? new dtf().resolvedOptions().locale : '';
+    if (tag) return tag;
+  } catch {}
+
   try {
     if (Platform.OS === 'ios') {
       const s: any = NativeModules.SettingsManager?.settings;
-      const apple = s?.AppleLocale || (Array.isArray(s?.AppleLanguages) ? s.AppleLanguages[0] : '');
-      return apple || 'en';
+      return s?.AppleLocale || (Array.isArray(s?.AppleLanguages) ? s.AppleLanguages[0] : '') || 'en';
     }
     return NativeModules.I18nManager?.localeIdentifier || 'en';
-  } catch {
-    return 'en';
-  }
+  } catch {}
+
+  return 'en';
 }
 
 // Resolved once at startup. Default is English; Russian when the OS is Russian.
-export const lang: Lang = detectLocale().toLowerCase().startsWith('ru') ? 'ru' : 'en';
+export const lang: Lang = detectLanguage().toLowerCase().startsWith('ru') ? 'ru' : 'en';
 
 const dicts: Record<Lang, Record<string, string>> = { en, ru };
 

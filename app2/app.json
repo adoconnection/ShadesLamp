@@ -40,10 +40,13 @@
         "react-native-ble-plx",
         {
           "isBackgroundEnabled": false,
-          "modes": ["central"],
+          "modes": [
+            "central"
+          ],
           "bluetoothAlwaysPermission": "Shades Lamp uses Bluetooth to connect to your LED lamp"
         }
-      ]
+      ],
+      "expo-localization"
     ]
   }
 }
