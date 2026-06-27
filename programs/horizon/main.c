@@ -13,7 +13,7 @@ static const char META[] =
     "\"desc\":\"Distant sky over water or field with drifting clouds\","
     "\"params\":["
         "{\"id\":0,\"name\":\"Preset\",\"type\":\"select\","
-         "\"options\":[\"Ocean\",\"Bliss\",\"Azure Meadow\"],\"default\":0,"
+         "\"options\":[\"Ocean\",\"Bliss\",\"Azure Meadow\",\"Sunset\",\"Sunrise\"],\"default\":0,"
          "\"desc\":\"Scene colours\"},"
         "{\"id\":1,\"name\":\"Horizon\",\"type\":\"int\","
          "\"min\":0,\"max\":100,\"default\":40,"
@@ -128,6 +128,16 @@ void update(int tick_ms){
     } else if (preset == 2) {    /* Azure Meadow — light azure sky, fresh grass */
         skyTop = (Col){ 92,162,236}; skyHor = (Col){182,216,246};
         grndHor= (Col){122,192, 92}; grndBot= (Col){ 84,156, 70};
+    } else if (preset == 3) {    /* Sunset — violet dusk fading to a hot orange glow,
+                                  * mirrored on dark water; clouds catch warm light */
+        skyTop = (Col){ 40, 24, 70}; skyHor = (Col){255,120, 50};
+        grndHor= (Col){120, 50, 30}; grndBot= (Col){ 30, 14, 26};
+        cloudC = (Col){255,180,140};
+    } else if (preset == 4) {    /* Sunrise — soft morning blue over a peach/gold dawn,
+                                  * cool water below; clouds tinted warm white */
+        skyTop = (Col){ 70,110,180}; skyHor = (Col){255,190,130};
+        grndHor= (Col){110, 90, 70}; grndBot= (Col){ 26, 30, 44};
+        cloudC = (Col){255,215,190};
     } else {                     /* Ocean (default) — dark dusk sky over deep water.
                                   * Water = Earth program's "Map" sea (40,90,200)
                                   * at brightness 23 (x23/255), flat like Earth. */
