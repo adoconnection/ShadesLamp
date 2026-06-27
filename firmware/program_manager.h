@@ -23,6 +23,7 @@ struct ProgramInfo {
     String  pulse;
     String  coverJson;  // serialized cover object e.g. {"from":"#...","to":"#...","angle":135}
     String  guid;
+    String  slug;       // stable program slug (from meta.json); fallback identity
     String  version;
 };
 
@@ -50,6 +51,23 @@ public:
 
     // Get program name by ID
     String getProgramName(uint8_t id) const;
+
+    // True if a program with this device id is currently installed.
+    bool hasProgram(uint8_t id) const;
+
+    // Stable program guid (from meta.json) for a device id, or "" if unknown.
+    String programGuid(uint8_t id) const;
+
+    // Resolve a stable program guid to its current device id, or -1 if no
+    // installed program carries that guid. Used by playlists so a saved
+    // position survives delete/update/re-download (the numeric id may change,
+    // the guid does not).
+    int resolveGuid(const String& guid) const;
+
+    // Resolve a program slug to its current device id, or -1 if none installed.
+    // Slug is the reliable stored identity for legacy positions whose numeric
+    // `prog` slot has since drifted to a different program.
+    int resolveSlug(const String& slug) const;
 
     // Get JSON array of all programs: [{"id":0,"name":"..."},...]
     String getProgramListJson() const;

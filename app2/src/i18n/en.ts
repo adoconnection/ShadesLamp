@@ -158,6 +158,8 @@ export const en = {
   positionParams: 'Parameters in this playlist',
   playThisPosition: 'Play this position',
   editPositionHint: 'Changes are saved to this playlist position only.',
+  programMissing: 'Program unavailable',
+  programMissingDesc: 'This program is not on the lamp right now. It will be skipped during playback. Re-install it to restore this position.',
 } as const;
 
 export type StringKey = keyof typeof en;

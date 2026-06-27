@@ -207,6 +207,10 @@ void setup() {
     // Initialize program manager (loads programs from flash, activates saved program)
     programManager->begin();
 
+    // One-time: stamp stable guids onto legacy playlist positions so they keep
+    // resolving after a program is deleted/updated/re-downloaded.
+    Playlists::migrateGuids(programManager);
+
     // Resume a playlist that was rotating before the last reboot (the render task
     // applies the saved position on its first tick).
     Playlists::resumeFromState();

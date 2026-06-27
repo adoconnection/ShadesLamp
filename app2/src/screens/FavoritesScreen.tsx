@@ -9,6 +9,7 @@ import { Playlist } from '../types/playlist';
 import { useProgramStore } from '../store/useProgramStore';
 import { usePlaylistStore } from '../store/usePlaylistStore';
 import { useBleStore } from '../store/useBleStore';
+import { findProgramForPosition } from '../ble/playlists';
 import { gradientColors } from '../utils/color';
 import Cover from '../components/Cover';
 import NavButton from '../components/NavButton';
@@ -32,7 +33,7 @@ export default function FavoritesScreen({ navigation }: Props) {
   function coverFor(pl: Playlist) {
     const first = pl.positions[0];
     if (first) {
-      const prog = first.slug ? programs.find((p) => p.slug === first.slug) : programs.find((p) => p.id === first.prog);
+      const prog = findProgramForPosition(first, programs);
       if (prog) return { cover: prog.cover, pulse: prog.pulse };
     }
     return { cover: { from: '#FCD34D', to: '#B45309', angle: 135 }, pulse: '#FCD34D' };

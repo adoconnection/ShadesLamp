@@ -150,6 +150,44 @@ bool setPositionParams(uint8_t id, uint8_t index, const String& paramsJson) {
     return save(id, doc);
 }
 
+// One-time migration: stamp a stable guid onto legacy positions that only have
+// a numeric `prog`. Run once at boot (after ProgramManager::begin, before
+// resumeFromState) so older playlists survive program delete/update/re-download.
+// Idempotent: positions that already carry a guid are left untouched, and a file
+// is only rewritten if something actually changed.
+void migrateGuids(ProgramManager* pm) {
+    for (uint8_t id : listIds()) {
+        JsonDocument doc;
+        if (!load(id, doc)) continue;
+        JsonArray pos = doc["positions"].as<JsonArray>();
+        if (!pos) continue;
+        bool changed = false;
+        for (JsonObject o : pos) {
+            const char* g = o["guid"] | (const char*)nullptr;
+            if (g && g[0]) continue;                 // already has a guid
+            // Resolve by slug first (the reliable stored identity), then by the
+            // legacy prog slot. prog ids drift as programs are added/removed, so
+            // a slug match is what keeps a stamped guid correct.
+            int id = -1;
+            const char* slug = o["slug"] | (const char*)nullptr;
+            if (slug && slug[0]) id = pm->resolveSlug(String(slug));
+            if (id < 0) {
+                int prog = o["prog"] | -1;
+                if (prog >= 0 && prog <= 255 && pm->hasProgram((uint8_t)prog)) id = prog;
+            }
+            if (id < 0) continue;                     // program missing → leave legacy
+            String guid = pm->programGuid((uint8_t)id);
+            if (guid.length() == 0) continue;        // program has no guid → skip
+            o["guid"] = guid;                        // ArduinoJson deep-copies
+            changed = true;
+        }
+        if (changed) {
+            save(id, doc);
+            Serial.printf("%s migrated guids for playlist %u\r\n", TAG, id);
+        }
+    }
+}
+
 bool reorder(uint8_t id, const String& indicesJson) {
     JsonDocument doc;
     if (!load(id, doc)) return false;
@@ -224,8 +262,47 @@ static bool loadMeta(uint8_t id, int* outCount) {
     return true;
 }
 
+// Resolve a position object to a currently-installed program id, or -1 if its
+// program is missing (deleted / not yet re-downloaded). Resolution order mirrors
+// the app (guid → slug → prog): the guid is authoritative when present; legacy
+// positions fall back to slug (a reliable stored identity) and only then to the
+// numeric `prog` slot, which drifts as programs are added/removed.
+static int resolvePosProgram(ProgramManager* pm, JsonObject o) {
+    const char* guid = o["guid"] | (const char*)nullptr;
+    if (guid && guid[0]) return pm->resolveGuid(String(guid));  // -1 if uninstalled
+    const char* slug = o["slug"] | (const char*)nullptr;
+    if (slug && slug[0]) {
+        int id = pm->resolveSlug(String(slug));
+        if (id >= 0) return id;
+    }
+    int prog = o["prog"] | -1;
+    if (prog < 0 || prog > 255) return -1;
+    return pm->hasProgram((uint8_t)prog) ? prog : -1;           // verify still present
+}
+
+// Find the next index (within `count` steps from `start`, stepping by `dir`)
+// whose position resolves to an installed program. Returns -1 if the whole
+// playlist is currently unplayable (every program missing / empty).
+static int findPlayableIndex(ProgramManager* pm, uint8_t id, int start, int dir) {
+    JsonDocument doc;
+    if (!load(id, doc)) return -1;
+    JsonArray pos = doc["positions"].as<JsonArray>();
+    if (!pos) return -1;
+    int n = (int)pos.size();
+    if (n <= 0) return -1;
+    if (dir == 0) dir = 1;
+    int i = ((start % n) + n) % n;
+    for (int k = 0; k < n; k++) {
+        JsonObject o = pos[i].as<JsonObject>();
+        if (!o.isNull() && resolvePosProgram(pm, o) >= 0) return i;
+        i = (((i + dir) % n) + n) % n;
+    }
+    return -1;
+}
+
 // Issue the transient switch for position `index` of playlist `id`.
 // MUST run on the render task (calls pm->requestSwitchTransient).
+// Returns false if the position's program is missing — caller skips it.
 static bool applyPositionIndex(ProgramManager* pm, uint8_t id, int index) {
     JsonDocument doc;
     if (!load(id, doc)) return false;
@@ -233,8 +310,8 @@ static bool applyPositionIndex(ProgramManager* pm, uint8_t id, int index) {
     if (!pos || index < 0 || index >= (int)pos.size()) return false;
     JsonObject o = pos[index].as<JsonObject>();
     if (o.isNull()) return false;
-    int prog = o["prog"] | -1;
-    if (prog < 0 || prog > 255) return false;
+    int prog = resolvePosProgram(pm, o);
+    if (prog < 0) return false;   // program missing → skip this position
     String params;
     JsonArray pa = o["params"].as<JsonArray>();
     if (pa) serializeJson(pa, params); else params = "[]";
@@ -315,9 +392,17 @@ void tickRotation(ProgramManager* pm, BleService* ble, uint32_t now) {
     if (g_playId < 0) return;
 
     // Apply a freshly-requested position (play/jump/resume), even mid-fade.
+    // If the requested program is missing, skip forward to the next playable
+    // position and tell the app where we actually landed.
     if (g_applyPending) {
         g_applyPending = false;
-        if (applyPositionIndex(pm, (uint8_t)g_playId, g_index)) g_lastMs = now;
+        int want = g_index;
+        int idx = findPlayableIndex(pm, (uint8_t)g_playId, want, +1);
+        if (idx >= 0) {
+            g_index = idx;
+            if (applyPositionIndex(pm, (uint8_t)g_playId, idx)) g_lastMs = now;
+            if (idx != want && ble) ble->notifyEvent(EVT_PL_ADVANCE, (uint8_t)idx);
+        }
         return;
     }
 
@@ -333,6 +418,14 @@ void tickRotation(ProgramManager* pm, BleService* ble, uint32_t now) {
         if (next == g_index) next = (next + 1) % g_count;
     } else {
         next = (g_index + 1) % g_count;
+    }
+
+    // Skip over any positions whose program is currently missing.
+    next = findPlayableIndex(pm, (uint8_t)g_playId, next, +1);
+    if (next < 0) {                                // nothing playable right now
+        g_lastMs = now;                            // hold; retry next interval
+        onPositionsChanged((uint8_t)g_playId);     // positions may have shrunk
+        return;
     }
 
     if (applyPositionIndex(pm, (uint8_t)g_playId, next)) {

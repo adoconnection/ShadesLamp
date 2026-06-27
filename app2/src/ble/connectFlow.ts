@@ -84,6 +84,7 @@ export async function connectAndLoadDevice(
           const name = raw?.name || `Program ${programId}`;
           store.addProgram({
             id: programId,
+            guid: raw?.guid,
             name,
             desc: raw?.desc || '',
             author: raw?.author || 'built-in',
@@ -177,7 +178,7 @@ async function resolveProgramsMeta(items: ProgramListItem[]): Promise<Program[]>
         if (cached) {
           meta = cached;
           return {
-            id: p.id, name: meta.name, desc: meta.desc, author: meta.author,
+            id: p.id, guid: p.guid, name: meta.name, desc: meta.desc, author: meta.author,
             size: '', version: p.version, cover: meta.cover, coverSvg: meta.coverSvg,
             pulse: meta.pulse, category: meta.category, params: [], slug: meta.slug,
             i18n: meta.i18n,
@@ -211,7 +212,7 @@ async function resolveProgramsMeta(items: ProgramListItem[]): Promise<Program[]>
       }
 
       return {
-        id: p.id, name: meta.name, desc: meta.desc, author: meta.author,
+        id: p.id, guid: p.guid, name: meta.name, desc: meta.desc, author: meta.author,
         size: '', version: p.version || metaVersion, cover: meta.cover, coverSvg: meta.coverSvg,
         pulse: meta.pulse, category: meta.category, params: [], slug: meta.slug,
         i18n: meta.i18n,

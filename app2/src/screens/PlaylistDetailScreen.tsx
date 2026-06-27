@@ -8,6 +8,7 @@ import { RootStackParamList } from '../types/navigation';
 import { PlaylistPosition, RotationMode } from '../types/playlist';
 import { useProgramStore } from '../store/useProgramStore';
 import { usePlaylistStore } from '../store/usePlaylistStore';
+import { findProgramForPosition } from '../ble/playlists';
 import Cover from '../components/Cover';
 import NavButton from '../components/NavButton';
 import { BackIcon, TrashIcon, PlayIcon, PauseIcon, EditIcon } from '../components/Icon';
@@ -39,8 +40,9 @@ export default function PlaylistDetailScreen({ route, navigation }: Props) {
   const [nameInput, setNameInput] = useState('');
 
   const display = useCallback((pos: PlaylistPosition) => {
-    const prog = pos.slug ? programs.find((p) => p.slug === pos.slug) : programs.find((p) => p.id === pos.prog);
+    const prog = findProgramForPosition(pos, programs);
     return {
+      missing: !prog,
       name: prog ? localized(prog, 'name', prog.name) : (pos.name || `Program ${pos.prog}`),
       cover: prog?.cover || DEFAULT_COVER,
       pulse: prog?.pulse || '#888888',
@@ -66,11 +68,15 @@ export default function PlaylistDetailScreen({ route, navigation }: Props) {
           rightThreshold={40}
           onSwipeableOpen={() => removePosition(pl.id, index)}
         >
-          <Pressable style={styles.row} onPress={() => playPosition(pl.id, index)} onLongPress={drag} delayLongPress={180} disabled={isActive}>
-            <Cover cover={d.cover} pulse={d.pulse} size={44} radius={10} animated={isCurrent} />
+          <Pressable style={styles.row} onPress={() => { if (!d.missing) playPosition(pl.id, index); }} onLongPress={drag} delayLongPress={180} disabled={isActive}>
+            <View style={d.missing && styles.coverMissing}>
+              <Cover cover={d.cover} pulse={d.pulse} size={44} radius={10} animated={isCurrent && !d.missing} />
+            </View>
             <View style={styles.rowInfo}>
-              <Text style={[styles.rowName, isCurrent && { color: d.pulse }]} numberOfLines={1}>{d.name}</Text>
-              <Text style={styles.rowMeta} numberOfLines={1}>{item.params.length} · {t('parameters').toLowerCase()}</Text>
+              <Text style={[styles.rowName, d.missing && styles.rowNameMissing, isCurrent && !d.missing && { color: d.pulse }]} numberOfLines={1}>{d.name}</Text>
+              <Text style={[styles.rowMeta, d.missing && styles.rowMetaMissing]} numberOfLines={1}>
+                {d.missing ? t('programMissing') : `${item.params.length} · ${t('parameters').toLowerCase()}`}
+              </Text>
             </View>
             <Pressable
               hitSlop={12}
@@ -223,7 +229,10 @@ const styles = StyleSheet.create({
   rowInfo: { flex: 1, minWidth: 0 },
   editBtn: { padding: 8, borderRadius: 10 },
   rowName: { fontSize: 15, fontWeight: '700', color: colors.text, letterSpacing: -0.2 },
+  rowNameMissing: { color: 'rgba(250,250,247,0.4)' },
   rowMeta: { fontFamily: fonts.mono, fontSize: 11, color: 'rgba(250,250,247,0.45)', marginTop: 2 },
+  rowMetaMissing: { color: '#F59E0B' },
+  coverMissing: { opacity: 0.35 },
   deleteAction: { width: 72, backgroundColor: '#DC2626', alignItems: 'center', justifyContent: 'center', marginVertical: 4, borderRadius: 12 },
   empty: { paddingHorizontal: 24, paddingTop: 20, alignItems: 'center' },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 6 },

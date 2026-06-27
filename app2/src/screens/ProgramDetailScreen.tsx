@@ -108,12 +108,18 @@ export default function ProgramDetailScreen({ route, navigation }: Props) {
   const isActive = activeId === programId;
   // Starred if this program is saved in any playlist (matched by slug, else id).
   const isFavorite = playlists.some((pl) =>
-    pl.positions.some((pos) => (pos.slug && program.slug ? pos.slug === program.slug : pos.prog === program.id)),
+    pl.positions.some((pos) =>
+      pos.guid && program.guid
+        ? pos.guid === program.guid
+        : pos.slug && program.slug
+          ? pos.slug === program.slug
+          : pos.prog === program.id),
   );
   const accent = program.pulse;
 
   // Build a position snapshot of the current program + its parameter values.
   const snapshot = () => ({
+    guid: program.guid,
     prog: program.id,
     slug: program.slug,
     name: localized(program, 'name', program.name),

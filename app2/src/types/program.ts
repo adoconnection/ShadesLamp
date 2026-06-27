@@ -44,6 +44,7 @@ export interface ProgramListItem {
 
 export interface Program {
   id: number;
+  guid?: string;               // stable program identity (from meta.json)
   name: string;
   desc: string;
   author: string;

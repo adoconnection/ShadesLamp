@@ -6,8 +6,9 @@ export type { RotationMode };
 // Addressed by its array index within the playlist.
 export interface PlaylistPosition {
   uid?: string;                // client-side stable key (for drag lists); not persisted
-  prog: number;                // device program id at save time
-  slug?: string;               // stable program identity (preferred for re-resolution)
+  guid?: string;               // stable program identity (primary re-resolution key)
+  prog: number;                // device program id at save time (legacy fallback)
+  slug?: string;               // program slug (secondary fallback / display)
   name?: string;               // snapshot program name (display fallback)
   params: { id: number; value: number; f: boolean }[]; // f = isFloat
 }

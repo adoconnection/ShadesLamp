@@ -76,13 +76,16 @@ export default function LibraryScreen({ navigation }: Props) {
 
   // Programs that appear in at least one playlist (for the star indicator).
   const favMatch = useMemo(() => {
+    const guids = new Set<string>();
     const slugs = new Set<string>();
     const ids = new Set<number>();
     for (const pl of playlists) for (const pos of pl.positions) {
+      if (pos.guid) guids.add(pos.guid);
       if (pos.slug) slugs.add(pos.slug);
       ids.add(pos.prog);
     }
-    return (p: Program) => (p.slug ? slugs.has(p.slug) : false) || ids.has(p.id);
+    return (p: Program) =>
+      (p.guid ? guids.has(p.guid) : false) || (p.slug ? slugs.has(p.slug) : false) || ids.has(p.id);
   }, [playlists]);
 
   const handleActivate = useCallback(async (id: number) => {

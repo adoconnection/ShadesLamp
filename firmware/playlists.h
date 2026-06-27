@@ -10,8 +10,12 @@ class BleService;
 
 // Playlists owned by the firmware. One JSON file per playlist:
 //   /playlists/{id}.json = {"name","mode","interval","positions":[ {pos}, ... ]}
-// A position carries the program id + a param snapshot:
-//   {"prog":<id>,"slug":"...","name":"...","params":[{"id","value","f"}]}
+// A position carries a STABLE program guid + a param snapshot:
+//   {"guid":"...","prog":<id>,"slug":"...","name":"...","params":[{"id","value","f"}]}
+// `guid` is the program's immutable identity (from meta.json) and is the primary
+// resolution key — it survives delete/update/re-download even when the numeric
+// `prog` slot changes. `prog`/`slug`/`name` are kept as legacy fallback +
+// display hints. A position whose guid isn't installed is skipped during play.
 // Order == array order. Positions are addressed by their array index.
 // mode: 0=off, 1=next, 2=random.
 //
@@ -47,6 +51,10 @@ namespace Playlists {
     // Reorder positions: indicesJson is a JSON array of current indices in the
     // new order, e.g. [2,0,1].
     bool reorder(uint8_t id, const String& indicesJson);
+
+    // One-time boot migration: add a stable `guid` to legacy positions that
+    // only stored a numeric `prog`. Call once after ProgramManager::begin().
+    void migrateGuids(ProgramManager* pm);
 
     // ── Rotation engine (lamp-driven playback) ──────────────────────────────
     // All engine functions are cheap and safe to call from BLE callbacks except

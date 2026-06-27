@@ -7,6 +7,7 @@ import { useProgramStore } from '../store/useProgramStore';
 import { usePlaylistStore } from '../store/usePlaylistStore';
 import { useBleStore } from '../store/useBleStore';
 import { getParams } from '../ble/commands';
+import { findProgramForPosition } from '../ble/playlists';
 import { Param, Gradient } from '../types/program';
 import { PlaylistPosition } from '../types/playlist';
 import Cover from '../components/Cover';
@@ -32,11 +33,8 @@ export default function PositionEditScreen({ route, navigation }: Props) {
   const disabled = connectionState !== 'connected';
 
   const pos = pl?.positions[index];
-  const program = pos
-    ? pos.slug
-      ? programs.find((p) => p.slug === pos.slug)
-      : programs.find((p) => p.id === pos.prog)
-    : undefined;
+  const program = pos ? findProgramForPosition(pos, programs) : undefined;
+  const missing = !!pos && !program;
 
   const accent = program?.pulse || '#888888';
   const cover = program?.cover || DEFAULT_COVER;
@@ -149,14 +147,18 @@ export default function PositionEditScreen({ route, navigation }: Props) {
           <Cover cover={cover} pulse={accent} size={56} radius={14} />
           <View style={styles.titleInfo}>
             <Text style={styles.title} numberOfLines={2}>{name}</Text>
-            <Text style={styles.subtitle}>{t('positionParams')}</Text>
+            <Text style={[styles.subtitle, missing && styles.subtitleMissing]}>
+              {missing ? t('programMissing') : t('positionParams')}
+            </Text>
           </View>
         </View>
 
+        {missing && <Text style={styles.missingHint}>{t('programMissingDesc')}</Text>}
+
         <Pressable
-          style={[styles.playBtn, disabled && { opacity: 0.4 }]}
+          style={[styles.playBtn, (disabled || missing) && { opacity: 0.4 }]}
           onPress={onPlay}
-          disabled={disabled}
+          disabled={disabled || missing}
         >
           <PlayIcon size={16} color="#0A0A08" />
           <Text style={styles.playText}>{t('playThisPosition')}</Text>
@@ -203,6 +205,11 @@ const styles = StyleSheet.create({
   titleInfo: { flex: 1, minWidth: 0 },
   title: { fontSize: 24, fontWeight: '800', color: colors.text, letterSpacing: -0.5 },
   subtitle: { fontFamily: fonts.mono, fontSize: 12, color: 'rgba(250,250,247,0.5)', marginTop: 4 },
+  subtitleMissing: { color: '#F59E0B' },
+  missingHint: {
+    fontSize: 13, color: 'rgba(250,250,247,0.6)', lineHeight: 19,
+    paddingHorizontal: 20, paddingBottom: 12,
+  },
   playBtn: {
     marginHorizontal: 20, marginBottom: 8, paddingVertical: 13, borderRadius: 14,
     backgroundColor: '#FAFAF7', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,

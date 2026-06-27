@@ -293,6 +293,35 @@ String ProgramManager::getProgramName(uint8_t id) const {
     return _programs[idx].name;
 }
 
+bool ProgramManager::hasProgram(uint8_t id) const {
+    return findProgramIndex(id) >= 0;
+}
+
+String ProgramManager::programGuid(uint8_t id) const {
+    ensureMetaLoaded(id);
+    int idx = findProgramIndex(id);
+    if (idx < 0) return String();
+    return _programs[idx].guid;
+}
+
+int ProgramManager::resolveGuid(const String& guid) const {
+    if (guid.length() == 0) return -1;
+    for (const ProgramInfo& p : _programs) {
+        ensureMetaLoaded(p.id);
+        if (p.guid.length() > 0 && p.guid == guid) return (int)p.id;
+    }
+    return -1;
+}
+
+int ProgramManager::resolveSlug(const String& slug) const {
+    if (slug.length() == 0) return -1;
+    for (const ProgramInfo& p : _programs) {
+        ensureMetaLoaded(p.id);
+        if (p.slug.length() > 0 && p.slug == slug) return (int)p.id;
+    }
+    return -1;
+}
+
 String ProgramManager::getProgramListJson() const {
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
@@ -760,6 +789,7 @@ void ProgramManager::ensureMetaLoaded(uint8_t id) const {
                 info.coverJson = coverStr;
             }
             if (richDoc.containsKey("guid"))    info.guid = richDoc["guid"].as<String>();
+            if (richDoc.containsKey("slug"))    info.slug = richDoc["slug"].as<String>();
             if (richDoc.containsKey("version")) info.version = richDoc["version"].as<String>();
         }
     }
