@@ -346,6 +346,46 @@ function host_m_noise_fill(ptr,w,h,scale,ox,oy,oct){
     mem[ptr+y*w+x]= v<0?0:(v>255?255:v);
   }
 }
+// ── Anti-aliased drawing into the program's RGB buffer (additive) ──────────
+function aa_add(mem,bufBase,bufLen,w,h,x,y,r,g,b,c){
+  if(c<=0||x<0||y<0||x>=w||y>=h)return;
+  const idx=(y*w+x)*3; if(idx+3>bufLen)return;
+  const o=bufBase+idx;
+  let v;
+  v=mem[o]  +((r*c+0.5)|0); mem[o]  =v>255?255:v;
+  v=mem[o+1]+((g*c+0.5)|0); mem[o+1]=v>255?255:v;
+  v=mem[o+2]+((b*c+0.5)|0); mem[o+2]=v>255?255:v;
+}
+function host_m_blend(ptr,w,h,fx,fy,rgb){
+  const mem=new Uint8Array(exportsW.memory.buffer);
+  if(ptr<0||ptr>mem.length||w<=0||h<=0)return;
+  const bufLen=mem.length-ptr;
+  const r=(rgb>>16)&255,g=(rgb>>8)&255,b=rgb&255;
+  const ix=Math.floor(fx),iy=Math.floor(fy),dx=fx-ix,dy=fy-iy;
+  aa_add(mem,ptr,bufLen,w,h,ix,  iy,  r,g,b,(1-dx)*(1-dy));
+  aa_add(mem,ptr,bufLen,w,h,ix+1,iy,  r,g,b,dx*(1-dy));
+  aa_add(mem,ptr,bufLen,w,h,ix,  iy+1,r,g,b,(1-dx)*dy);
+  aa_add(mem,ptr,bufLen,w,h,ix+1,iy+1,r,g,b,dx*dy);
+}
+function host_m_line(ptr,w,h,x0,y0,x1,y1,rgb){
+  const mem=new Uint8Array(exportsW.memory.buffer);
+  if(ptr<0||ptr>mem.length||w<=0||h<=0)return;
+  const bufLen=mem.length-ptr;
+  const r=(rgb>>16)&255,g=(rgb>>8)&255,b=rgb&255;
+  let steep=Math.abs(y1-y0)>Math.abs(x1-x0),t;
+  if(steep){t=x0;x0=y0;y0=t;t=x1;x1=y1;y1=t;}
+  if(x0>x1){t=x0;x0=x1;x1=t;t=y0;y0=y1;y1=t;}
+  const dx=x1-x0,dy=y1-y0,grad=dx===0?1:dy/dx;
+  const pl=(a,bb,c)=>{ if(steep)aa_add(mem,ptr,bufLen,w,h,bb,a,r,g,b,c); else aa_add(mem,ptr,bufLen,w,h,a,bb,r,g,b,c); };
+  let xend=Math.floor(x0+0.5), yend=y0+grad*(xend-x0), xgap=1-((x0+0.5)-Math.floor(x0+0.5));
+  let xp1=xend, yp1=Math.floor(yend), fyy=yend-Math.floor(yend);
+  pl(xp1,yp1,(1-fyy)*xgap); pl(xp1,yp1+1,fyy*xgap);
+  let intery=yend+grad;
+  xend=Math.floor(x1+0.5); yend=y1+grad*(xend-x1); xgap=(x1+0.5)-Math.floor(x1+0.5);
+  let xp2=xend, yp2=Math.floor(yend); fyy=yend-Math.floor(yend);
+  pl(xp2,yp2,(1-fyy)*xgap); pl(xp2,yp2+1,fyy*xgap);
+  for(let x=xp1+1;x<xp2;x++){ const iy=Math.floor(intery),f=intery-iy; pl(x,iy,1-f); pl(x,iy+1,f); intery+=grad; }
+}
 
 const baseEnv = {
   get_width:host_get_width, get_height:host_get_height,
@@ -358,6 +398,8 @@ const baseEnv = {
   m_exp:Math.exp, m_pow:Math.pow, m_hsv:host_m_hsv,
   // batch operations
   m_fade:host_m_fade, m_fill:host_m_fill, m_noise_fill:host_m_noise_fill,
+  // anti-aliased drawing
+  m_blend:host_m_blend, m_line:host_m_line,
 };
 // Proxy: любой неизвестный импорт → безопасная заглушка (как --allow-undefined)
 const envProxy = new Proxy(baseEnv, {

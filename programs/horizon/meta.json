@@ -1,25 +1,65 @@
 {
   "guid": "b8d0f2a4-5c7e-4901-a2b3-c4d5e6f70819",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "name": "Horizon",
   "desc": "Distant sky over water or field with drifting clouds",
   "author": "Shades",
   "category": "Ambient",
-  "cover": {"from": "#3E86C7", "to": "#06204E", "via": "#96C4EA", "angle": 180},
+  "cover": {
+    "from": "#3E86C7",
+    "to": "#06204E",
+    "via": "#96C4EA",
+    "angle": 180
+  },
   "pulse": "#96C4EA",
   "about": "A calm faraway view: a graded sky over dark water or a green field, divided at an adjustable horizon, with sparse snow-white clouds drifting slowly under the very top. Presets: Ocean, Bliss (a nod to the XP wallpaper) and Azure Meadow.",
-  "tags": ["sky", "ocean", "clouds", "horizon", "calm", "ambient"],
+  "tags": [
+    "sky",
+    "ocean",
+    "clouds",
+    "horizon",
+    "calm",
+    "ambient"
+  ],
   "i18n": {
     "ru": {
       "name": "Горизонт",
       "desc": "Далёкое небо над водой или полем с плывущими облаками",
       "about": "Спокойный вид вдаль: небо с лёгким градиентом над тёмной водой или зелёным полем, разделённое настраиваемым горизонтом, и редкие белоснежные облака, медленно плывущие под самым верхом. Пресеты: Океан, Безмятежность (отсылка к обоям XP) и Лазурный луг.",
       "params": {
-        "0": {"name": "Пресет", "desc": "Цвета сцены", "options": ["Океан", "Безмятежность", "Лазурный луг"]},
-        "1": {"name": "Горизонт", "desc": "Высота нижней части (вода/поле), %"},
-        "2": {"name": "Облака", "desc": "Сколько облаков плывёт", "options": ["Выкл", "Мало", "Много"]},
-        "3": {"name": "Скорость", "desc": "Скорость дрейфа облаков"},
-        "4": {"name": "Яркость", "desc": "Общая яркость"}
+        "0": {
+          "name": "Пресет",
+          "desc": "Цвета сцены",
+          "options": [
+            "Океан",
+            "Безмятежность",
+            "Лазурный луг"
+          ]
+        },
+        "1": {
+          "name": "Горизонт",
+          "desc": "Высота нижней части (вода/поле), %"
+        },
+        "2": {
+          "name": "Облака",
+          "desc": "Сколько облаков плывёт (0 — выключить)"
+        },
+        "3": {
+          "name": "Скорость",
+          "desc": "Скорость дрейфа облаков"
+        },
+        "4": {
+          "name": "Яркость",
+          "desc": "Общая яркость"
+        },
+        "5": {
+          "name": "Размер облаков",
+          "desc": "Размер облаков (привязаны к верху)"
+        },
+        "6": {
+          "name": "Скученность",
+          "desc": "Насколько кучно облака (0 — разброс по всей ширине)"
+        }
       }
     }
   }

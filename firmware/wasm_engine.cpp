@@ -243,6 +243,99 @@ m3ApiRawFunction(host_m_noise_fill) {
     m3ApiSuccess();
 }
 
+// ── Anti-aliased drawing into the program's RGB framebuffer (additive) ──────
+// Additive saturating blend of one pixel scaled by coverage c (0..1).
+static inline void aa_add(uint8_t* buf, uint32_t bufLen, int w, int h,
+                          int x, int y, int r, int g, int b, float c) {
+    if (c <= 0.0f || x < 0 || y < 0 || x >= w || y >= h) return;
+    uint32_t idx = ((uint32_t)y * (uint32_t)w + (uint32_t)x) * 3u;
+    if (idx + 3u > bufLen) return;
+    int v;
+    v = buf[idx]   + (int)(r * c + 0.5f); buf[idx]   = v > 255 ? 255 : v;
+    v = buf[idx+1] + (int)(g * c + 0.5f); buf[idx+1] = v > 255 ? 255 : v;
+    v = buf[idx+2] + (int)(b * c + 0.5f); buf[idx+2] = v > 255 ? 255 : v;
+}
+
+m3ApiRawFunction(host_m_blend) {
+    m3ApiGetArg(int32_t, ptr);
+    m3ApiGetArg(int32_t, w);
+    m3ApiGetArg(int32_t, h);
+    m3ApiGetArg(float,   fx);
+    m3ApiGetArg(float,   fy);
+    m3ApiGetArg(int32_t, rgb);
+    uint32_t memSize = 0;
+    uint8_t* mem = m3_GetMemory(runtime, &memSize, 0);
+    if (mem && ptr >= 0 && (uint32_t)ptr <= memSize && w > 0 && h > 0) {
+        uint8_t* buf = mem + ptr; uint32_t bufLen = memSize - (uint32_t)ptr;
+        int r = (rgb >> 16) & 0xFF, g = (rgb >> 8) & 0xFF, b = rgb & 0xFF;
+        float ffx = floorf(fx), ffy = floorf(fy);
+        int ix = (int)ffx, iy = (int)ffy;
+        float dx = fx - ffx, dy = fy - ffy;
+        aa_add(buf, bufLen, w, h, ix,   iy,   r, g, b, (1.0f-dx)*(1.0f-dy));
+        aa_add(buf, bufLen, w, h, ix+1, iy,   r, g, b, dx*(1.0f-dy));
+        aa_add(buf, bufLen, w, h, ix,   iy+1, r, g, b, (1.0f-dx)*dy);
+        aa_add(buf, bufLen, w, h, ix+1, iy+1, r, g, b, dx*dy);
+    }
+    m3ApiSuccess();
+}
+
+m3ApiRawFunction(host_m_line) {
+    m3ApiGetArg(int32_t, ptr);
+    m3ApiGetArg(int32_t, w);
+    m3ApiGetArg(int32_t, h);
+    m3ApiGetArg(float,   x0);
+    m3ApiGetArg(float,   y0);
+    m3ApiGetArg(float,   x1);
+    m3ApiGetArg(float,   y1);
+    m3ApiGetArg(int32_t, rgb);
+    uint32_t memSize = 0;
+    uint8_t* mem = m3_GetMemory(runtime, &memSize, 0);
+    if (!(mem && ptr >= 0 && (uint32_t)ptr <= memSize && w > 0 && h > 0)) m3ApiSuccess();
+    uint8_t* buf = mem + ptr; uint32_t bufLen = memSize - (uint32_t)ptr;
+    int r = (rgb >> 16) & 0xFF, g = (rgb >> 8) & 0xFF, b = rgb & 0xFF;
+
+    int steep = fabsf(y1 - y0) > fabsf(x1 - x0);
+    if (steep) { float t; t=x0;x0=y0;y0=t; t=x1;x1=y1;y1=t; }
+    if (x0 > x1) { float t; t=x0;x0=x1;x1=t; t=y0;y0=y1;y1=t; }
+    float dx = x1 - x0, dy = y1 - y0;
+    float grad = (dx == 0.0f) ? 1.0f : dy / dx;
+
+    /* endpoint 1 */
+    float xend = floorf(x0 + 0.5f);
+    float yend = y0 + grad * (xend - x0);
+    float xgap = 1.0f - ((x0 + 0.5f) - floorf(x0 + 0.5f));
+    int xp1 = (int)xend, yp1 = (int)floorf(yend);
+    float fyy = yend - floorf(yend);
+    if (steep) { aa_add(buf,bufLen,w,h, yp1,   xp1, r,g,b, (1.0f-fyy)*xgap);
+                 aa_add(buf,bufLen,w,h, yp1+1, xp1, r,g,b, fyy*xgap); }
+    else       { aa_add(buf,bufLen,w,h, xp1, yp1,   r,g,b, (1.0f-fyy)*xgap);
+                 aa_add(buf,bufLen,w,h, xp1, yp1+1, r,g,b, fyy*xgap); }
+    float intery = yend + grad;
+
+    /* endpoint 2 */
+    xend = floorf(x1 + 0.5f);
+    yend = y1 + grad * (xend - x1);
+    xgap = (x1 + 0.5f) - floorf(x1 + 0.5f);
+    int xp2 = (int)xend, yp2 = (int)floorf(yend);
+    fyy = yend - floorf(yend);
+    if (steep) { aa_add(buf,bufLen,w,h, yp2,   xp2, r,g,b, (1.0f-fyy)*xgap);
+                 aa_add(buf,bufLen,w,h, yp2+1, xp2, r,g,b, fyy*xgap); }
+    else       { aa_add(buf,bufLen,w,h, xp2, yp2,   r,g,b, (1.0f-fyy)*xgap);
+                 aa_add(buf,bufLen,w,h, xp2, yp2+1, r,g,b, fyy*xgap); }
+
+    /* main span */
+    for (int x = xp1 + 1; x < xp2; x++) {
+        int iy = (int)floorf(intery);
+        float f = intery - floorf(intery);
+        if (steep) { aa_add(buf,bufLen,w,h, iy,   x, r,g,b, 1.0f-f);
+                     aa_add(buf,bufLen,w,h, iy+1, x, r,g,b, f); }
+        else       { aa_add(buf,bufLen,w,h, x, iy,   r,g,b, 1.0f-f);
+                     aa_add(buf,bufLen,w,h, x, iy+1, r,g,b, f); }
+        intery += grad;
+    }
+    m3ApiSuccess();
+}
+
 // ── WasmEngine class implementation ────────────────────────────────────────
 
 WasmEngine::WasmEngine(LedDriver* ledDriver, ParamStore* paramStore)
@@ -513,6 +606,8 @@ bool WasmEngine::linkHostFunctions() {
     m3_LinkRawFunction(_module, "env", "m_fade",       "v(iii)",     &host_m_fade);
     m3_LinkRawFunction(_module, "env", "m_fill",       "v(iii)",     &host_m_fill);
     m3_LinkRawFunction(_module, "env", "m_noise_fill", "v(iiiiiii)", &host_m_noise_fill);
+    m3_LinkRawFunction(_module, "env", "m_blend",      "v(iiiffi)",  &host_m_blend);
+    m3_LinkRawFunction(_module, "env", "m_line",       "v(iiiffffi)",&host_m_line);
 
     // Not a hard failure if individual links fail (function may not be imported)
     return true;
@@ -609,6 +704,8 @@ static void linkAllHostFunctions(IM3Module mod) {
     m3_LinkRawFunction(mod, "env", "m_fade",       "v(iii)",     &host_m_fade);
     m3_LinkRawFunction(mod, "env", "m_fill",       "v(iii)",     &host_m_fill);
     m3_LinkRawFunction(mod, "env", "m_noise_fill", "v(iiiiiii)", &host_m_noise_fill);
+    m3_LinkRawFunction(mod, "env", "m_blend",      "v(iiiffi)",  &host_m_blend);
+    m3_LinkRawFunction(mod, "env", "m_line",       "v(iiiffffi)",&host_m_line);
 }
 
 bool wasmValidate(const uint8_t* wasmData, size_t wasmSize) {

@@ -76,6 +76,21 @@ void m_fill(void* buf, int num_pixels, int rgb);
 __attribute__((import_module("env"), import_name("m_noise_fill")))
 void m_noise_fill(void* buf, int w, int h, int scale, int ox, int oy, int octaves);
 
+// Anti-aliased drawing into an RGB framebuffer (row-major (y*w+x)*3), ADDITIVE
+// (saturating). Use these for smooth sub-pixel motion instead of integer
+// set_pixel/stamps. `rgb` is packed 0xRRGGBB. Coords are floats. The host
+// bounds-checks against the buffer. Pair with get_framebuffer()/draw().
+
+// Splat one anti-aliased point at (fx,fy): a 2x2 bilinear additive blend.
+__attribute__((import_module("env"), import_name("m_blend")))
+void m_blend(void* buf, int w, int h, float fx, float fy, int rgb);
+
+// Draw an anti-aliased line (Xiaolin Wu) from (x0,y0) to (x1,y1). Does NOT wrap
+// across edges; for a cylinder seam, draw with stepped m_blend (wrap x yourself)
+// or draw a second copy shifted by ±w.
+__attribute__((import_module("env"), import_name("m_line")))
+void m_line(void* buf, int w, int h, float x0, float y0, float x1, float y1, int rgb);
+
 // ── Framebuffer fast-path (optional) ─────────────────────────────────────
 // Instead of calling set_pixel per pixel, EXPORT a function named
 // "get_framebuffer" that returns a pointer to an RGB buffer in your own memory

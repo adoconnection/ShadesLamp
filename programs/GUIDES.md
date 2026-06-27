@@ -119,6 +119,14 @@ size, so a bad pointer can never escape your program's memory.
 | `m_fade(buf, len, keep)` | `void (void*, int, int)` | Multiply `len` bytes by `keep/256` (trail fade). `keep` 0–256 |
 | `m_fill(buf, num_pixels, rgb)` | `void (void*, int, int)` | Fill RGB triplets with packed `0xRRGGBB` |
 | `m_noise_fill(buf, w, h, scale, ox, oy, octaves)` | `void (void*, int, int, int, int, int, int)` | Write a `w*h` grayscale value-noise (fbm) field, 1 byte/cell. `scale/ox/oy` are 8.8 fixed-point (256 = one cell), `octaves` 1–4 |
+| `m_blend(buf, w, h, fx, fy, rgb)` | `void (void*, int, int, float, float, int)` | Splat one **anti-aliased** point at float `(fx,fy)` — a 2×2 bilinear additive (saturating) blend. For smooth sub-pixel motion |
+| `m_line(buf, w, h, x0, y0, x1, y1, rgb)` | `void (void*, int, int, float, float, float, float, int)` | Draw an **anti-aliased** line (Xiaolin Wu), additive. Does **not** wrap; for a cylinder seam draw a second copy shifted by `±w` |
+
+> `buf` for `m_blend`/`m_line` is the RGB framebuffer (row-major `(y*w+x)*3`),
+> the same buffer you return from `get_framebuffer()`. Both are *additive* —
+> `m_fade`/`m_fill` the buffer first, then splat. They're the native way to get
+> soft edges and jitter-free motion on the low-res matrix (e.g. `constellation`
+> draws its stars with `m_blend` and links with `m_line`).
 
 ### Framebuffer fast-path (optional)
 

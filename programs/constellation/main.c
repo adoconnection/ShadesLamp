@@ -84,14 +84,21 @@ static int cur_w, cur_h;
 static int32_t prev_tick;
 static int started;
 
-static void addpix(int x, int y, int r, int g, int b) {
-    while (x < 0) x += cur_w; while (x >= cur_w) x -= cur_w;   /* wrap x */
-    if (y < 0 || y >= cur_h) return;
-    int i = (y*cur_w + x)*3;
-    int v;
-    v = acc[i]   + r; acc[i]   = v > 255 ? 255 : v;
-    v = acc[i+1] + g; acc[i+1] = v > 255 ? 255 : v;
-    v = acc[i+2] + b; acc[i+2] = v > 255 ? 255 : v;
+/* acc is our RGB framebuffer; the host copies it to the LEDs on draw(). */
+EXPORT(get_framebuffer)
+int get_framebuffer(void) { return (int)acc; }
+
+static int packrgb(int r, int g, int b) {
+    if (r < 0) r = 0; if (r > 255) r = 255;
+    if (g < 0) g = 0; if (g > 255) g = 255;
+    if (b < 0) b = 0; if (b > 255) b = 255;
+    return (r << 16) | (g << 8) | b;
+}
+/* anti-aliased splat with cylinder wrap (host clips the off-screen copies) */
+static void blend_wrap(int W, int H, float fx, float fy, int rgb) {
+    m_blend(acc, W, H, fx,              fy, rgb);
+    m_blend(acc, W, H, fx - (float)W,   fy, rgb);
+    m_blend(acc, W, H, fx + (float)W,   fy, rgb);
 }
 
 EXPORT(init)
@@ -240,12 +247,12 @@ void update(int tick_ms) {
                 lg = (int)((ig + jg) * 0.5f * ls);
                 lb = (int)((ib + jb) * 0.5f * ls);
             }
-            int steps = (int)(fabsf2(ddx) > fabsf2(ddy) ? fabsf2(ddx) : fabsf2(ddy));
-            if (steps < 1) steps = 1;
-            for (int k = 0; k <= steps; k++) {
-                float t = (float)k / (float)steps;
-                addpix((int)(p_x[i] + ddx * t + 0.5f), (int)(p_y[i] + ddy * t + 0.5f), lr, lg, lb);
-            }
+            /* anti-aliased link; draw the seam-wrapped copies too (host clips) */
+            int lrgb = packrgb(lr, lg, lb);
+            float ax = p_x[i], ay = p_y[i], bx = p_x[i] + ddx, by = p_y[i] + ddy;
+            m_line(acc, W, H, ax,            ay, bx,            by, lrgb);
+            m_line(acc, W, H, ax - (float)W, ay, bx - (float)W, by, lrgb);
+            m_line(acc, W, H, ax + (float)W, ay, bx + (float)W, by, lrgb);
         }
     }
 
@@ -259,26 +266,19 @@ void update(int tick_ms) {
         pb = pb + (1.0f - pb) * gboost;       /* Link Glow lifts stars to full */
         if (big && pb < 0.85f) pb = 0.85f;   /* make the white glow prominent */
         float s = pb * (float)bright / 255.0f;
-        int cx = (int)(p_x[i] + 0.5f);
-        int cy = (int)(p_y[i] + 0.5f);
         int cr = (int)(r * s), cg = (int)(g * s), cb = (int)(b * s);
-        addpix(cx, cy, cr, cg, cb);
-        /* big particles get a soft halo; small ones are a single pixel */
+        /* anti-aliased star at the float position (smooth sub-pixel motion) */
+        blend_wrap(W, H, p_x[i], p_y[i], packrgb(cr, cg, cb));
+        /* big stars get a soft AA halo around the core */
         if (size != 0) {
-            int hr = cr*2/5, hg = cg*2/5, hb = cb*2/5;
-            addpix(cx+1, cy, hr, hg, hb);
-            addpix(cx-1, cy, hr, hg, hb);
-            addpix(cx, cy+1, hr, hg, hb);
-            addpix(cx, cy-1, hr, hg, hb);
+            int hrgb = packrgb(cr*2/5, cg*2/5, cb*2/5);
+            blend_wrap(W, H, p_x[i] + 0.9f, p_y[i],        hrgb);
+            blend_wrap(W, H, p_x[i] - 0.9f, p_y[i],        hrgb);
+            blend_wrap(W, H, p_x[i],        p_y[i] + 0.9f, hrgb);
+            blend_wrap(W, H, p_x[i],        p_y[i] - 0.9f, hrgb);
         }
     }
 
-    /* blit accumulator to the display */
-    for (int y = 0; y < H; y++)
-        for (int x = 0; x < W; x++) {
-            int i = (y*W + x)*3;
-            set_pixel(x, y, acc[i], acc[i+1], acc[i+2]);
-        }
-
+    /* acc is the framebuffer (get_framebuffer); the host copies it on draw() */
     draw();
 }

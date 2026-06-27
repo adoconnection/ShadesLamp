@@ -18,15 +18,21 @@ static const char META[] =
         "{\"id\":1,\"name\":\"Horizon\",\"type\":\"int\","
          "\"min\":0,\"max\":100,\"default\":40,"
          "\"desc\":\"Height of the lower (water/field) part, %\"},"
-        "{\"id\":2,\"name\":\"Clouds\",\"type\":\"select\","
-         "\"options\":[\"Off\",\"Few\",\"Many\"],\"default\":1,"
+        "{\"id\":2,\"name\":\"Clouds\",\"type\":\"int\","
+         "\"min\":0,\"max\":8,\"default\":3,"
          "\"desc\":\"How many clouds drift by\"},"
         "{\"id\":3,\"name\":\"Speed\",\"type\":\"int\","
          "\"min\":1,\"max\":100,\"default\":30,"
          "\"desc\":\"Cloud drift speed\"},"
         "{\"id\":4,\"name\":\"Brightness\",\"type\":\"int\","
          "\"min\":1,\"max\":255,\"default\":220,"
-         "\"desc\":\"Overall brightness\"}"
+         "\"desc\":\"Overall brightness\"},"
+        "{\"id\":5,\"name\":\"Cloud Size\",\"type\":\"int\","
+         "\"min\":5,\"max\":100,\"default\":25,"
+         "\"desc\":\"Cloud size (anchored to the top)\"},"
+        "{\"id\":6,\"name\":\"Clustering\",\"type\":\"int\","
+         "\"min\":0,\"max\":100,\"default\":25,"
+         "\"desc\":\"How tightly clouds bunch together (0 = spread across)\"}"
     "]}";
 
 EXPORT(get_meta_ptr)
@@ -64,24 +70,24 @@ static float gland_at(int r, int c){
 }
 
 #define MAX_CLOUDS 8
-static float   cl_x[MAX_CLOUDS];   /* centre x (drifts) */
-static float   cl_y[MAX_CLOUDS];   /* centre y (near the top) */
-static float   cl_spd[MAX_CLOUDS]; /* drift speed factor (parallax) */
+static float   cl_jit[MAX_CLOUDS]; /* per-cloud jitter within its slot (0..1) */
+static float   cl_y[MAX_CLOUDS];   /* centre y offset below the very top */
 static uint8_t cl_flip[MAX_CLOUDS];/* mirror horizontally for variety */
+static float   cl_drift = 0.0f;    /* shared horizontal drift (keeps spacing constant) */
 static int   started = 0;
 static int32_t prev_tick = 0;
 
 EXPORT(init)
-void init(void){ rng = 20260627; started = 0; prev_tick = 0; }
+void init(void){ rng = 20260627; started = 0; prev_tick = 0; cl_drift = 0.0f; }
 
 static void seed_clouds(int W, int H){
+    (void)W;
     for (int i = 0; i < MAX_CLOUDS; i++){
-        cl_x[i]   = frand() * (float)W;
-        /* centre ~2px below the top so the 5px-tall blob sits just under it */
-        cl_y[i]   = (float)(H - 1) - 2.0f - frand() * (float)H * 0.10f;
-        cl_spd[i] = 0.5f + frand() * 0.9f;                        /* parallax variation */
+        cl_jit[i]  = frand();                     /* nudges the cloud inside its even slot */
+        cl_y[i]    = frand() * (float)H * 0.10f;   /* small offset of the cloud TOP below the very top */
         cl_flip[i] = (rng_next() & 1);
     }
+    cl_drift = 0.0f;
 }
 
 EXPORT(update)
@@ -91,6 +97,14 @@ void update(int tick_ms){
     int clouds = get_param_i32(2);
     int speed  = get_param_i32(3);
     int bright = get_param_i32(4);
+    int csize  = get_param_i32(5);
+    int cluster= get_param_i32(6);
+    if (csize < 5) csize = 25;       /* guard saves predating this param */
+    if (csize > 100) csize = 100;
+    if (cluster < 0) cluster = 0;
+    if (cluster > 100) cluster = 100;
+    if (clouds < 0) clouds = 0;      /* Clouds is now a count (0..MAX_CLOUDS) */
+    if (clouds > MAX_CLOUDS) clouds = MAX_CLOUDS;
 
     int W = get_width();
     int H = get_height();
@@ -126,15 +140,35 @@ void update(int tick_ms){
     if (horizonY < 0) horizonY = 0;          /* 0% = all sky */
     if (horizonY > H) horizonY = H;          /* 100% = all water/field */
 
-    /* drift clouds */
+    /* drift clouds — one shared offset so the spacing the user dials in is kept */
     float spd = ((float)speed / 100.0f) * 6.0f + 0.4f;        /* px/sec */
-    int nClouds = (clouds == 0) ? 0 : (clouds == 1) ? 3 : 6;
-    if (nClouds > MAX_CLOUDS) nClouds = MAX_CLOUDS;
+    int nClouds = clouds;
+    cl_drift += spd * dt;
+    while (cl_drift >= (float)W) cl_drift -= (float)W;
+    while (cl_drift < 0.0f)      cl_drift += (float)W;
+
+    /* Place clouds in evenly spaced slots across the width, then squeeze them
+     * toward the centre as "Clustering" rises: 0 = spread across the whole
+     * width, 100 = bunched into a tight knot. */
+    float spreadF = 1.0f - (float)cluster / 100.0f * 0.92f;   /* 1.0 .. 0.08 */
+    float cl_x[MAX_CLOUDS];
     for (int i = 0; i < nClouds; i++){
-        cl_x[i] += cl_spd[i] * spd * dt;
-        while (cl_x[i] >= (float)W) cl_x[i] -= (float)W;
-        while (cl_x[i] < 0.0f)      cl_x[i] += (float)W;
+        float slot = ((float)i + 0.5f + (cl_jit[i] - 0.5f) * 0.7f) / (float)nClouds; /* 0..1 */
+        float f    = 0.5f + (slot - 0.5f) * spreadF;          /* band around centre */
+        float xx   = f * (float)W + cl_drift;
+        while (xx >= (float)W) xx -= (float)W;
+        while (xx < 0.0f)      xx += (float)W;
+        cl_x[i] = xx;
     }
+
+    /* cloud scale: px per mask cell. Bigger = bigger cloud (up to ~full width).
+     * The 5x5 mask spans 4 cells, so footprint ≈ 4*cscale px. */
+    float cscale = 0.6f + (float)csize / 100.0f * ((float)W * 0.18f);
+    if (cscale < 0.4f) cscale = 0.4f;
+    /* anchor each cloud's TOP just under the very top, regardless of size */
+    float cyc[MAX_CLOUDS];
+    for (int i = 0; i < nClouds; i++)
+        cyc[i] = (float)(H - 1) - cl_y[i] - 2.0f * cscale;   /* top row sits ≈ H-1-cl_y */
 
     float skyH = (float)(H - horizonY);
     if (skyH < 1.0f) skyH = 1.0f;
@@ -164,8 +198,9 @@ void update(int tick_ms){
                     float ddx = (float)x - cl_x[i];
                     if (ddx >  (float)W * 0.5f) ddx -= (float)W;   /* wrap */
                     if (ddx < -(float)W * 0.5f) ddx += (float)W;
-                    float gx = ddx + 2.0f;                 /* mask column coord */
-                    float gy = ((float)y - cl_y[i]) + 2.0f;/* mask row coord */
+                    /* map pixel offset -> mask cells, scaled by cloud size */
+                    float gx = ddx / cscale + 2.0f;               /* mask column coord */
+                    float gy = ((float)y - cyc[i]) / cscale + 2.0f;/* mask row coord */
                     if (gx <= -1.0f || gx >= 5.0f || gy <= -1.0f || gy >= 5.0f) continue;
                     if (cl_flip[i]) gx = 4.0f - gx;        /* mirror for variety */
 
