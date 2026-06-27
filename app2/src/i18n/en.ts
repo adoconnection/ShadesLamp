@@ -115,6 +115,9 @@ export const en = {
   clearMemoryTitle: 'Clear memory?',
   clearMemoryMsg: 'All uploaded programs will be erased from the lamp. The device name and settings are kept.',
   clear: 'Clear',
+  renameDevice: 'Device name',
+  renameFailed: 'Couldn’t rename the device.',
+  renameTooLong: 'Name is too long. Try a shorter one (up to 20 characters, fewer for non-Latin).',
 
   // Favorites variants + rotation
   savedCount: '{n} saved',

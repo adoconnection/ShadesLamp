@@ -116,6 +116,9 @@ export const ru: Record<StringKey, string> = {
   clearMemoryTitle: 'Очистить память?',
   clearMemoryMsg: 'Все загруженные программы будут удалены с лампы. Имя и настройки устройства сохранятся.',
   clear: 'Очистить',
+  renameDevice: 'Имя устройства',
+  renameFailed: 'Не удалось переименовать устройство.',
+  renameTooLong: 'Слишком длинное имя. Сделайте короче (до 20 символов, для кириллицы — меньше).',
 
   // Favorites variants + rotation
   savedCount: 'сохранено: {n}',
