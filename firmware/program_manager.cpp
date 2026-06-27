@@ -24,6 +24,9 @@ ProgramManager::ProgramManager(WasmEngine* engine, ParamStore* paramStore, LedDr
     , _pendingDeleteId(0xFF)
     , _pendingClearAll(false)
     , _pendingTransientSwitch(false)
+    , _configDirty(false)
+    , _configDirtyTime(0)
+    , _resumeProgramId(0xFF)
 {
     _mutex = xSemaphoreCreateMutex();
 }
@@ -81,6 +84,7 @@ void ProgramManager::begin() {
     if (_activeId == 0xFF && !_programs.empty()) {
         Serial.printf("%s No saved active program, activating first available\r\n", TAG);
         switchProgram(_programs[0].id);
+        _resumeProgramId = _programs[0].id;
     }
 
     Serial.printf("%s Ready, %u programs, active=%u\r\n", TAG, _programs.size(), _activeId);
@@ -264,6 +268,7 @@ bool ProgramManager::deleteProgram(uint8_t id) {
         uint8_t nextId = _programs[0].id;
         xSemaphoreGive(_mutex);
         switchProgram(nextId);
+        _resumeProgramId = nextId;   // resume this one next boot
         saveConfig();
         return true;
     }
@@ -509,7 +514,7 @@ void ProgramManager::setHardwareConfig(uint8_t pin, uint16_t width, uint16_t hei
 
 void ProgramManager::saveConfig() {
     JsonDocument doc;
-    doc["active"] = _activeId;
+    doc["active"] = _resumeProgramId;   // last manually-chosen program (resume target)
     doc["name"] = _deviceName;
     doc["ledPin"] = _ledPin;
     doc["ledWidth"] = _ledWidth;
@@ -533,6 +538,11 @@ void ProgramManager::saveActiveParams() {
 void ProgramManager::requestParamSave() {
     _lastParamDirtyTime = millis();
     _paramsDirty = true;
+}
+
+void ProgramManager::requestConfigSave() {
+    _configDirtyTime = millis();
+    _configDirty = true;
 }
 
 void ProgramManager::flushIfDirty() {
@@ -633,13 +643,22 @@ void ProgramManager::processPending() {
                 // persist active program — rotation must not churn config.json.
                 applyTransientParams(transientParams);
             } else {
-                saveConfig();
+                // Manual switch: this is the program to resume on power-on.
+                // Persist it, but debounced so rapid flicking writes flash once.
+                _resumeProgramId = pendingId;
+                requestConfigSave();
             }
         }
     }
 
     // Handle deferred param save
     flushIfDirty();
+
+    // Debounced active-program (resume) persist
+    if (_configDirty && (millis() - _configDirtyTime) >= RESUME_DEBOUNCE_MS) {
+        _configDirty = false;
+        saveConfig();
+    }
 }
 
 // ── Private helpers ────────────────────────────────────────────────────────
@@ -678,6 +697,7 @@ void ProgramManager::loadConfig() {
 
     if (doc.containsKey("active")) {
         _activeId = doc["active"].as<uint8_t>();
+        _resumeProgramId = _activeId;   // seed the resume target from saved config
         Serial.printf("%s Config: active program = %u\r\n", TAG, _activeId);
     }
 

@@ -191,7 +191,13 @@ static volatile int      g_count       = 0;    // positions in the playing list
 static volatile bool     g_applyPending = false; // render task should apply g_index now
 static volatile bool     g_clearPending = false; // render task should delete the state file
 static volatile bool     g_notifyStopPending = false; // render task should emit EVT_PL_STOPPED
+static volatile bool     g_stateDirty  = false; // render task should persist play state
+static uint32_t          g_stateDirtyMs = 0;    // millis() of last play/jump (debounce)
 static uint32_t          g_lastMs      = 0;    // render-task only
+
+// Persist which playlist is playing only after the user has settled, so rapid
+// play/swipe doesn't hammer flash. The resume position isn't important.
+#define PL_STATE_DEBOUNCE_MS 10000U
 
 static void saveState() {
     JsonDocument doc;
@@ -242,11 +248,13 @@ void playStart(uint8_t id, int index) {
     g_playId = id;
     g_clearPending = false;          // we're (re)starting — don't let a deferred clear wipe the new state
     g_notifyStopPending = false;     // ...nor a deferred stop-notify cancel it in the app
-    if (n <= 0) { g_index = 0; g_applyPending = false; saveState(); return; }
+    // Schedule a debounced persist (10 s after the last play/swipe).
+    g_stateDirtyMs = millis();
+    g_stateDirty = true;
+    if (n <= 0) { g_index = 0; g_applyPending = false; return; }
     if (index < 0 || index >= n) index = 0;
     g_index = index;
     g_applyPending = true;           // render task applies it on next tick
-    saveState();
     Serial.printf("%s play id=%u index=%d (mode=%u interval=%u count=%d)\r\n",
                   TAG, id, index, g_mode, g_interval, n);
 }
@@ -255,6 +263,7 @@ void stop() {
     if (g_playId < 0) return;
     g_playId = -1;
     g_applyPending = false;
+    g_stateDirty = false;            // cancel any pending debounced save
     // Defer the flash delete + client notify to the render task so stop() is
     // safe to call from any context (BLE callback, touch task).
     g_clearPending = true;
@@ -299,6 +308,10 @@ void tickRotation(ProgramManager* pm, BleService* ble, uint32_t now) {
     // app; do it here on the render task (runs every frame, even while idle).
     if (g_clearPending) { g_clearPending = false; clearState(); }
     if (g_notifyStopPending) { g_notifyStopPending = false; if (ble) ble->notifyEvent(EVT_PL_STOPPED, 0); }
+    if (g_stateDirty && (uint32_t)(now - g_stateDirtyMs) >= PL_STATE_DEBOUNCE_MS) {
+        g_stateDirty = false;
+        if (g_playId >= 0) saveState();   // persist which playlist to resume
+    }
     if (g_playId < 0) return;
 
     // Apply a freshly-requested position (play/jump/resume), even mid-fade.

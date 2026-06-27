@@ -92,6 +92,11 @@ public:
     // Request async program switch (returns immediately, processed in processPending())
     void requestSwitch(uint8_t programId);
 
+    // Debounced persist of the active program (for power-on resume). A manual
+    // program switch calls this instead of saving config.json on every switch;
+    // the write happens RESUME_DEBOUNCE_MS after the last user switch.
+    void requestConfigSave();
+
     // Request async program switch that, after loading, overlays the given param
     // values IN MEMORY ONLY (paramsJson = [{"id","value","f"}, ...]). Used by the
     // playlist rotation engine: a position must not rewrite the program's stored
@@ -156,6 +161,16 @@ private:
     static const unsigned long SAVE_DEBOUNCE_MS = 3000;
     volatile bool     _paramsDirty;
     unsigned long     _lastParamDirtyTime;
+
+    // Debounced active-program persist (resume on power-on). Don't write
+    // config.json on every switch — only once the user has settled for 10 s.
+    static const unsigned long RESUME_DEBOUNCE_MS = 10000;
+    volatile bool     _configDirty;
+    unsigned long     _configDirtyTime;
+    // The program to resume on power-on = the last MANUALLY chosen program.
+    // Distinct from _activeId, which during playlist rotation holds the current
+    // (transient) position's program. config.json["active"] persists this.
+    uint8_t           _resumeProgramId;
 
     // Async program switch / delete (set from BLE callback, processed in loop)
     volatile uint8_t  _pendingSwitchId;  // 0xFF = none
