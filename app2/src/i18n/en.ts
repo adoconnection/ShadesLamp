@@ -55,6 +55,8 @@ export const en = {
   authorLabel: 'AUTHOR',
   versionLabel: 'VERSION',
   parameters: 'Parameters',
+  enabled: 'Enabled',
+  disabled: 'Disabled',
   loadingParameters: 'Loading parameters…',
   noParameters: 'No parameters',
   file: 'File',

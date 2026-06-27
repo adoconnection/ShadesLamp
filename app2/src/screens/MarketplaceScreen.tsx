@@ -14,7 +14,7 @@ import FeaturedCard from '../components/FeaturedCard';
 import MarketRow from '../components/MarketRow';
 import Skeleton from '../components/Skeleton';
 import { BackIcon, SearchIcon } from '../components/Icon';
-import { t, tCategory, localized } from '../i18n';
+import { t, tCategory, localized, compareByName } from '../i18n';
 import { isVersionNewer } from '../utils/format';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
@@ -141,13 +141,7 @@ export default function MarketplaceScreen({ navigation }: Props) {
       return true;
     })
     // Sort by the displayed (localized) name, same as the Library screen.
-    .sort((a, b) =>
-      localized(a, 'name', a.name).localeCompare(
-        localized(b, 'name', b.name),
-        undefined,
-        { sensitivity: 'base' },
-      ),
-    );
+    .sort(compareByName);
 
   const featuredItems = catalog.filter((item) => featured.includes(item.slug));
 
@@ -354,10 +348,6 @@ const styles = StyleSheet.create({
   skeletonLine: { height: 13, width: '55%', borderRadius: 6 },
   skeletonLineShort: { height: 11, width: '35%', borderRadius: 6 },
   skeletonBtn: { width: 36, height: 36, borderRadius: 18 },
-  loadingText: {
-    color: 'rgba(250,250,247,0.5)',
-    fontSize: 13,
-  },
   errorText: {
     color: '#F87171',
     fontSize: 13,

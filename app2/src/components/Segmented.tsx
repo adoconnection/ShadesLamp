@@ -17,6 +17,9 @@ export default function Segmented({ options, value, color = '#FAFAF7', onChange,
           key={i}
           onPress={() => onChange(i)}
           disabled={disabled}
+          accessibilityRole="radio"
+          accessibilityState={{ selected: value === i, disabled: !!disabled }}
+          accessibilityLabel={opt}
           style={[
             styles.button,
             {

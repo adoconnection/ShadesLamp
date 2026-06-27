@@ -77,6 +77,19 @@ export function localized(
   return fallback;
 }
 
+// Locale-aware comparator by the displayed (localized) name, so program lists
+// stay alphabetized by what the user actually sees (not the English fallback).
+export function compareByName(
+  a: { i18n?: ProgramI18n; name: string },
+  b: { i18n?: ProgramI18n; name: string },
+): number {
+  return localized(a, 'name', a.name).localeCompare(
+    localized(b, 'name', b.name),
+    undefined,
+    { sensitivity: 'base' },
+  );
+}
+
 // Localized parameter name/desc from meta i18n.params[paramId], else fallback.
 export function localizedParam(
   i18n: ProgramI18n | undefined,

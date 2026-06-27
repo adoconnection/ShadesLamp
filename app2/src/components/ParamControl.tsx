@@ -4,6 +4,7 @@ import Slider from './Slider';
 import Toggle from './Toggle';
 import Picker from './Picker';
 import { Param } from '../types/program';
+import { t } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -58,7 +59,7 @@ export default function ParamControl({ param, accent, onChange, disabled }: Para
       {param.type === 'bool' && (
         <View style={styles.boolRow}>
           <Text style={styles.boolLabel}>
-            {param.value ? 'enabled' : 'disabled'}
+            {param.value ? t('enabled') : t('disabled')}
           </Text>
           <Toggle
             value={!!param.value}

@@ -56,6 +56,8 @@ export const ru: Record<StringKey, string> = {
   authorLabel: 'АВТОР',
   versionLabel: 'ВЕРСИЯ',
   parameters: 'Параметры',
+  enabled: 'Включено',
+  disabled: 'Выключено',
   loadingParameters: 'Загрузка параметров…',
   noParameters: 'Без параметров',
   file: 'Файл',

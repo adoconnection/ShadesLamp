@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState, useMemo } from 'react';
-import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
@@ -11,14 +11,13 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { Program } from '../types/program';
 import { useProgramStore } from '../store/useProgramStore';
 import { usePlaylistStore } from '../store/usePlaylistStore';
 import { useBleStore } from '../store/useBleStore';
-import { setActiveProgram, setPower, setOrder } from '../ble/commands';
+import { setActiveProgram, setPower } from '../ble/commands';
 import { refreshPrograms } from '../ble/connectFlow';
 import BleStatusPill from '../components/BleStatusPill';
 import ProgramRow from '../components/ProgramRow';
@@ -26,7 +25,7 @@ import ActionTile from '../components/ActionTile';
 import { MarketIcon, StarOutlineIcon, SettingsIcon, PowerIcon } from '../components/Icon';
 import { gradientColors } from '../utils/color';
 import { padId } from '../utils/format';
-import { t, tCategory, localized, localizedParam } from '../i18n';
+import { t, tCategory, localized, localizedParam, compareByName } from '../i18n';
 import { fonts } from '../theme/typography';
 import { colors } from '../theme/colors';
 
@@ -34,7 +33,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Library'>;
 
 export default function LibraryScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { programs, activeId, setActiveId, reorderPrograms } = useProgramStore();
+  const { programs, activeId, setActiveId } = useProgramStore();
   const { connectionState, deviceInfo, powerOn, setPowerOn } = useBleStore();
   const [category, setCategory] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
@@ -56,10 +55,9 @@ export default function LibraryScreen({ navigation }: Props) {
     return ['All', ...cats];
   }, [programs]);
 
+  // Always alphabetical by the displayed (localized) name — never a manual order.
   const sortedAndFiltered = useMemo(() => {
-    const sorted = programs.slice().sort((a, b) =>
-      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-    );
+    const sorted = programs.slice().sort(compareByName);
     if (category === 'All') return sorted;
     return sorted.filter((p) => p.category === category);
   }, [programs, category]);
@@ -113,15 +111,6 @@ export default function LibraryScreen({ navigation }: Props) {
     }
   }, [connectionState, powerOn, setPowerOn]);
 
-  const handleDragEnd = useCallback(({ data }: { data: Program[] }) => {
-    reorderPrograms(data);
-    if (connectionState === 'connected') {
-      setOrder(data.map((p) => p.id)).catch(() => {});
-    }
-  }, [connectionState, reorderPrograms]);
-
-  const canDrag = category === 'All';
-
   // Swipe the Now Playing hero left/right to switch to the next/previous program
   // (in the same name order as the list, wrapping around).
   const heroDx = useSharedValue(0);
@@ -131,9 +120,7 @@ export default function LibraryScreen({ navigation }: Props) {
     // While a playlist is playing, swipe steps through its positions.
     if (playing) { advancePlaylist(dir); return; }
     if (programs.length === 0) return;
-    const order = programs.slice().sort((a, b) =>
-      a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
-    );
+    const order = programs.slice().sort(compareByName);
     const i = order.findIndex((p) => p.id === activeId);
     const ni = i < 0 ? 0 : (i + dir + order.length) % order.length;
     handleActivate(order[ni].id);
@@ -149,21 +136,17 @@ export default function LibraryScreen({ navigation }: Props) {
     }),
     [goRelative, heroDx]);
 
-  const renderItem = useCallback(({ item: p, drag, isActive: isDragging }: RenderItemParams<Program>) => (
-    <ScaleDecorator>
-      <View style={styles.listItem}>
-        <ProgramRow
-          program={p}
-          active={p.id === activeId}
-          isFavorite={favMatch(p)}
-          onTap={() => handleActivate(p.id)}
-          onOpen={() => navigation.navigate('ProgramDetail', { programId: p.id })}
-          onLongPress={canDrag ? drag : undefined}
-          isDragging={isDragging}
-        />
-      </View>
-    </ScaleDecorator>
-  ), [activeId, favMatch, handleActivate, navigation, canDrag]);
+  const renderItem = useCallback(({ item: p }: { item: Program }) => (
+    <View style={styles.listItem}>
+      <ProgramRow
+        program={p}
+        active={p.id === activeId}
+        isFavorite={favMatch(p)}
+        onTap={() => handleActivate(p.id)}
+        onOpen={() => navigation.navigate('ProgramDetail', { programId: p.id })}
+      />
+    </View>
+  ), [activeId, favMatch, handleActivate, navigation]);
 
   const keyExtractor = useCallback((p: Program) => String(p.id), []);
 
@@ -346,18 +329,19 @@ export default function LibraryScreen({ navigation }: Props) {
   );
 
   return (
-    <DraggableFlatList
+    <FlatList
       data={sortedAndFiltered}
       keyExtractor={keyExtractor}
       renderItem={renderItem}
-      onDragEnd={handleDragEnd}
       ListHeaderComponent={ListHeader}
       ListEmptyComponent={ListEmpty}
       contentContainerStyle={{ paddingBottom: 80 }}
-      containerStyle={styles.container}
-      activationDistance={15}
-      refreshing={refreshing}
-      onRefresh={connectionState === 'connected' ? handleRefresh : undefined}
+      style={styles.container}
+      refreshControl={
+        connectionState === 'connected' ? (
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.text} />
+        ) : undefined
+      }
     />
   );
 }
