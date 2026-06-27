@@ -47,6 +47,21 @@ int get_meta_len(void) { return sizeof(META) - 1; }
 #define MAP_H 32
 static uint8_t earth_map[MAP_W][MAP_H];
 
+/* RGB framebuffer (row-major (y*W+x)*3): the host copies it to the LEDs in a
+ * single draw(), instead of one set_pixel host-call per pixel. Sized for the
+ * largest display we support. */
+#define MAX_W 64
+#define MAX_H 64
+static uint8_t FB[MAX_W * MAX_H * 3];
+EXPORT(get_framebuffer)
+int get_framebuffer(void) { return (int)FB; }
+
+/* Night theme "city lights": per map-cell brightness. The base level is fixed
+ * per cell; the twinkle changes only once per ~320ms bucket. Precomputing this
+ * table per cell (MAP_W*MAP_H) keeps the hashing out of the per-pixel loop. */
+static uint8_t night_lvl[MAP_W][MAP_H];
+static int32_t night_twk = -1;
+
 /* Base land/sea shape. col 0 ≈ 180°W (left), col 16 ≈ 0° (centre), col 31 ≈ 180°E.
  * rows[0] is the northernmost art line. '#' = land. */
 static const char *const rows[ART_H] = {
@@ -140,6 +155,25 @@ static uint32_t hashu(uint32_t a) {
     a ^= a >> 16; a *= 0x7feb352du; a ^= a >> 15; a *= 0x846ca68bu; a ^= a >> 16; return a;
 }
 
+/* Rebuild the per-cell city-light brightness for the current twinkle bucket.
+ * Called only when the bucket changes (≈ every 320ms), not per pixel/frame. */
+static void build_night(int32_t twk) {
+    for (int cx = 0; cx < MAP_W; cx++) {
+        for (int cy = 0; cy < MAP_H; cy++) {
+            if (!earth_map[cx][cy]) { night_lvl[cx][cy] = 0; continue; }
+            uint32_t h  = hashu((uint32_t)(cx * 131 + cy * 977));
+            int s8 = (int)(h & 255);
+            int f  = 45 + (s8 * s8) / 300;      /* mostly dim, a few bright */
+            if (f > 255) f = 255;
+            uint32_t h2 = hashu(h ^ (uint32_t)twk);
+            int tw = 205 + (int)(h2 & 50);      /* 205..255 shimmer */
+            f = (f * tw) / 255;
+            night_lvl[cx][cy] = (uint8_t)f;
+        }
+    }
+    night_twk = twk;
+}
+
 /* ---- Colour themes: land + sea picked together ---- */
 static void pick_theme(int style, int *lr, int *lg, int *lb, int *sr, int *sg, int *sb) {
     switch (style) {
@@ -169,6 +203,8 @@ void update(int tick_ms) {
     int H = get_height();
     if (W < 1) W = 1;
     if (H < 1) H = 1;
+    if (W > MAX_W) W = MAX_W;
+    if (H > MAX_H) H = MAX_H;
 
     int32_t dt_ms = tick_ms - prev_tick;
     prev_tick = tick_ms;
@@ -193,7 +229,8 @@ void update(int tick_ms) {
     int sb = (sea_b  * sea_bright)  / 255;
 
     int night = (style == 2);            /* city-lights sparkle on land */
-    int twk   = tick_ms / 320;           /* slow twinkle bucket */
+    int32_t twk = tick_ms / 320;         /* slow twinkle bucket */
+    if (night && twk != night_twk) build_night(twk);   /* refresh table, not per pixel */
 
     for (int x = 0; x < W; x++) {
         int32_t src_x_q8;
@@ -232,14 +269,8 @@ void update(int tick_ms) {
             } else {
                 plr = lr; plg = lg; plb = lb;
                 if (night && wL > 0) {
-                    /* city lights: skewed per-cell brightness + slow twinkle */
-                    uint32_t h = hashu((uint32_t)(sx_lo * 131 + sy * 977));
-                    int s8 = (int)(h & 255);
-                    int f  = 45 + (s8 * s8) / 300;      /* mostly dim, a few bright */
-                    if (f > 255) f = 255;
-                    uint32_t h2 = hashu(h ^ (uint32_t)twk);
-                    int tw = 205 + (int)(h2 & 50);      /* 205..255 shimmer */
-                    f = (f * tw) / 255;
+                    /* city lights: precomputed per-cell brightness (incl. twinkle) */
+                    int f = night_lvl[sx_lo][sy];
                     plr = (lr * f) / 255;
                     plg = (lg * f) / 255;
                     plb = (lb * f) / 255;
@@ -252,9 +283,10 @@ void update(int tick_ms) {
             if (r > 255) r = 255;
             if (g > 255) g = 255;
             if (b > 255) b = 255;
-            set_pixel(x, y, r, g, b);
+            int fi = (y * W + x) * 3;
+            FB[fi] = (uint8_t)r; FB[fi + 1] = (uint8_t)g; FB[fi + 2] = (uint8_t)b;
         }
     }
 
-    draw();
+    draw();   /* host copies FB (W*H*3 bytes) in one go */
 }
