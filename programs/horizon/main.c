@@ -16,7 +16,7 @@ static const char META[] =
          "\"options\":[\"Ocean\",\"Bliss\",\"Azure Meadow\"],\"default\":0,"
          "\"desc\":\"Scene colours\"},"
         "{\"id\":1,\"name\":\"Horizon\",\"type\":\"int\","
-         "\"min\":10,\"max\":80,\"default\":40,"
+         "\"min\":0,\"max\":100,\"default\":40,"
          "\"desc\":\"Height of the lower (water/field) part, %\"},"
         "{\"id\":2,\"name\":\"Clouds\",\"type\":\"select\","
          "\"options\":[\"Off\",\"Few\",\"Many\"],\"default\":1,"
@@ -57,6 +57,12 @@ static const float GLAND[5][5] = {
     { 0.0f, 0.5f, 1.0f, 0.5f, 0.0f },   /* top                 */
 };
 
+/* mask value with implicit 0 outside the 5x5 grid (soft fade to nothing) */
+static float gland_at(int r, int c){
+    if (r < 0 || r > 4 || c < 0 || c > 4) return 0.0f;
+    return GLAND[r][c];
+}
+
 #define MAX_CLOUDS 8
 static float   cl_x[MAX_CLOUDS];   /* centre x (drifts) */
 static float   cl_y[MAX_CLOUDS];   /* centre y (near the top) */
@@ -90,8 +96,8 @@ void update(int tick_ms){
     int H = get_height();
     if (W < 1) W = 1;
     if (H < 1) H = 1;
-    if (horiz < 5) horiz = 5;
-    if (horiz > 90) horiz = 90;
+    if (horiz < 0) horiz = 0;
+    if (horiz > 100) horiz = 100;
 
     if (!started){ seed_clouds(W, H); started = 1; }
 
@@ -117,8 +123,8 @@ void update(int tick_ms){
     }
 
     int horizonY = (int)((float)H * (float)horiz / 100.0f);   /* lower part height */
-    if (horizonY < 1) horizonY = 1;
-    if (horizonY > H - 1) horizonY = H - 1;
+    if (horizonY < 0) horizonY = 0;          /* 0% = all sky */
+    if (horizonY > H) horizonY = H;          /* 100% = all water/field */
 
     /* drift clouds */
     float spd = ((float)speed / 100.0f) * 6.0f + 0.4f;        /* px/sec */
@@ -149,22 +155,28 @@ void update(int tick_ms){
         for (int x = 0; x < W; x++){
             int r = base.r, g = base.g, b = base.b;
 
-            /* clouds drift in the sky only — stamped in a Greenland shape */
-            if (nClouds > 0 && y >= horizonY){
+            /* clouds — Greenland shape, sampled bilinearly at the cloud's
+             * fractional position so the edges are soft and the drift smooth.
+             * Drawn regardless of the horizon so they're never clipped. */
+            if (nClouds > 0){
                 float mask = 0.0f;
                 for (int i = 0; i < nClouds; i++){
-                    int cxr = (int)(cl_x[i] + 0.5f);
-                    int cyr = (int)(cl_y[i] + 0.5f);
-                    int dc = x - cxr;
-                    while (dc >  W / 2) dc -= W;          /* wrap around cylinder */
-                    while (dc < -W / 2) dc += W;
-                    int dr = y - cyr;
-                    if (dc >= -2 && dc <= 2 && dr >= -2 && dr <= 2){
-                        int col = dc + 2;
-                        if (cl_flip[i]) col = 4 - col;
-                        float m = GLAND[dr + 2][col];
-                        if (m > mask) mask = m;
-                    }
+                    float ddx = (float)x - cl_x[i];
+                    if (ddx >  (float)W * 0.5f) ddx -= (float)W;   /* wrap */
+                    if (ddx < -(float)W * 0.5f) ddx += (float)W;
+                    float gx = ddx + 2.0f;                 /* mask column coord */
+                    float gy = ((float)y - cl_y[i]) + 2.0f;/* mask row coord */
+                    if (gx <= -1.0f || gx >= 5.0f || gy <= -1.0f || gy >= 5.0f) continue;
+                    if (cl_flip[i]) gx = 4.0f - gx;        /* mirror for variety */
+
+                    int c0 = (int)gx; if (gx < 0.0f && (float)c0 != gx) c0--;
+                    int r0 = (int)gy; if (gy < 0.0f && (float)r0 != gy) r0--;
+                    float fx2 = gx - (float)c0;
+                    float fy2 = gy - (float)r0;
+                    float top = gland_at(r0,   c0) + (gland_at(r0,   c0+1) - gland_at(r0,   c0)) * fx2;
+                    float bot = gland_at(r0+1, c0) + (gland_at(r0+1, c0+1) - gland_at(r0+1, c0)) * fx2;
+                    float m   = top + (bot - top) * fy2;
+                    if (m > mask) mask = m;
                 }
                 if (mask > 0.0f){
                     float a = mask * 0.92f;

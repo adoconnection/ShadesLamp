@@ -257,6 +257,45 @@ static float obj_y[MAX_OBJECTS];
 
 This avoids dynamic allocation (no `malloc` in WASM).
 
+### Smooth sub-pixel motion (soft-edged sprites)
+
+On a low-res matrix, anything that moves looks **jerky** if you snap it to whole
+pixels — `set_pixel((int)(x+0.5f), ...)` only changes the image when the object
+crosses an integer boundary, so a slow drift visibly steps cell-to-cell.
+
+Fix it with sub-pixel anti-aliasing — three rules:
+
+1. **Keep positions as `float`** and advance them with delta-time
+   (`x += speed * dt`). Never round the stored position.
+2. **Render the shape as a continuous coverage field, not a hard stamp.** For a
+   blob/sprite, sample a small density mask **bilinearly** at the fractional
+   offset; for a dot, use an analytic falloff of the distance.
+3. **Use soft edge values (between 0 and 1).** Blend the pixel toward the
+   sprite colour by that coverage. As the position moves a fraction of a pixel,
+   brightness *flows* between neighbouring LEDs (1.0 → 0.6 → 0.2 …) and the eye
+   reads it as smooth motion.
+
+Bilinear sample of a small mask `M[rows][cols]` (0 outside the grid):
+
+```c
+static float M_at(int r, int c) { return (r<0||r>=RH||c<0||c>=CW) ? 0.0f : MASK[r][c]; }
+
+// cloud centre (cx,cy) is float; (x,y) is the pixel; CX/CY centre the mask
+float gx = (x - cx) + CX, gy = (y - cy) + CY;
+int c0 = (int)gx; if (gx < 0 && (float)c0 != gx) c0--;   // floor (handles negatives)
+int r0 = (int)gy; if (gy < 0 && (float)r0 != gy) r0--;
+float fx = gx - c0, fy = gy - r0;
+float top = M_at(r0,   c0) + (M_at(r0,   c0+1) - M_at(r0,   c0)) * fx;
+float bot = M_at(r0+1, c0) + (M_at(r0+1, c0+1) - M_at(r0+1, c0)) * fx;
+float cover = top + (bot - top) * fy;                    // 0..1, continuous
+// out = lerp(bg, spriteColour, cover * opacity)
+```
+
+Analytic variant for round dots (no mask): `cover = 1 - (dx*dx+dy*dy)/(r*r)` (clamp
+≥0). For points, the Wu-style 2×2 weighting in `flame_particle`'s `wu_draw` is the
+same idea. On a cylinder, wrap the horizontal delta first
+(`if (dx >  W*0.5f) dx -= W; if (dx < -W*0.5f) dx += W;`).
+
 ## Constraints
 
 - **No standard library** (`-nostdlib`): no `malloc`, `printf`, `math.h`, `string.h`
