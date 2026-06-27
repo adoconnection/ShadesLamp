@@ -1,0 +1,35 @@
+{
+  "guid": "4d6f2a18-7e9c-4310-a5b8-2c1d9f6e3a07",
+  "version": "1.0.1",
+  "name": "Ascension",
+  "desc": "Neon plumes of energy streaming up the column with rising pulses",
+  "author": "Shades",
+  "category": "Streams",
+  "cover": {
+    "from": "#001022",
+    "to": "#39FF14",
+    "via": "#00B3FF",
+    "angle": 90
+  },
+  "pulse": "#39FF14",
+  "tags": [
+    "psy",
+    "energy",
+    "rising",
+    "neon",
+    "plasma"
+  ],
+  "i18n": {
+    "ru": {
+      "name": "Вознесение",
+      "desc": "Неоновые потоки энергии, восходящие по колонне с пульсами вверх",
+      "params": {
+        "0": { "name": "Скорость", "desc": "Скорость подъёма" },
+        "1": { "name": "Яркость", "desc": "Общая яркость" },
+        "2": { "name": "Палитра", "desc": "Цветовой пресет" },
+        "3": { "name": "Потоки", "desc": "Число струй энергии" },
+        "4": { "name": "Турбулентность", "desc": "Плотность восходящих пульсов" }
+      }
+    }
+  }
+}

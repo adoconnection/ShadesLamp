@@ -1,0 +1,34 @@
+{
+  "guid": "7c1a9e42-3b6d-4f81-9a2c-1de5f0a7b3c1",
+  "version": "1.0.1",
+  "name": "Hyperspace Tunnel",
+  "desc": "Infinite twisting tunnel of light rings rushing upward",
+  "author": "Shades",
+  "category": "Streams",
+  "cover": {
+    "from": "#0B0033",
+    "to": "#00E5FF",
+    "via": "#7A00FF",
+    "angle": 120
+  },
+  "pulse": "#00E5FF",
+  "tags": [
+    "psy",
+    "tunnel",
+    "hyperspace",
+    "trippy",
+    "spiral"
+  ],
+  "i18n": {
+    "ru": {
+      "name": "Гиперпространство",
+      "desc": "Бесконечный закрученный туннель из колец света, летящих вверх",
+      "params": {
+        "0": { "name": "Скорость", "desc": "Скорость полёта" },
+        "1": { "name": "Яркость", "desc": "Общая яркость" },
+        "2": { "name": "Палитра", "desc": "Цветовой пресет" },
+        "3": { "name": "Закрутка", "desc": "Рукава спирали / закрутка" }
+      }
+    }
+  }
+}

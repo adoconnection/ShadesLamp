@@ -3,7 +3,8 @@
 /*
  * Rotating Cube - Wireframe 3D cube rotating on all three axes,
  * projected onto the 2D cylindrical LED matrix.
- * Uses Bresenham line drawing with horizontal wrapping.
+ * Uses native anti-aliased line drawing (Xiaolin Wu, m_line) for the edges
+ * and m_blend for vertex dots, with cylinder-seam wrapping via shifted copies.
  */
 
 /* ---- Metadata JSON ---- */
@@ -31,89 +32,33 @@ int get_meta_ptr(void) { return (int)META; }
 EXPORT(get_meta_len)
 int get_meta_len(void) { return sizeof(META) - 1; }
 
-/* ---- Math helpers ---- */
-static int iabs(int x) { return x < 0 ? -x : x; }
-
-/* ---- HSV to RGB ---- */
-static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
-    int c = m_hsv(h & 255, s, v); *r = (c>>16)&255; *g = (c>>8)&255; *b = c&255;
-}
-
-/* ---- Framebuffer ---- */
+/* ---- Framebuffer (interleaved RGB, row-major (y*W + x)*3) ---- */
 #define MAX_W 64
 #define MAX_H 64
 
-static uint8_t fb_r[MAX_W * MAX_H];
-static uint8_t fb_g[MAX_W * MAX_H];
-static uint8_t fb_b[MAX_W * MAX_H];
+static uint8_t FB[MAX_W * MAX_H * 3];
+
+EXPORT(get_framebuffer)
+int get_framebuffer(void) { return (int)FB; }
 
 static int cur_w, cur_h;
 
-static void fb_clear(void) {
-    int total = cur_w * cur_h;
-    for (int i = 0; i < total; i++) {
-        fb_r[i] = 0;
-        fb_g[i] = 0;
-        fb_b[i] = 0;
-    }
+/* ---- Draw an AA line with cylinder-seam wrapping ----
+ * m_line does NOT wrap, so we draw the primary segment plus copies
+ * shifted by +/- W. Off-screen portions are clipped by the host. */
+static void draw_wrapped_line(float x0, float y0, float x1, float y1, int rgb) {
+    float w = (float)cur_w;
+    m_line(FB, cur_w, cur_h, x0,     y0, x1,     y1, rgb);
+    m_line(FB, cur_w, cur_h, x0 - w, y0, x1 - w, y1, rgb);
+    m_line(FB, cur_w, cur_h, x0 + w, y0, x1 + w, y1, rgb);
 }
 
-/* Additive blend pixel into framebuffer with horizontal wrapping */
-static void fb_plot(int x, int y, int r, int g, int b) {
-    /* Horizontal wrap for cylinder */
-    x = ((x % cur_w) + cur_w) % cur_w;
-    /* Vertical clamp */
-    if (y < 0 || y >= cur_h) return;
-
-    int idx = x * cur_h + y;
-    int nr = (int)fb_r[idx] + r;
-    int ng = (int)fb_g[idx] + g;
-    int nb = (int)fb_b[idx] + b;
-    fb_r[idx] = (uint8_t)(nr > 255 ? 255 : nr);
-    fb_g[idx] = (uint8_t)(ng > 255 ? 255 : ng);
-    fb_b[idx] = (uint8_t)(nb > 255 ? 255 : nb);
-}
-
-/* ---- Bresenham line drawing with cylinder wrap ---- */
-static void draw_line(int x0, int y0, int x1, int y1, int r, int g, int b) {
-    int dx = x1 - x0;
-    int dy = y1 - y0;
-
-    /* For horizontal wrapping: choose the shorter path around the cylinder */
-    if (dx > cur_w / 2) dx -= cur_w;
-    else if (dx < -cur_w / 2) dx += cur_w;
-
-    int sx = dx > 0 ? 1 : -1;
-    int sy = dy > 0 ? 1 : -1;
-    int adx = iabs(dx);
-    int ady = iabs(dy);
-
-    int x = x0;
-    int y = y0;
-
-    if (adx >= ady) {
-        int err = adx / 2;
-        for (int i = 0; i <= adx; i++) {
-            fb_plot(x, y, r, g, b);
-            err -= ady;
-            if (err < 0) {
-                y += sy;
-                err += adx;
-            }
-            x += sx;
-        }
-    } else {
-        int err = ady / 2;
-        for (int i = 0; i <= ady; i++) {
-            fb_plot(x, y, r, g, b);
-            err -= adx;
-            if (err < 0) {
-                x += sx;
-                err += ady;
-            }
-            y += sy;
-        }
-    }
+/* ---- AA point with cylinder-seam wrapping ---- */
+static void draw_wrapped_point(float x, float y, int rgb) {
+    float w = (float)cur_w;
+    m_blend(FB, cur_w, cur_h, x,     y, rgb);
+    m_blend(FB, cur_w, cur_h, x - w, y, rgb);
+    m_blend(FB, cur_w, cur_h, x + w, y, rgb);
 }
 
 /* ---- 3D Cube definition ---- */
@@ -137,21 +82,24 @@ static const int cube_edges[12][2] = {
     {0,4}, {1,5}, {2,6}, {3,7}   /* connecting edges */
 };
 
-/* Transformed (projected) screen coordinates of each vertex */
-static int proj_x[8];
-static int proj_y[8];
+/* Transformed (projected) screen coordinates of each vertex (sub-pixel float) */
+static float proj_x[8];
+static float proj_y[8];
 /* Depth values for edge brightness modulation */
 static float vert_z[8];
 
-EXPORT(init)
-void init(void) {
+static void clamp_dims(void) {
     cur_w = get_width();
     cur_h = get_height();
     if (cur_w > MAX_W) cur_w = MAX_W;
     if (cur_h > MAX_H) cur_h = MAX_H;
     if (cur_w < 1) cur_w = 1;
     if (cur_h < 1) cur_h = 1;
-    fb_clear();
+}
+
+EXPORT(init)
+void init(void) {
+    clamp_dims();
 }
 
 EXPORT(update)
@@ -161,12 +109,7 @@ void update(int tick_ms) {
     int hue    = get_param_i32(2);
     int size   = get_param_i32(3);
 
-    cur_w = get_width();
-    cur_h = get_height();
-    if (cur_w > MAX_W) cur_w = MAX_W;
-    if (cur_h > MAX_H) cur_h = MAX_H;
-    if (cur_w < 1) cur_w = 1;
-    if (cur_h < 1) cur_h = 1;
+    clamp_dims();
 
     /* Clamp params */
     if (speed < 1) speed = 1;
@@ -227,15 +170,14 @@ void update(int tick_ms) {
         if (denom < 0.5f) denom = 0.5f;
         float persp = cam_dist / denom;
 
-        float px = x3 * persp * scale + center_x;
-        float py = y3 * persp * scale + center_y;
-
-        proj_x[i] = (int)(px + 0.5f);
-        proj_y[i] = (int)(py + 0.5f);
+        /* Keep sub-pixel float positions for smooth AA motion */
+        proj_x[i] = x3 * persp * scale + center_x;
+        proj_y[i] = y3 * persp * scale + center_y;
     }
 
     /* Clear framebuffer */
-    fb_clear();
+    int total = cur_w * cur_h * 3;
+    for (int i = 0; i < total; i++) FB[i] = 0;
 
     /* Draw each edge */
     for (int e = 0; e < 12; e++) {
@@ -256,10 +198,16 @@ void update(int tick_ms) {
 
         /* Color: use hue param, with slight variation per edge for visual interest */
         int edge_hue = (hue + e * 5) & 255;
-        int r, g, b;
-        hsv_to_rgb(edge_hue, 255, edge_bright, &r, &g, &b);
+        int rgb = m_hsv(edge_hue, 255, edge_bright);
 
-        draw_line(proj_x[v0], proj_y[v0], proj_x[v1], proj_y[v1], r, g, b);
+        /* Pick the shorter path around the cylinder for the horizontal delta */
+        float x0 = proj_x[v0];
+        float x1 = proj_x[v1];
+        float dx = x1 - x0;
+        if (dx > cur_w / 2) x1 -= (float)cur_w;
+        else if (dx < -cur_w / 2) x1 += (float)cur_w;
+
+        draw_wrapped_line(x0, proj_y[v0], x1, proj_y[v1], rgb);
     }
 
     /* Draw vertex dots (slightly brighter) for definition */
@@ -270,17 +218,8 @@ void update(int tick_ms) {
         if (dot_bright > 255) dot_bright = 255;
 
         /* Vertices are white-ish (low saturation) */
-        int r, g, b;
-        hsv_to_rgb(hue, 120, dot_bright, &r, &g, &b);
-        fb_plot(proj_x[i], proj_y[i], r, g, b);
-    }
-
-    /* Render framebuffer to display */
-    for (int x = 0; x < cur_w; x++) {
-        for (int y = 0; y < cur_h; y++) {
-            int idx = x * cur_h + y;
-            set_pixel(x, y, fb_r[idx], fb_g[idx], fb_b[idx]);
-        }
+        int rgb = m_hsv(hue, 120, dot_bright);
+        draw_wrapped_point(proj_x[i], proj_y[i], rgb);
     }
 
     draw();

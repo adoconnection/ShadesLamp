@@ -401,21 +401,30 @@ Add your program entry to `programs/index.json` in alphabetical order:
 {"slug": "your_program", "meta": "programs/your_program/meta.json", "wasm": "programs/your_program/main.wasm"}
 ```
 
-## Step 5: Test in the simulator
+## Step 5: Register in the simulator
 
-`simulator.html` (repo root) is a 3D lamp emulator that runs your `.wasm`
-exactly like the firmware does (same host functions, switchable lamp sizes).
-Serve the repo over HTTP and open it:
+**Every new program MUST be added to the simulator's built-in list.** Add its
+slug to the `PRESETS` array near the bottom of `simulator.html` (repo root) — the
+dropdown is built from this array, so a program that isn't listed there can only
+be loaded by hand. Add it in the same place you'd add it to `index.json`; treat
+this as part of "creating the program", not an optional extra:
+
+```js
+const PRESETS = [..., "your_program"];   // in simulator.html
+```
+
+`simulator.html` is a 3D lamp emulator that runs your `.wasm` exactly like the
+firmware does (same host functions, switchable lamp sizes). Serve the repo over
+HTTP and open it:
 
 ```bash
 python -m http.server 8777
 # then open http://localhost:8777/simulator.html
 ```
 
-- **Drag-and-drop** your `main.wasm` onto the page, or click *"Открыть .wasm"* —
-  works for any file with no extra setup.
-- To get your program into the built-in dropdown, add its slug to the `PRESETS`
-  array near the bottom of `simulator.html`.
+- Pick your program from the dropdown (now that it's in `PRESETS`), or
+  **drag-and-drop** `main.wasm` onto the page / click *"Открыть .wasm"* for a
+  quick one-off load without editing the list.
 - Use the lamp-size buttons (16×16 … 32×48) to confirm the effect holds up at
   every aspect ratio — `get_width()`/`get_height()` change live each frame.
 
@@ -427,7 +436,7 @@ variation to confirm it actually animates.
 ## Step 6: Commit and Push
 
 ```bash
-git add programs/your_program/main.c programs/your_program/main.wasm programs/your_program/meta.json programs/index.json
+git add programs/your_program/main.c programs/your_program/main.wasm programs/your_program/meta.json programs/index.json simulator.html
 git commit -m "Add YourProgram effect"
 git push
 ```

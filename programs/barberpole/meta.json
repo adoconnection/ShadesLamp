@@ -1,0 +1,36 @@
+{
+  "guid": "9a3e1c75-2d8f-4b60-8c14-5f7a9e2d0b38",
+  "version": "1.0.2",
+  "name": "Barberpole Spiral",
+  "desc": "Helical ribbons of light spiralling up around the column",
+  "author": "Shades",
+  "category": "Streams",
+  "cover": {
+    "from": "#FF0066",
+    "to": "#00FFC8",
+    "via": "#FFE000",
+    "angle": 60
+  },
+  "pulse": "#00FFC8",
+  "tags": [
+    "psy",
+    "spiral",
+    "helix",
+    "barberpole",
+    "totem"
+  ],
+  "i18n": {
+    "ru": {
+      "name": "Спираль-столб",
+      "desc": "Спиральные ленты света, обвивающие колонну и уходящие вверх",
+      "params": {
+        "0": { "name": "Скорость", "desc": "Скорость подъёма" },
+        "1": { "name": "Яркость", "desc": "Общая яркость" },
+        "2": { "name": "Палитра", "desc": "Цветовой пресет" },
+        "3": { "name": "Рукава", "desc": "Число заходов спирали" },
+        "4": { "name": "Шаг", "desc": "Плотность по вертикали" },
+        "5": { "name": "Направление", "desc": "Направление движения: вверх или вниз", "options": ["Вверх", "Вниз"] }
+      }
+    }
+  }
+}

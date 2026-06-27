@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-06-27T12:45:00Z",
+  "updated": "2026-06-27T20:10:00Z",
   "featured": [
     "flame_particle",
     "spirals",
@@ -11,9 +11,19 @@
   ],
   "programs": [
     {
+      "slug": "ascension",
+      "meta": "programs/ascension/meta.json",
+      "wasm": "programs/ascension/main.wasm"
+    },
+    {
       "slug": "aurora",
       "meta": "programs/aurora/meta.json",
       "wasm": "programs/aurora/main.wasm"
+    },
+    {
+      "slug": "barberpole",
+      "meta": "programs/barberpole/meta.json",
+      "wasm": "programs/barberpole/main.wasm"
     },
     {
       "slug": "bouncing_balls",
@@ -116,6 +126,11 @@
       "wasm": "programs/fountains/main.wasm"
     },
     {
+      "slug": "glitch",
+      "meta": "programs/glitch/meta.json",
+      "wasm": "programs/glitch/main.wasm"
+    },
+    {
       "slug": "grass",
       "meta": "programs/grass/meta.json",
       "wasm": "programs/grass/main.wasm"
@@ -141,6 +156,11 @@
       "wasm": "programs/horizon/main.wasm"
     },
     {
+      "slug": "hyper_net",
+      "meta": "programs/hyper_net/meta.json",
+      "wasm": "programs/hyper_net/main.wasm"
+    },
+    {
       "slug": "jellyfish",
       "meta": "programs/jellyfish/meta.json",
       "wasm": "programs/jellyfish/main.wasm"
@@ -149,6 +169,11 @@
       "slug": "kaleidoscope",
       "meta": "programs/kaleidoscope/meta.json",
       "wasm": "programs/kaleidoscope/main.wasm"
+    },
+    {
+      "slug": "laser_sky",
+      "meta": "programs/laser_sky/meta.json",
+      "wasm": "programs/laser_sky/main.wasm"
     },
     {
       "slug": "lava",
@@ -164,6 +189,11 @@
       "slug": "lightning",
       "meta": "programs/lightning/meta.json",
       "wasm": "programs/lightning/main.wasm"
+    },
+    {
+      "slug": "mandala",
+      "meta": "programs/mandala/meta.json",
+      "wasm": "programs/mandala/main.wasm"
     },
     {
       "slug": "matrix_rain",
@@ -261,6 +291,11 @@
       "wasm": "programs/starfall/main.wasm"
     },
     {
+      "slug": "tentacles",
+      "meta": "programs/tentacles/meta.json",
+      "wasm": "programs/tentacles/main.wasm"
+    },
+    {
       "slug": "trading",
       "meta": "programs/trading/meta.json",
       "wasm": "programs/trading/main.wasm"
@@ -269,6 +304,11 @@
       "slug": "tricolor",
       "meta": "programs/tricolor/meta.json",
       "wasm": "programs/tricolor/main.wasm"
+    },
+    {
+      "slug": "tunnel",
+      "meta": "programs/tunnel/meta.json",
+      "wasm": "programs/tunnel/main.wasm"
     },
     {
       "slug": "tv",

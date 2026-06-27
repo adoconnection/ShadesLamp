@@ -564,13 +564,16 @@ function renderLamp(){
   // painter: дальние первыми
   sp.sort((p,q)=>p.z-q.z);
 
-  // 1) физические корпуса LED (тёмные точки)
+  // 1) физические корпуса LED (тёмные точки) — видны ТОЛЬКО при подсветке
+  // корпусов > 0. Яркость корпуса целиком завязана на ambient, поэтому при
+  // ambient=0 структура лампы не рисуется вовсе (на экране только свечение LED).
   ctx.globalCompositeOperation = "source-over";
-  for (const p of sp){
+  if (ambient > 0) for (const p of sp){
     const rad = 0.30*p.scale;
     ctx.beginPath();
-    // тёмный корпус SMD; подсветка корпусов делает структуру лампы видимой даже у погашенных LED
-    const bodyA = Math.min(0.9, (0.18 + ambient)*p.vis + 0.05);
+    // Коэффициенты подобраны так, что при дефолтном ambient=0.12 вид совпадает
+    // с прежним (≈0.30*vis+0.05), а при ambient→0 прозрачность уходит в ноль.
+    const bodyA = Math.min(0.9, ambient * (2.5*p.vis + 0.42));
     const bodyC = Math.round(26 + ambient*120);
     ctx.fillStyle = "rgba("+bodyC+","+(bodyC+2)+","+(bodyC+10)+","+bodyA+")";
     ctx.arc(p.sx,p.sy,Math.max(0.6,rad),0,6.2832);
@@ -781,7 +784,8 @@ const PRESETS = ["rainbow","plasma","aurora","ocean","lava","lava_lamp","flame",
  "metaballs","bouncing_balls","popcorn","pulse","sinusoid","spirals","twinkling","waves",
  "warp","vortex","kaleidoscope","jellyfish","helix","hexagons","horizon","dna","moire","morphing",
  "cube","electrons","core","breathing","police","forest","whirl","fountains","tricolor",
- "flowers","grass","starfall","earth","rgb_cycle","random_blink","solid_color","matrix_test","tv","meteor_shower","trading","constellation"];
+ "flowers","grass","starfall","earth","rgb_cycle","random_blink","solid_color","matrix_test","tv","meteor_shower","trading","constellation",
+ "tunnel","barberpole","ascension","mandala","laser_sky","tentacles","hyper_net","glitch"];
 
 (function initPresets(){
   const sel=document.getElementById("presetSel");
