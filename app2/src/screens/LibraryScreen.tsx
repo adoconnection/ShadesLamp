@@ -39,6 +39,9 @@ export default function LibraryScreen({ navigation }: Props) {
   const syncProgress = useBleStore((s) => s.syncProgress);
   const playlistsLoading = useBleStore((s) => s.playlistsLoading);
   const syncing = syncProgress !== null || playlistsLoading;
+  // No live link → the lamp owns its state, so the UI is view-only: you can
+  // browse but not change the running program, parameters or power.
+  const connected = connectionState === 'connected';
   const [category, setCategory] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -93,28 +96,28 @@ export default function LibraryScreen({ navigation }: Props) {
   }, [playlists]);
 
   const handleActivate = useCallback(async (id: number) => {
+    // Mutations require a live link — otherwise we'd change local state the lamp
+    // never sees and the sync would overwrite it anyway.
+    if (connectionState !== 'connected') return;
     // Directly picking a program stops any playing playlist (auto-rotation off).
     usePlaylistStore.getState().stop();
-    if (connectionState === 'connected') {
-      try {
-        await setActiveProgram(id);
-      } catch (err) {
-        console.warn('Failed to activate program via BLE:', err);
-      }
+    try {
+      await setActiveProgram(id);
+    } catch (err) {
+      console.warn('Failed to activate program via BLE:', err);
     }
     setActiveId(id);
   }, [connectionState, setActiveId]);
 
   const handlePowerToggle = useCallback(async () => {
+    if (connectionState !== 'connected') return;
     const newState = !powerOn;
     setPowerOn(newState);
-    if (connectionState === 'connected') {
-      try {
-        await setPower(newState);
-      } catch (err) {
-        console.warn('Failed to toggle power via BLE:', err);
-        setPowerOn(!newState); // revert on failure
-      }
+    try {
+      await setPower(newState);
+    } catch (err) {
+      console.warn('Failed to toggle power via BLE:', err);
+      setPowerOn(!newState); // revert on failure
     }
   }, [connectionState, powerOn, setPowerOn]);
 
@@ -124,6 +127,8 @@ export default function LibraryScreen({ navigation }: Props) {
   const heroAnimStyle = useAnimatedStyle(() => ({ transform: [{ translateX: heroDx.value }] }));
 
   const goRelative = useCallback((dir: number) => {
+    // Swiping the hero changes what's running — gate on a live link.
+    if (connectionState !== 'connected') return;
     // While a playlist is playing, swipe steps through its positions.
     if (playing) { advancePlaylist(dir); return; }
     if (programs.length === 0) return;
@@ -131,7 +136,7 @@ export default function LibraryScreen({ navigation }: Props) {
     const i = order.findIndex((p) => p.id === activeId);
     const ni = i < 0 ? 0 : (i + dir + order.length) % order.length;
     handleActivate(order[ni].id);
-  }, [playing, advancePlaylist, programs, activeId, handleActivate]);
+  }, [connectionState, playing, advancePlaylist, programs, activeId, handleActivate]);
 
   const heroSwipe = useMemo(() => Gesture.Pan()
     .activeOffsetX([-20, 20])
@@ -149,11 +154,13 @@ export default function LibraryScreen({ navigation }: Props) {
         program={p}
         active={p.id === activeId}
         isFavorite={favMatch(p)}
-        onTap={() => handleActivate(p.id)}
+        onTap={() => connected
+          ? handleActivate(p.id)
+          : navigation.navigate('ProgramDetail', { programId: p.id })}
         onOpen={() => navigation.navigate('ProgramDetail', { programId: p.id })}
       />
     </View>
-  ), [activeId, favMatch, handleActivate, navigation]);
+  ), [activeId, favMatch, handleActivate, navigation, connected]);
 
   const keyExtractor = useCallback((p: Program) => String(p.id), []);
 
@@ -168,7 +175,8 @@ export default function LibraryScreen({ navigation }: Props) {
         <View style={styles.headerRight}>
           <Pressable
             onPress={handlePowerToggle}
-            style={[styles.powerBtn, !powerOn && styles.powerBtnOff]}
+            disabled={!connected}
+            style={[styles.powerBtn, !powerOn && styles.powerBtnOff, !connected && styles.controlDisabled]}
             hitSlop={8}
           >
             <PowerIcon size={18} color={powerOn ? '#4ADE80' : 'rgba(250,250,247,0.4)'} />
@@ -470,6 +478,9 @@ const styles = StyleSheet.create({
   },
   powerBtnOff: {
     backgroundColor: 'rgba(250,250,247,0.06)',
+  },
+  controlDisabled: {
+    opacity: 0.4,
   },
   heroWrap: {
     paddingHorizontal: 20,

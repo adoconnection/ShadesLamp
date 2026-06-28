@@ -103,9 +103,9 @@ export default function PlaylistDetailScreen({ route, navigation }: Props) {
       </View>
 
       <Pressable
-        style={[styles.playBig, isPlaying && { backgroundColor: '#FCD34D' }]}
+        style={[styles.playBig, isPlaying && { backgroundColor: '#FCD34D' }, (pl.positions.length === 0 || disconnected) && styles.playBigDisabled]}
         onPress={() => (isPlaying ? stop() : play(pl.id))}
-        disabled={pl.positions.length === 0}
+        disabled={pl.positions.length === 0 || disconnected}
       >
         {isPlaying ? <PauseIcon size={18} color="#0A0A08" /> : <PlayIcon size={18} color="#0A0A08" />}
         <Text style={styles.playBigText}>{isPlaying ? t('stop') : t('play')}</Text>
@@ -225,6 +225,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FAFAF7', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
   playBigText: { fontSize: 15, fontWeight: '700', color: '#0A0A08' },
+  playBigDisabled: { opacity: 0.4 },
   sectionLabel: {
     fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1, color: 'rgba(250,250,247,0.45)',
     paddingHorizontal: 8, paddingTop: 18, paddingBottom: 10, textTransform: 'uppercase',

@@ -119,7 +119,8 @@ export default function FavoritesScreen({ navigation }: Props) {
                   </View>
                   <Pressable
                     hitSlop={10}
-                    style={[styles.playBtn, isPlaying && { backgroundColor: cd.pulse }]}
+                    disabled={!connected}
+                    style={[styles.playBtn, isPlaying && { backgroundColor: cd.pulse }, !connected && styles.playBtnDisabled]}
                     onPress={() => (isPlaying ? stop() : play(pl.id))}
                   >
                     {isPlaying ? <PauseIcon size={16} color="#0A0A08" /> : <PlayIcon size={16} color={colors.text} />}
@@ -163,6 +164,7 @@ const styles = StyleSheet.create({
   rowName: { fontSize: 16, fontWeight: '700', color: colors.text, letterSpacing: -0.3 },
   rowMeta: { fontFamily: fonts.mono, fontSize: 11, color: 'rgba(250,250,247,0.45)', marginTop: 2 },
   playBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
+  playBtnDisabled: { opacity: 0.4 },
   deleteAction: { width: 72, backgroundColor: '#DC2626', alignItems: 'center', justifyContent: 'center', marginVertical: 4, borderRadius: 12 },
   hint: { fontFamily: fonts.mono, fontSize: 11, color: 'rgba(250,250,247,0.35)', textAlign: 'center', marginTop: 14 },
 });

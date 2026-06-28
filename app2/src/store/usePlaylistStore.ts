@@ -157,29 +157,37 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
 
   // Playback is driven by the lamp. The store only sends a semantic command and
   // mirrors the resulting state locally for the UI; the lamp does the rotation.
+  // Playback only makes sense against a live lamp — without a connection we'd
+  // flip local "playing" state the lamp never sees (and that the next sync would
+  // contradict). So these are no-ops while disconnected; on reconnect load()
+  // re-reads the real playback state from the lamp.
   play: (id) => {
+    if (!connected()) return;
     const pl = get().playlists.find((p) => p.id === id);
     if (!pl || pl.positions.length === 0) { set({ playingId: id, currentIndex: null }); return; }
     set({ playingId: id, currentIndex: 0 });
-    if (connected()) plPlay(id, 0).catch(() => {});
+    plPlay(id, 0).catch(() => {});
   },
 
   playPosition: (id, index) => {
+    if (!connected()) return;
     const pl = get().playlists.find((p) => p.id === id);
     if (!pl || index < 0 || index >= pl.positions.length) return;
     set({ playingId: id, currentIndex: index });
-    if (connected()) plPlay(id, index).catch(() => {});
+    plPlay(id, index).catch(() => {});
   },
 
   stop: () => {
+    if (!connected()) return;
     if (get().playingId == null) return;
     set({ playingId: null });
-    if (connected()) plStop().catch(() => {});
+    plStop().catch(() => {});
   },
 
   // Manual swipe: jump to the neighbouring position and let the lamp keep
   // rotating from there (PL_PLAY resets the interval at the new index).
   advance: (dir) => {
+    if (!connected()) return;
     const { playingId, currentIndex, playlists } = get();
     if (playingId == null) return;
     const pl = playlists.find((p) => p.id === playingId);
