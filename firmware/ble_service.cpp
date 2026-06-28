@@ -328,8 +328,12 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
 
                 pm->setDeviceName(newName);
 
-                Serial.printf("%s Name saved. Will apply after reboot.\r\n", TAG);
+                Serial.printf("%s Name saved. Rebooting to apply.\r\n", TAG);
                 g_bleService->sendResponse("{\"ok\":true,\"reboot\":true}");
+                // The BLE device name is baked into the stack at begin(); the only
+                // reliable way to apply it is to reboot. Do it right after the
+                // response is actually transmitted (same path as CMD_REBOOT).
+                g_bleService->rebootAfterResponse();
                 break;
             }
 
