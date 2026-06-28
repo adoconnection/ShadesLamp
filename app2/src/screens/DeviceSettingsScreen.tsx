@@ -162,12 +162,14 @@ export default function DeviceSettingsScreen({ navigation }: Props) {
 
       <SectionLabel>{t('deviceSection')}</SectionLabel>
       <Card>
-        <SettingsRow label={t('restart')} onPress={handleRestart} />
-        <SettingsRow label={t('clearMemory')} onPress={handleClearMemory} danger />
+        {/* These act on the lamp, so they're disabled without a live link. */}
+        <SettingsRow label={t('restart')} onPress={handleRestart} disabled={!connected} />
+        <SettingsRow label={t('clearMemory')} onPress={handleClearMemory} danger disabled={!connected} />
         <SettingsRow
           label={t('power')}
           toggle
           defaultOn={powerOn}
+          disabled={!connected}
           onToggle={async (on: boolean) => {
             setPowerOn(on);
             if (connectionState === 'connected') {

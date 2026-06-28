@@ -488,6 +488,7 @@ const styles = StyleSheet.create({
   },
   disconnectedBanner: {
     marginHorizontal: 20,
+    marginTop: 12,
     marginBottom: 8,
     paddingVertical: 10,
     paddingHorizontal: 16,

@@ -15,6 +15,7 @@ interface SettingsRowProps {
   onToggle?: (value: boolean) => void;
   danger?: boolean;
   last?: boolean;
+  disabled?: boolean;
   onPress?: () => void;
 }
 
@@ -28,6 +29,7 @@ export default function SettingsRow({
   onToggle,
   danger,
   last,
+  disabled,
   onPress,
 }: SettingsRowProps) {
   const [on, setOn] = useState(!!defaultOn);
@@ -39,15 +41,16 @@ export default function SettingsRow({
 
   return (
     <Pressable
-      onPress={onPress || (toggle ? () => handleToggle(!on) : undefined)}
-      style={[styles.row, !last && styles.border]}
+      onPress={disabled ? undefined : (onPress || (toggle ? () => handleToggle(!on) : undefined))}
+      disabled={disabled}
+      style={[styles.row, !last && styles.border, disabled && styles.disabled]}
     >
       <Text style={[styles.label, danger && styles.danger]}>{label}</Text>
       {detail && (
         <Text style={[styles.detail, mono && styles.mono]}>{detail}</Text>
       )}
       {chev && <ChevronIcon color="rgba(250,250,247,0.4)" />}
-      {toggle && <Toggle value={on} onChange={handleToggle} color={colors.text} />}
+      {toggle && <Toggle value={on} onChange={handleToggle} color={colors.text} disabled={disabled} />}
     </Pressable>
   );
 }
@@ -63,6 +66,9 @@ const styles = StyleSheet.create({
   border: {
     borderBottomWidth: 0.5,
     borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  disabled: {
+    opacity: 0.4,
   },
   label: {
     flex: 1,
