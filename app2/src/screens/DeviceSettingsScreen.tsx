@@ -200,6 +200,7 @@ export default function DeviceSettingsScreen({ navigation }: Props) {
               returnKeyType="done"
               onSubmitEditing={saveName}
             />
+            <Text style={renameStyles.note}>{t('renameRebootNote')}</Text>
             <Pressable style={renameStyles.save} onPress={saveName}>
               <Text style={renameStyles.saveText}>{t('save')}</Text>
             </Pressable>
@@ -240,6 +241,7 @@ const renameStyles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
     fontSize: 16, color: colors.text,
   },
+  note: { marginTop: 12, fontSize: 12, lineHeight: 17, color: 'rgba(250,250,247,0.5)' },
   save: { marginTop: 14, paddingVertical: 13, borderRadius: 14, backgroundColor: colors.accent, alignItems: 'center' },
   saveText: { fontSize: 14, fontWeight: '700', color: colors.accentDark },
 });

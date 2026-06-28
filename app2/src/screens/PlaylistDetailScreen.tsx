@@ -8,6 +8,7 @@ import { RootStackParamList } from '../types/navigation';
 import { PlaylistPosition, RotationMode } from '../types/playlist';
 import { useProgramStore } from '../store/useProgramStore';
 import { usePlaylistStore } from '../store/usePlaylistStore';
+import { useBleStore } from '../store/useBleStore';
 import { findProgramForPosition } from '../ble/playlists';
 import Cover from '../components/Cover';
 import NavButton from '../components/NavButton';
@@ -36,6 +37,7 @@ export default function PlaylistDetailScreen({ route, navigation }: Props) {
   const playingId = usePlaylistStore((s) => s.playingId);
   const currentIndex = usePlaylistStore((s) => s.currentIndex);
   const { reorder, removePosition, setRotation, play, playPosition, stop, renamePlaylist } = usePlaylistStore();
+  const disconnected = useBleStore((s) => s.connectionState !== 'connected');
   const [renameOpen, setRenameOpen] = useState(false);
   const [nameInput, setNameInput] = useState('');
 
@@ -146,6 +148,11 @@ export default function PlaylistDetailScreen({ route, navigation }: Props) {
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <NavButton icon={<BackIcon />} onPress={() => navigation.goBack()} />
       </View>
+      {disconnected && (
+        <View style={styles.disconnectedBanner}>
+          <Text style={styles.disconnectedText}>{t('lampDisconnected')}</Text>
+        </View>
+      )}
       <DraggableFlatList
         data={data}
         keyExtractor={(p, i) => p.uid ?? String(i)}
@@ -203,6 +210,13 @@ const renameStyles = StyleSheet.create({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: { paddingHorizontal: 20, paddingBottom: 4 },
+  disconnectedBanner: {
+    marginHorizontal: 20, marginBottom: 8, marginTop: 4,
+    paddingVertical: 10, paddingHorizontal: 16,
+    backgroundColor: 'rgba(248,113,113,0.08)', borderColor: 'rgba(248,113,113,0.2)',
+    borderWidth: 0.5, borderRadius: 12, alignItems: 'center',
+  },
+  disconnectedText: { fontFamily: fonts.mono, fontSize: 12, color: '#F87171' },
   titleArea: { paddingHorizontal: 8, paddingTop: 8, paddingBottom: 12 },
   title: { fontSize: 28, fontWeight: '800', color: colors.text, letterSpacing: -0.6 },
   subtitle: { fontFamily: fonts.mono, fontSize: 12, color: 'rgba(250,250,247,0.5)', marginTop: 4 },

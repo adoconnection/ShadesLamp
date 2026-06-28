@@ -33,7 +33,7 @@ export async function connectAndLoadDevice(
   deviceId: string,
   onDisconnected?: () => void,
 ): Promise<Device> {
-  const { setConnectionState, setDeviceId, setDeviceMac, setDeviceInfo, setPowerOn } = useBleStore.getState();
+  const { setConnectionState, setDeviceId, setDeviceMac, setDeviceInfo, setPowerOn, setSyncProgress, setPlaylistsLoading } = useBleStore.getState();
   const { setPrograms, setActiveId } = useProgramStore.getState();
 
   setConnectionState('connecting');
@@ -44,6 +44,9 @@ export async function connectAndLoadDevice(
 
   setOnDisconnected(() => {
     setConnectionState('disconnected');
+    // A connection that drops mid-sync must not leave the spinners stuck.
+    setSyncProgress(null);
+    setPlaylistsLoading(false);
     setOnActiveChanged(null);
     setOnEvent(null);
     onDisconnected?.();
@@ -126,16 +129,21 @@ export async function connectAndLoadDevice(
     getPower().catch(() => true),
   ]);
 
-  const programs = await resolveProgramsMeta(programList as ProgramListItem[]);
+  // Build the program list from cached metadata first (instant) and surface the
+  // UI right away. Programs whose meta isn't cached get a placeholder now and
+  // are filled in progressively in the background — so the first connection
+  // feels immediate instead of blocking on N serial GET_META round-trips while
+  // the lamp's render loop is frozen handling them.
+  const { base, missing } = await buildBasePrograms(programList as ProgramListItem[]);
 
-  setPrograms(programs);
+  setPrograms(base);
   setActiveId(activeId);
   setPowerOn(powerOn);
 
-  // Replace marketplace installed state from device programs (atomic — drops
-  // slugs of programs that are no longer on the device, e.g. removed via CLI)
-  const slugs = programs.map((p) => p.slug).filter(Boolean) as string[];
-  useMarketStore.getState().setInstalledSlugs(slugs);
+  // Seed marketplace installed state from what we know now; refined once the
+  // background meta load completes (some slugs only arrive with the meta).
+  const baseSlugs = base.map((p) => p.slug).filter(Boolean) as string[];
+  useMarketStore.getState().setInstalledSlugs(baseSlugs);
 
   const storageUsedKB = Math.round(storageInfo.used / 1024);
   const storageTotalKB = Math.round(storageInfo.total / 1024);
@@ -150,17 +158,119 @@ export async function connectAndLoadDevice(
     temp: (hwConfig.ok && typeof hwConfig.temp === 'number') ? hwConfig.temp : undefined,
   });
 
+  // Connected as soon as the essentials are in — the UI is now usable while the
+  // rest streams in. Persist for auto-reconnect before returning.
   setConnectionState('connected');
-
-  // Load playlists stored on the lamp (best-effort; don't block connection).
-  import('../store/usePlaylistStore')
-    .then((m) => m.usePlaylistStore.getState().load())
-    .catch(() => {});
-
-  // Persist for auto-reconnect
   await saveLastDevice(deviceId);
 
+  // Resolve remaining metadata + load playlists in the background. Not awaited:
+  // the caller (and the user) shouldn't wait on it.
+  void loadRemainingData(missing);
+
   return device;
+}
+
+// Fetch the metadata still missing after the cached-first build, updating the
+// store (and the meta cache) one program at a time, and load the lamp's
+// playlists. Drives the sync spinners and yields between BLE reads so the lamp
+// gets render time instead of stalling under a tight request burst.
+async function loadRemainingData(missing: ProgramListItem[]): Promise<void> {
+  const { setSyncProgress, setPlaylistsLoading } = useBleStore.getState();
+  const store = useProgramStore.getState();
+
+  if (missing.length > 0) {
+    setSyncProgress({ done: 0, total: missing.length });
+    let done = 0;
+    for (const p of missing) {
+      // Bail out if the connection dropped mid-sync.
+      if (useBleStore.getState().connectionState !== 'connected') {
+        setSyncProgress(null);
+        return;
+      }
+      try {
+        const raw = await getMeta(p.id);
+        if (raw && raw.name) {
+          const meta: CachedMeta = {
+            name: raw.name,
+            desc: raw.desc || '',
+            author: raw.author || 'built-in',
+            category: raw.category || 'Effects',
+            cover: raw.cover || defaultMeta.cover,
+            coverSvg: raw.coverSvg,
+            pulse: raw.pulse || '#888888',
+            tags: raw.tags,
+            slug: raw.slug,
+            i18n: raw.i18n,
+          };
+          store.addProgram(toProgram(p, meta));
+          if (p.guid && p.version) await setCachedMeta(p.guid, p.version, meta);
+        }
+      } catch {
+        // Leave the placeholder in place.
+      }
+      done++;
+      setSyncProgress({ done, total: missing.length });
+      // Give the lamp's render task a slice between meta reads.
+      await new Promise((r) => setTimeout(r, 30));
+    }
+    setSyncProgress(null);
+  }
+
+  // Refresh installed slugs from the now-complete program list.
+  const slugs = useProgramStore.getState().programs.map((p) => p.slug).filter(Boolean) as string[];
+  useMarketStore.getState().setInstalledSlugs(slugs);
+
+  // Load playlists stored on the lamp (best-effort).
+  if (useBleStore.getState().connectionState === 'connected') {
+    setPlaylistsLoading(true);
+    try {
+      await usePlaylistStore.getState().load();
+    } catch {
+      // ignore
+    } finally {
+      setPlaylistsLoading(false);
+    }
+  }
+}
+
+// Build a Program from a list entry + resolved (or cached) metadata.
+function toProgram(p: ProgramListItem, meta: CachedMeta): Program {
+  return {
+    id: p.id, guid: p.guid, name: meta.name, desc: meta.desc, author: meta.author,
+    size: '', version: p.version, cover: meta.cover, coverSvg: meta.coverSvg,
+    pulse: meta.pulse, category: meta.category, params: [], slug: meta.slug,
+    i18n: meta.i18n,
+  };
+}
+
+// Split the program list into ready-to-show entries (cached meta) and entries
+// whose meta still needs fetching. Cached entries are built immediately; the
+// rest get a placeholder Program so the row shows right away.
+async function buildBasePrograms(
+  items: ProgramListItem[],
+): Promise<{ base: Program[]; missing: ProgramListItem[] }> {
+  const base: Program[] = [];
+  const missing: ProgramListItem[] = [];
+
+  for (const p of items) {
+    let cached: CachedMeta | null = null;
+    if (p.guid && p.version) {
+      cached = await getCachedMeta(p.guid, p.version);
+    }
+    if (cached) {
+      base.push(toProgram(p, cached));
+    } else {
+      base.push({
+        id: p.id, guid: p.guid, name: p.name || `Program ${p.id}`,
+        desc: '', author: defaultMeta.author, size: '', version: p.version,
+        cover: defaultMeta.cover, pulse: defaultMeta.pulse, category: defaultMeta.category,
+        params: [],
+      });
+      missing.push(p);
+    }
+  }
+
+  return { base, missing };
 }
 
 const defaultMeta: CachedMeta = {

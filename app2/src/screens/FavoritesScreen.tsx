@@ -13,6 +13,7 @@ import { findProgramForPosition } from '../ble/playlists';
 import { gradientColors } from '../utils/color';
 import Cover from '../components/Cover';
 import NavButton from '../components/NavButton';
+import Spinner from '../components/Spinner';
 import { BackIcon, StarFillIcon, TrashIcon, ChevronIcon, PlusIcon, PlayIcon, PauseIcon } from '../components/Icon';
 import { t } from '../i18n';
 import { fonts } from '../theme/typography';
@@ -27,6 +28,12 @@ export default function FavoritesScreen({ navigation }: Props) {
   const playingId = usePlaylistStore((s) => s.playingId);
   const { load, createPlaylist, deletePlaylist, play, stop } = usePlaylistStore();
   const connected = useBleStore((s) => s.connectionState === 'connected');
+  const connecting = useBleStore((s) => s.connectionState === 'connecting');
+  const playlistsLoading = useBleStore((s) => s.playlistsLoading);
+  const loaded = usePlaylistStore((s) => s.loaded);
+  // Show a spinner while we have no playlists yet but a load is in flight
+  // (mid-connect, syncing, or this screen's own load() before it resolves).
+  const showLoading = playlists.length === 0 && (playlistsLoading || connecting || (connected && !loaded));
 
   useEffect(() => { load(); }, [load]);
 
@@ -80,7 +87,12 @@ export default function FavoritesScreen({ navigation }: Props) {
         <Text style={styles.createText}>{t('newPlaylist')}</Text>
       </Pressable>
 
-      {playlists.length === 0 ? (
+      {showLoading ? (
+        <View style={styles.loadingBox}>
+          <Spinner size={20} color={colors.accent} />
+          <Text style={styles.loadingText}>{t('loadingPlaylists')}</Text>
+        </View>
+      ) : playlists.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>{t('emptyPlaylistsTitle')}</Text>
           <Text style={styles.emptyDesc}>{connected ? t('emptyPlaylistsDesc') : t('connectToManage')}</Text>
@@ -140,6 +152,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.06)', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
   },
   createText: { fontSize: 14, fontWeight: '700', color: colors.text },
+  loadingBox: { paddingHorizontal: 24, paddingTop: 24, alignItems: 'center', gap: 12 },
+  loadingText: { fontFamily: fonts.mono, fontSize: 12, color: 'rgba(250,250,247,0.5)' },
   empty: { paddingHorizontal: 24, paddingTop: 10, alignItems: 'center' },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 6 },
   emptyDesc: { fontSize: 13, color: 'rgba(250,250,247,0.5)', lineHeight: 19, textAlign: 'center' },

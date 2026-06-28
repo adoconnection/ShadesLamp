@@ -20,6 +20,7 @@ import { useBleStore } from '../store/useBleStore';
 import { setActiveProgram, setPower } from '../ble/commands';
 import { refreshPrograms } from '../ble/connectFlow';
 import BleStatusPill from '../components/BleStatusPill';
+import Spinner from '../components/Spinner';
 import ProgramRow from '../components/ProgramRow';
 import ActionTile from '../components/ActionTile';
 import { MarketIcon, StarOutlineIcon, SettingsIcon, PowerIcon } from '../components/Icon';
@@ -35,6 +36,9 @@ export default function LibraryScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { programs, activeId, setActiveId } = useProgramStore();
   const { connectionState, deviceInfo, powerOn, setPowerOn } = useBleStore();
+  const syncProgress = useBleStore((s) => s.syncProgress);
+  const playlistsLoading = useBleStore((s) => s.playlistsLoading);
+  const syncing = syncProgress !== null || playlistsLoading;
   const [category, setCategory] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
 
@@ -172,10 +176,23 @@ export default function LibraryScreen({ navigation }: Props) {
           <BleStatusPill
             state={connectionState}
             name={deviceInfo.name}
+            syncing={syncing}
             onPress={() => navigation.navigate('BleConnect')}
           />
         </View>
       </View>
+
+      {/* Sync progress banner — visible only while the lamp's data is loading */}
+      {syncing && (
+        <View style={styles.syncBanner}>
+          <Spinner size={13} thickness={1.5} color={colors.green} />
+          <Text style={styles.syncText}>
+            {syncProgress
+              ? t('syncingPrograms', { done: syncProgress.done, total: syncProgress.total })
+              : t('loadingPlaylists')}
+          </Text>
+        </View>
+      )}
 
       {/* Now Playing Hero */}
       {activeProgram && (
@@ -424,6 +441,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+  },
+  syncBanner: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: 'rgba(52,211,153,0.08)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(52,211,153,0.2)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  syncText: {
+    fontFamily: fonts.mono,
+    fontSize: 12,
+    color: colors.green,
   },
   powerBtn: {
     width: 36,

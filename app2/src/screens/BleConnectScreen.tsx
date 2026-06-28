@@ -16,6 +16,7 @@ import { useBleStore } from '../store/useBleStore';
 import { scanDevices } from '../ble/manager';
 import { connectAndLoadDevice } from '../ble/connectFlow';
 import NavButton from '../components/NavButton';
+import Spinner from '../components/Spinner';
 import { BackIcon, RefreshIcon, BluetoothIcon, SignalIcon } from '../components/Icon';
 import { t } from '../i18n';
 import { fonts } from '../theme/typography';
@@ -109,11 +110,15 @@ export default function BleConnectScreen({ navigation }: Props) {
       {/* BLE Animation */}
       <View style={styles.animArea}>
         <View style={styles.animCenter}>
-          {scanning && [0, 1, 2].map((i) => (
+          {scanning && !connectingId && [0, 1, 2].map((i) => (
             <ScanRing key={i} delay={i * 800} />
           ))}
           <View style={styles.bleCircle}>
-            <BluetoothIcon size={24} color="#60A5FA" />
+            {connectingId ? (
+              <Spinner size={30} thickness={2} color="#60A5FA" />
+            ) : (
+              <BluetoothIcon size={24} color="#60A5FA" />
+            )}
           </View>
         </View>
         <Text style={styles.scanStatus}>

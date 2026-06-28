@@ -119,6 +119,7 @@ export const ru: Record<StringKey, string> = {
   renameDevice: 'Имя устройства',
   renameFailed: 'Не удалось переименовать устройство.',
   renameTooLong: 'Слишком длинное имя. Сделайте короче (до 20 символов, для кириллицы — меньше).',
+  renameRebootNote: 'После сохранения лампа перезагрузится и переподключится автоматически.',
 
   // Favorites variants + rotation
   savedCount: 'сохранено: {n}',
@@ -161,4 +162,10 @@ export const ru: Record<StringKey, string> = {
   editPositionHint: 'Изменения сохраняются только для этой позиции плейлиста.',
   programMissing: 'Программы нет',
   programMissingDesc: 'Этой программы сейчас нет на лампе. При воспроизведении она будет пропущена. Установите её заново, чтобы восстановить позицию.',
+
+  // Connection / sync
+  statusSyncing: 'Синхронизация…',
+  syncingPrograms: 'Загрузка программ · {done}/{total}',
+  loadingPlaylists: 'Загрузка плейлистов…',
+  connectingToLamp: 'Подключение к лампе…',
 };

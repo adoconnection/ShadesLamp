@@ -118,6 +118,7 @@ export const en = {
   renameDevice: 'Device name',
   renameFailed: 'Couldn’t rename the device.',
   renameTooLong: 'Name is too long. Try a shorter one (up to 20 characters, fewer for non-Latin).',
+  renameRebootNote: 'After saving, the lamp will restart and reconnect automatically.',
 
   // Favorites variants + rotation
   savedCount: '{n} saved',
@@ -160,6 +161,12 @@ export const en = {
   editPositionHint: 'Changes are saved to this playlist position only.',
   programMissing: 'Program unavailable',
   programMissingDesc: 'This program is not on the lamp right now. It will be skipped during playback. Re-install it to restore this position.',
+
+  // Connection / sync
+  statusSyncing: 'Syncing…',
+  syncingPrograms: 'Loading programs · {done}/{total}',
+  loadingPlaylists: 'Loading playlists…',
+  connectingToLamp: 'Connecting to lamp…',
 } as const;
 
 export type StringKey = keyof typeof en;
