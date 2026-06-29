@@ -16,7 +16,7 @@ static const char META[] =
          "\"desc\":\"Overall brightness\"},"
         "{\"id\":3,\"name\":\"Mode\",\"type\":\"select\","
          "\"options\":[\"Drift\",\"Flight\"],\"default\":1,"
-         "\"desc\":\"Drift = smooth wander, Flight = curved darts with pauses\"}"
+         "\"desc\":\"Drift = straight glides in random directions, Flight = curved darts with pauses\"}"
     "]}";
 
 EXPORT(get_meta_ptr)
@@ -88,6 +88,16 @@ static void start_dart(int i) {
     fly_dspd[i] = 2.5f + (float)(rng_next() % 2000) / 1000.0f * 2.0f;    /* 2.5..4.5 */
     fly_mstate[i] = 0;
     fly_mtime[i] = random_range(6, 16);    /* short burst */
+}
+
+/* Begin a new straight drift leg: a brand-new heading picked uniformly over the
+ * full circle (up, down, sideways — anything) and a random travel distance. No
+ * velocity is carried over between legs, so paths stay straight and never curl
+ * into the circles a momentum-based random walk produces. */
+static void start_drift(int i) {
+    fly_head[i] = (float)(rng_next() % 6283) / 1000.0f;             /* 0..2pi, any direction */
+    fly_dspd[i] = 0.8f + (float)(rng_next() % 1000) / 1000.0f * 1.4f; /* 0.8..2.2 magnitude */
+    fly_mtime[i] = random_range(15, 70);   /* random leg length */
 }
 
 EXPORT(init)
@@ -204,16 +214,12 @@ void update(int tick_ms) {
                 if (fly_mtime[i] <= 0) start_dart(i);
             }
         } else {
-            /* Drift: periodically nudge velocity (every ~20 frames). */
-            if ((step_counter % 20) == (i % 20)) {
-                fly_vx[i] += (float)random_range(-3, 4) / 10.0f;
-                fly_vy[i] += (float)random_range(-3, 4) / 10.0f;
-                /* Clamp velocity */
-                if (fly_vx[i] > 2.0f) fly_vx[i] = 2.0f;
-                if (fly_vx[i] < -2.0f) fly_vx[i] = -2.0f;
-                if (fly_vy[i] > 2.0f) fly_vy[i] = 2.0f;
-                if (fly_vy[i] < -2.0f) fly_vy[i] = -2.0f;
-            }
+            /* Drift: glide in a straight line in a fully random direction for a
+             * random distance, then pick an entirely new direction. */
+            fly_mtime[i]--;
+            if (fly_mtime[i] <= 0) start_drift(i);
+            fly_vx[i] = m_cos(fly_head[i]) * fly_dspd[i];
+            fly_vy[i] = m_sin(fly_head[i]) * fly_dspd[i];
         }
 
         /* Move */
@@ -233,9 +239,10 @@ void update(int tick_ms) {
             fly_y[i] = (float)(H - 1) * 2.0f - fly_y[i];
             fly_vy[i] = -f_abs(fly_vy[i]);
         }
-        /* In flight mode keep the heading in sync with the bounced velocity so
-         * the dart continues in the reflected direction instead of into the wall. */
-        if (mode == 1 && fly_mstate[i] == 0)
+        /* Keep the heading in sync with the bounced velocity so a dart (flight)
+         * or drift leg continues in the reflected direction instead of driving
+         * straight back into the wall. */
+        if ((mode == 1 && fly_mstate[i] == 0) || mode == 0)
             fly_head[i] = m_atan2(fly_vy[i], fly_vx[i]);
 
         /* Phase/lifecycle management */
