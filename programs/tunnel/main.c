@@ -13,7 +13,7 @@ static const char META[] =
     "{\"name\":\"Hyperspace Tunnel\","
     "\"desc\":\"Infinite twisting tunnel of light rings rushing upward\","
     "\"params\":["
-        "{\"id\":0,\"name\":\"Speed\",\"type\":\"int\",\"min\":1,\"max\":100,\"default\":50,\"desc\":\"Rush speed\"},"
+        "{\"id\":0,\"name\":\"Speed\",\"type\":\"int\",\"min\":1,\"max\":20,\"default\":12,\"desc\":\"Rush speed\"},"
         "{\"id\":1,\"name\":\"Brightness\",\"type\":\"int\",\"min\":1,\"max\":255,\"default\":220,\"desc\":\"Overall brightness\"},"
         "{\"id\":2,\"name\":\"Palette\",\"type\":\"select\",\"options\":[\"UV Neon\",\"Rainbow\",\"Fire\",\"Ice\"],\"default\":0,\"desc\":\"Color preset\"},"
         "{\"id\":3,\"name\":\"Twist\",\"type\":\"int\",\"min\":0,\"max\":8,\"default\":3,\"desc\":\"Spiral arms / twist\"}"
@@ -71,7 +71,7 @@ EXPORT(init) void init(void){ init_sin(); dims(); }
 EXPORT(update) void update(int tick_ms){
     int speed=get_param_i32(0), bright=get_param_i32(1), pal=get_param_i32(2), twist=get_param_i32(3);
     dims();
-    if(speed<1)speed=1; if(speed>100)speed=100;
+    if(speed<1)speed=1; if(speed>20)speed=20;
     if(bright<1)bright=1; if(bright>255)bright=255;
     if(twist<0)twist=0; if(twist>8)twist=8;
     build_pal(pal);

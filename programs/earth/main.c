@@ -269,8 +269,13 @@ void update(int tick_ms) {
             } else {
                 plr = lr; plg = lg; plb = lb;
                 if (night && wL > 0) {
-                    /* city lights: precomputed per-cell brightness (incl. twinkle) */
-                    int f = night_lvl[sx_lo][sy];
+                    /* city lights: precomputed per-cell brightness (incl. twinkle).
+                     * Interpolate across the sub-pixel scroll exactly like the
+                     * land/sea blend below, so the lit pattern drifts smoothly
+                     * instead of snapping cell-to-cell as the globe rotates. */
+                    int fLo = night_lvl[sx_lo][sy];
+                    int fHi = night_lvl[sx_hi][sy];
+                    int f = (fLo * (256 - frac_x) + fHi * frac_x) >> 8;
                     plr = (lr * f) / 255;
                     plg = (lg * f) / 255;
                     plb = (lb * f) / 255;

@@ -11,16 +11,16 @@ static const char META[] =
     "\"desc\":\"Fast electrons orbiting around a nucleus\","
     "\"params\":["
         "{\"id\":0,\"name\":\"Hue\",\"type\":\"int\","
-         "\"min\":0,\"max\":255,\"default\":25,"
-         "\"desc\":\"Base hue (0=red, 25=fire-orange)\"},"
+         "\"min\":0,\"max\":255,\"default\":0,"
+         "\"desc\":\"Base hue (0=palette rotation, 25=fire-orange)\"},"
         "{\"id\":1,\"name\":\"Electrons\",\"type\":\"int\","
-         "\"min\":1,\"max\":40,\"default\":20,"
+         "\"min\":1,\"max\":80,\"default\":40,"
          "\"desc\":\"Number of electrons\"},"
         "{\"id\":2,\"name\":\"Speed\",\"type\":\"int\","
-         "\"min\":1,\"max\":600,\"default\":150,"
+         "\"min\":1,\"max\":600,\"default\":231,"
          "\"desc\":\"Orbital speed\"},"
         "{\"id\":3,\"name\":\"Trail\",\"type\":\"int\","
-         "\"min\":1,\"max\":50,\"default\":20,"
+         "\"min\":1,\"max\":50,\"default\":30,"
          "\"desc\":\"Trail length (less=shorter)\"},"
         "{\"id\":4,\"name\":\"Brightness\",\"type\":\"int\","
          "\"min\":1,\"max\":255,\"default\":230,"
@@ -30,11 +30,14 @@ static const char META[] =
          "\"options\":[\"Off\",\"On\"],"
          "\"desc\":\"White electron head\"},"
         "{\"id\":6,\"name\":\"Spread\",\"type\":\"int\","
-         "\"min\":1,\"max\":100,\"default\":25,"
+         "\"min\":1,\"max\":100,\"default\":42,"
          "\"desc\":\"Vertical spread (% of height)\"},"
         "{\"id\":7,\"name\":\"Rotation\",\"type\":\"int\","
-         "\"min\":0,\"max\":200,\"default\":40,"
-         "\"desc\":\"Rotate equator-crossing points around the lamp\"}"
+         "\"min\":0,\"max\":200,\"default\":38,"
+         "\"desc\":\"Rotate equator-crossing points around the lamp\"},"
+        "{\"id\":8,\"name\":\"Tilt\",\"type\":\"int\","
+         "\"min\":0,\"max\":100,\"default\":71,"
+         "\"desc\":\"Orbit axis tilt; rocks between -tilt and +tilt (% of height)\"}"
     "]}";
 
 EXPORT(get_meta_ptr)
@@ -58,7 +61,7 @@ static void hsv2rgb(int hue, int sat, int val, int *r, int *g, int *b) {
 #define TWO_PI  6.28318530f
 
 /* ---- Particles ---- */
-#define MAX_P 40
+#define MAX_P 80
 
 static float p_angle[MAX_P];   /* orbital angle */
 static float p_incl[MAX_P];    /* vertical amplitude fraction: -1.0 to +1.0 */
@@ -69,6 +72,15 @@ static uint8_t p_hue[MAX_P];   /* hue offset */
  * equator-crossing points (nodes) around the cylinder instead of pinning
  * them to fixed columns (x=0 and x=width/2). */
 static float rot_phase = 0.0f;
+
+/* Phase of the orbit-axis tilt. The tilt magnitude is animated as a slow
+ * sine that sweeps the axis from -strength to +strength and back, so the
+ * whole ring of electrons rocks like a wobbling coin. */
+static float tilt_phase = 0.0f;
+
+/* Hue=0 is a special mode: instead of red, the base hue rotates through the
+ * whole spectrum over time (palette rotation). This phase drives it. */
+static float pal_phase = 0.0f;
 
 /* ---- Framebuffer ---- */
 #define MAX_W 64
@@ -102,6 +114,8 @@ void init(void) {
     }
     rng = 77317;
     rot_phase = 0.0f;
+    tilt_phase = 0.0f;
+    pal_phase = 0.0f;
 
     for (int i = 0; i < MAX_P; i++) {
         /* Spread starting angles evenly + jitter */
@@ -129,6 +143,7 @@ void update(int tick_ms) {
     int white_head = get_param_i32(5);
     int spread     = get_param_i32(6);
     int rotation   = get_param_i32(7);
+    int tilt       = get_param_i32(8);
 
     cur_w = get_width();
     cur_h = get_height();
@@ -144,6 +159,23 @@ void update(int tick_ms) {
     if (max_amp < 0.5f) max_amp = 0.5f;
 
     float base_speed = (float)speed * 0.0007f;
+
+    /* Tilt: same scaling idea as spread — strength is a % of the half-height.
+     * The actual tilt is animated, swinging -max_tilt .. +max_tilt over time. */
+    if (tilt < 0) tilt = 0; if (tilt > 100) tilt = 100;
+    float max_tilt = (equator - 1.0f) * (float)tilt / 100.0f;
+    tilt_phase += 0.02f;                       /* ~10 s full rock at 30 FPS */
+    while (tilt_phase >= TWO_PI) tilt_phase -= TWO_PI;
+    float cur_tilt = max_tilt * m_sin(tilt_phase);
+
+    /* Hue=0 -> palette rotation: sweep the base hue through the spectrum.
+     * Any other value pins the base hue as before. */
+    int eff_hue = base_hue;
+    if (base_hue == 0) {
+        pal_phase += 0.5f;                     /* ~17 s per full rainbow at 30 FPS */
+        while (pal_phase >= 256.0f) pal_phase -= 256.0f;
+        eff_hue = (int)pal_phase;
+    }
 
     /* Trail: trail=1 -> very short (fast fade), trail=50 -> very long (slow fade) */
     /* fade = 256 - (51-trail)*4: trail=1->56/256, trail=50->252/256 */
@@ -170,17 +202,30 @@ void update(int tick_ms) {
         float fx = p_angle[i] / TWO_PI * (float)cur_w;
         /* Y: oscillation around equator, amplitude = max_amp * incl fraction.
          * Subtracting rot_phase decouples the crossing nodes from x position,
-         * letting them rotate around the cylinder over time. */
-        float fy = equator + m_sin(p_angle[i] - rot_phase) * max_amp * p_incl[i];
-
-        if (fy < 0.0f) fy = 0.0f;
-        if (fy >= (float)cur_h - 0.01f) fy = (float)cur_h - 0.01f;
+         * letting them rotate around the cylinder over time.
+         * The tilt slants the whole ring (one side rides high, the opposite
+         * side low) — a tilted orbital plane that rocks in time. It shares the
+         * same `- rot_phase` reference as the spread oscillation, so Rotation
+         * moves the zero-crossing nodes of the tilt too, not just the spread. */
+        float fy = equator
+                 + (cur_tilt + max_amp * p_incl[i]) * m_sin(p_angle[i] - rot_phase);
 
         int px = (int)(fx + 0.5f);
+
+        /* With strong tilt an electron can swing off the top or bottom of the
+         * field. Don't clamp it to the edge (that smears a bright dot along the
+         * rim) — just skip drawing it this frame; it reappears as it orbits
+         * back into range. */
+        if (fy < 0.0f || fy >= (float)cur_h) {
+            head_x[i] = px;
+            head_y[i] = -1;          /* sentinel: white-head pass skips it */
+            continue;
+        }
+
         int py = (int)(fy + 0.5f);
         if (py >= cur_h) py = cur_h - 1;
 
-        uint8_t hue = (uint8_t)(base_hue + p_hue[i]);
+        uint8_t hue = (uint8_t)(eff_hue + p_hue[i]);
         plot(px, py, 255, hue);
 
         /* Remember head position for white overlay */

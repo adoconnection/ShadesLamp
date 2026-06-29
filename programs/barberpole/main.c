@@ -12,7 +12,7 @@ static const char META[] =
     "{\"name\":\"Barberpole Spiral\","
     "\"desc\":\"Helical ribbons of light spiralling up around the column\","
     "\"params\":["
-        "{\"id\":0,\"name\":\"Speed\",\"type\":\"int\",\"min\":1,\"max\":100,\"default\":45,\"desc\":\"Climb speed\"},"
+        "{\"id\":0,\"name\":\"Speed\",\"type\":\"int\",\"min\":1,\"max\":50,\"default\":10,\"desc\":\"Climb speed\"},"
         "{\"id\":1,\"name\":\"Brightness\",\"type\":\"int\",\"min\":1,\"max\":255,\"default\":220,\"desc\":\"Overall brightness\"},"
         "{\"id\":2,\"name\":\"Palette\",\"type\":\"select\",\"options\":[\"UV Neon\",\"Rainbow\",\"Fire\",\"Ice\"],\"default\":1,\"desc\":\"Color preset\"},"
         "{\"id\":3,\"name\":\"Arms\",\"type\":\"int\",\"min\":1,\"max\":6,\"default\":2,\"desc\":\"Number of helix starts\"},"
@@ -71,15 +71,25 @@ EXPORT(update) void update(int tick_ms){
     int speed=get_param_i32(0), bright=get_param_i32(1), pal=get_param_i32(2);
     int arms=get_param_i32(3), pitch=get_param_i32(4), dir=get_param_i32(5);
     dims();
-    if(speed<1)speed=1; if(speed>100)speed=100;
+    if(speed<1)speed=1; if(speed>50)speed=50;
     if(bright<1)bright=1; if(bright>255)bright=255;
     if(arms<1)arms=1; if(arms>6)arms=6;
     if(pitch<1)pitch=1; if(pitch>10)pitch=10;
     build_pal(pal);
 
+    /* Map the UI scale [1..50] onto the effective climb rate [0.2..22] with a
+     * quadratic curve: linear mapping gave a harsh ~10x lurch from 1->2, so
+     * square the normalized position — fine control when slow, steeper at top.
+     * The top (22) is deliberately below the 30 FPS wagon-wheel limit: the
+     * ribbon scrolls one full period per band unit, so once the per-frame
+     * advance (33ms * espeed * 0.00055) passes 0.5 the spiral appears to spin
+     * backwards. 22 keeps it at ~0.40 — fast but never reversing. */
+    float n = (float)(speed-1) / 49.0f;            /* 0..1 */
+    float espeed = 0.2f + (22.0f - 0.2f) * n * n;
+
     /* Direction flips the scroll: ribbons climb up (0) or sink down (1) */
-    float t=(float)tick_ms*(float)speed*0.0011f;
-    if(dir) t=-t;
+    float t=(float)tick_ms*espeed*0.00055f;
+    if(!dir) t=-t;
     float pf=(float)pitch;
     float af=(float)arms;
     float invW=1.0f/(float)W;

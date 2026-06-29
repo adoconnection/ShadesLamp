@@ -133,7 +133,12 @@ EXPORT(update) void update(int tick_ms){
         float inv=1.0f/(float)step;                            /* grid step (cell px) */
         float cx=(float)W*0.5f, cy=(float)H*0.5f;
 
-        float env=0.5f+0.5f*(1.0f-la);                        /* flash on entry, settle */
+        /* flash bright, hold, then fade to nothing over the tail — all while
+         * dist/ang keep advancing, so the net is still travelling as it fades */
+        float env, fadeStart=0.45f;
+        if(la<fadeStart) env=0.6f+0.4f*(1.0f-la/fadeStart);
+        else             env=0.6f*(1.0f-(la-fadeStart)/(1.0f-fadeStart));
+        if(env<0.0f)env=0.0f;
         int inten=(int)((float)bright*env);
 
         for(int y=0;y<H;y++){

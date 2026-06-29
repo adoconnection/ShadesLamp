@@ -13,11 +13,11 @@ static const char META[] =
     "{\"name\":\"Ascension\","
     "\"desc\":\"Neon plumes of energy streaming up the column with rising pulses\","
     "\"params\":["
-        "{\"id\":0,\"name\":\"Speed\",\"type\":\"int\",\"min\":1,\"max\":100,\"default\":50,\"desc\":\"Rise speed\"},"
+        "{\"id\":0,\"name\":\"Speed\",\"type\":\"int\",\"min\":1,\"max\":50,\"default\":8,\"desc\":\"Rise speed\"},"
         "{\"id\":1,\"name\":\"Brightness\",\"type\":\"int\",\"min\":1,\"max\":255,\"default\":220,\"desc\":\"Overall brightness\"},"
         "{\"id\":2,\"name\":\"Palette\",\"type\":\"select\",\"options\":[\"UV Neon\",\"Rainbow\",\"Fire\",\"Ice\"],\"default\":0,\"desc\":\"Color preset\"},"
-        "{\"id\":3,\"name\":\"Streams\",\"type\":\"int\",\"min\":1,\"max\":8,\"default\":5,\"desc\":\"Number of energy plumes\"},"
-        "{\"id\":4,\"name\":\"Turbulence\",\"type\":\"int\",\"min\":1,\"max\":10,\"default\":4,\"desc\":\"Rising pulse density\"}"
+        "{\"id\":3,\"name\":\"Streams\",\"type\":\"int\",\"min\":1,\"max\":8,\"default\":6,\"desc\":\"Number of energy plumes\"},"
+        "{\"id\":4,\"name\":\"Turbulence\",\"type\":\"int\",\"min\":1,\"max\":10,\"default\":10,\"desc\":\"Rising pulse density\"}"
     "]}";
 
 EXPORT(get_meta_ptr) int get_meta_ptr(void){ return (int)META; }
@@ -71,13 +71,20 @@ EXPORT(update) void update(int tick_ms){
     int speed=get_param_i32(0), bright=get_param_i32(1), pal=get_param_i32(2);
     int streams=get_param_i32(3), turb=get_param_i32(4);
     dims();
-    if(speed<1)speed=1; if(speed>100)speed=100;
+    if(speed<1)speed=1; if(speed>50)speed=50;
     if(bright<1)bright=1; if(bright>255)bright=255;
     if(streams<1)streams=1; if(streams>8)streams=8;
     if(turb<1)turb=1; if(turb>10)turb=10;
     build_pal(pal);
 
-    float t=(float)tick_ms*(float)speed*0.0012f;
+    /* Map the UI scale [1..50] onto the effective rise rate [0.2..50] with a
+     * quadratic curve: linear mapping made 1->2 jump ~10x (a harsh lurch), so
+     * square the normalized position — gentle, fine control at the slow end,
+     * steeper ramp toward the top. Endpoints stay 0.2 (slow default) .. 50. */
+    float n = (float)(speed-1) / 49.0f;            /* 0..1 */
+    float espeed = 0.2f + (50.0f - 0.2f) * n * n;
+
+    float t=(float)tick_ms*espeed*0.0012f;
 
     /* Plume centres drift slowly around the circumference */
     float cx[8];
