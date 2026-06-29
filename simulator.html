@@ -503,6 +503,7 @@ function rebuildGeometry(){
 // поэтому достаточно пересобрать геометрию и переинициализировать программу.
 function setLampType(cols,rows){
   COLS=cols; ROWS=rows;
+  try{ localStorage.setItem("sim_lamp", cols+","+rows); }catch(e){}
   rebuildGeometry();
   if (instance && exportsW){
     frame.fill(0);
@@ -787,21 +788,26 @@ const PRESETS = ["rainbow","plasma","aurora","ocean","lava","lava_lamp","flame",
  "flowers","grass","starfall","earth","rgb_cycle","random_blink","solid_color","matrix_test","tv","meteor_shower","trading","constellation",
  "tunnel","barberpole","ascension","mandala","laser_sky","tentacles","hyper_net","glitch"];
 
+// Загрузка встроенной программы по slug + запоминание выбора
+async function loadPreset(slug){
+  if(!slug) return;
+  try{
+    const res=await fetch("programs/"+slug+"/main.wasm",{cache:"no-store"});
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const buf=await res.arrayBuffer();
+    loadWasm(new Uint8Array(buf), slug);
+    document.getElementById("presetSel").value=slug;
+    try{ localStorage.setItem("sim_prog", slug); }catch(e){}
+  }catch(e){ toast("Не удалось загрузить (нужен http-сервер): "+e.message,true); }
+}
+
 (function initPresets(){
   const sel=document.getElementById("presetSel");
   const label = s => s.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
   PRESETS.slice().sort((a,b)=>label(a).localeCompare(label(b)))
     .forEach(s=>{ const o=document.createElement("option"); o.value=s;
       o.textContent=label(s); sel.appendChild(o); });
-  sel.onchange=async()=>{
-    const slug=sel.value; if(!slug) return;
-    try{
-      const res=await fetch("programs/"+slug+"/main.wasm",{cache:"no-store"});
-      if(!res.ok) throw new Error("HTTP "+res.status);
-      const buf=await res.arrayBuffer();
-      loadWasm(new Uint8Array(buf), slug);
-    }catch(e){ toast("Не удалось загрузить (нужен http-сервер): "+e.message,true); }
-  };
+  sel.onchange=()=>loadPreset(sel.value);
   // если открыто по http — спрятать подсказку про file://
   if (location.protocol.startsWith("http")){
     document.getElementById("loadHint").innerHTML="Выберите программу из списка или откройте свой <code>.wasm</code>.";
@@ -815,15 +821,21 @@ document.querySelectorAll("#lampTypes button").forEach(b=>{
 });
 
 // ── Старт ───────────────────────────────────────────────────────────────
+// Восстановить размер сетки из прошлой сессии
+try{ const s=localStorage.getItem("sim_lamp"); if(s){ const a=s.split(",").map(Number);
+  if(a[0]>0&&a[1]>0){ COLS=a[0]; ROWS=a[1]; } } }catch(e){}
+document.querySelectorAll("#lampTypes button").forEach(b=>
+  b.classList.toggle("on",(+b.dataset.c===COLS&&+b.dataset.r===ROWS)));
+
 rebuildGeometry();
 resize();
 requestAnimationFrame(loop);
 
-// Автозагрузка дефолтной программы при запуске через http
+// Автозагрузка программы при запуске через http: последняя выбранная или дефолт
 if (location.protocol.startsWith("http")){
-  fetch("programs/hyper_net/main.wasm",{cache:"no-store"}).then(r=>r.ok?r.arrayBuffer():Promise.reject())
-    .then(b=>{loadWasm(new Uint8Array(b),"hyper_net");document.getElementById("presetSel").value="hyper_net";})
-    .catch(()=>{});
+  let slug="hyper_net";
+  try{ const s=localStorage.getItem("sim_prog"); if(s&&PRESETS.includes(s)) slug=s; }catch(e){}
+  loadPreset(slug);
 }
 </script>
 </body>
