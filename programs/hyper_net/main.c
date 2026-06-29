@@ -83,12 +83,17 @@ static void dims(void){ W=get_width(); H=get_height();
     if(W>MAX_W)W=MAX_W; if(H>MAX_H)H=MAX_H; if(W<1)W=1; if(H<1)H=1; }
 
 /* Carried grid placement, so a "Continue" appearance can pick up exactly where
- * the previous one left off instead of recentring. */
+ * the previous one left off instead of recentring. The slide is stored as a
+ * phase in grid-cell units (wrapped to [0,1)) — NOT a screen offset — so the
+ * rotation always pivots on the screen centre and never appears to speed up as
+ * the grid travels. s_baseAng carries the accumulated rotation. */
 static int   s_cidx=-1;
-static float s_baseOx=0.0f, s_baseOy=0.0f, s_baseAng=0.0f;
+static float s_basePhU=0.0f, s_basePhV=0.0f, s_baseAng=0.0f;
+
+static inline float wrap01(float x){ x-=(float)(int)x; if(x<0.0f)x+=1.0f; return x; }
 
 EXPORT(init) void init(void){ init_sin(); dims();
-    s_cidx=-1; s_baseOx=0.0f; s_baseOy=0.0f; s_baseAng=0.0f;
+    s_cidx=-1; s_basePhU=0.0f; s_basePhV=0.0f; s_baseAng=0.0f;
     int total=MAX_W*MAX_H*3; for(int i=0;i<total;i++) FB[i]=0; }
 
 EXPORT(update) void update(int tick_ms){
@@ -147,26 +152,31 @@ EXPORT(update) void update(int tick_ms){
          *   Continue (продолжение)— inherit the offset & angle the previous
          *     appearance ended on; only the travel/turn directions (from this
          *     appearance's hash) change, so the grid flows on from where it was. */
+        float inv=1.0f/(float)step;                            /* grid step (cell px) */
         if(cidx!=s_cidx){
             if(flow==1 && s_cidx>=0){
                 uint32_t ph=fhash((uint32_t)s_cidx);              /* previous appearance */
                 float pTrav=(float)((ph>>10)&1023)/1023.0f*6.2831853f;
                 float pRdir=((ph>>20)&1)?1.0f:-1.0f;
                 float pDist=(float)move/100.0f*34.0f;            /* its full travel (la=1) */
-                s_baseOx += pDist*fcos(pTrav);
-                s_baseOy += pDist*fsin(pTrav);
+                /* carry the slide forward as a grid-cell phase (stays bounded) */
+                s_basePhU = wrap01(s_basePhU + pDist*fcos(pTrav)*inv);
+                s_basePhV = wrap01(s_basePhV + pDist*fsin(pTrav)*inv);
                 s_baseAng+= pRdir*(float)rotate/100.0f*3.0f;
             }else{
-                s_baseOx=0.0f; s_baseOy=0.0f; s_baseAng=axis;
+                s_basePhU=0.0f; s_basePhV=0.0f; s_baseAng=axis;
             }
             s_cidx=cidx;
         }
 
         float dist=(float)move/100.0f*34.0f*la;                   /* distance travelled so far */
         float ang =s_baseAng + rdir*(float)rotate/100.0f*3.0f*la; /* turned so far */
-        float ox=s_baseOx + dist*fcos(trav), oy=s_baseOy + dist*fsin(trav);
+        /* Slide expressed as a grid-cell phase, applied AFTER the centre
+         * rotation — so the grid rotates about the screen centre at a constant
+         * apparent speed no matter how far it has travelled. */
+        float driftU=s_basePhU + dist*fcos(trav)*inv;
+        float driftV=s_basePhV + dist*fsin(trav)*inv;
         float ct=fcos(ang), st=fsin(ang);
-        float inv=1.0f/(float)step;                            /* grid step (cell px) */
         float cx=(float)W*0.5f, cy=(float)H*0.5f;
 
         /* Appearance envelope — a 0..1 opacity multiplier on the injected net.
@@ -188,9 +198,9 @@ EXPORT(update) void update(int tick_ms){
 
         for(int y=0;y<H;y++){
             for(int x=0;x<W;x++){
-                float px=((float)x-cx)-ox, py=((float)y-cy)-oy;
-                float u=( px*ct + py*st)*inv;                 /* coords in the grid's frame */
-                float v=(-px*st + py*ct)*inv;
+                float px=(float)x-cx, py=(float)y-cy;         /* relative to screen centre */
+                float u=( px*ct + py*st)*inv - driftU;        /* rotate about centre, then slide */
+                float v=(-px*st + py*ct)*inv - driftV;
                 float cv=ridge(u); float dv=ridge(v);
                 if(cv<dv)cv=dv;                               /* mesh = union of both families */
                 if(cv>0.0f){
