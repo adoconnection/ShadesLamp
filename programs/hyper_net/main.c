@@ -24,7 +24,8 @@ static const char META[] =
         "{\"id\":7,\"name\":\"Step\",\"type\":\"int\",\"min\":2,\"max\":16,\"default\":5,\"desc\":\"Grid cell size in pixels\"},"
         "{\"id\":8,\"name\":\"Enter\",\"type\":\"select\",\"options\":[\"Instant\",\"Dissolve\"],\"default\":0,\"desc\":\"Instant flash, or dissolve in over the current image\"},"
         "{\"id\":9,\"name\":\"Exit\",\"type\":\"select\",\"options\":[\"Full fade\",\"Cut\"],\"default\":0,\"desc\":\"Fully fade out before the next appearance, or cut instantly\"},"
-        "{\"id\":10,\"name\":\"Fade len\",\"type\":\"int\",\"min\":1,\"max\":100,\"default\":40,\"desc\":\"Length of the dissolve-in / fade-out ramps\"}"
+        "{\"id\":10,\"name\":\"Fade len\",\"type\":\"int\",\"min\":1,\"max\":100,\"default\":40,\"desc\":\"Length of the dissolve-in / fade-out ramps\"},"
+        "{\"id\":11,\"name\":\"Flow\",\"type\":\"select\",\"options\":[\"Jump\",\"Continue\"],\"default\":0,\"desc\":\"Jump = each net appears somewhere new; Continue = keep position, only change motion\"}"
     "]}";
 
 EXPORT(get_meta_ptr) int get_meta_ptr(void){ return (int)META; }
@@ -81,7 +82,13 @@ static inline float ridge(float f){
 static void dims(void){ W=get_width(); H=get_height();
     if(W>MAX_W)W=MAX_W; if(H>MAX_H)H=MAX_H; if(W<1)W=1; if(H<1)H=1; }
 
+/* Carried grid placement, so a "Continue" appearance can pick up exactly where
+ * the previous one left off instead of recentring. */
+static int   s_cidx=-1;
+static float s_baseOx=0.0f, s_baseOy=0.0f, s_baseAng=0.0f;
+
 EXPORT(init) void init(void){ init_sin(); dims();
+    s_cidx=-1; s_baseOx=0.0f; s_baseOy=0.0f; s_baseAng=0.0f;
     int total=MAX_W*MAX_H*3; for(int i=0;i<total;i++) FB[i]=0; }
 
 EXPORT(update) void update(int tick_ms){
@@ -89,6 +96,7 @@ EXPORT(update) void update(int tick_ms){
     int rotate=get_param_i32(3), move=get_param_i32(4), appear=get_param_i32(5), pause=get_param_i32(6);
     int step=get_param_i32(7);
     int appearMode=get_param_i32(8), exitMode=get_param_i32(9), fadeLen=get_param_i32(10);
+    int flow=get_param_i32(11);
     dims();
     if(fade<1)fade=1; if(fade>100)fade=100;
     if(bright<1)bright=1; if(bright>255)bright=255;
@@ -101,6 +109,7 @@ EXPORT(update) void update(int tick_ms){
     if(appearMode<0)appearMode=0; if(appearMode>1)appearMode=1;
     if(exitMode<0)exitMode=0; if(exitMode>1)exitMode=1;
     if(fadeLen<1)fadeLen=1; if(fadeLen>100)fadeLen=100;
+    if(flow<0)flow=0; if(flow>1)flow=1;
 
     /* Fade the whole screen — this is the trail. Higher Fade = shorter trail. */
     int keep=256-fade*2; if(keep<40)keep=40; if(keep>254)keep=254;
@@ -133,9 +142,29 @@ EXPORT(update) void update(int tick_ms){
         int effPal=(palParam==0)?(int)((h>>30)&3):(palParam-1);
         build_pal(effPal);
 
-        float dist=(float)move/100.0f*34.0f*la;               /* distance travelled so far */
-        float ang =axis + rdir*(float)rotate/100.0f*3.0f*la;  /* turned so far */
-        float ox=dist*fcos(trav), oy=dist*fsin(trav);
+        /* Where does this appearance start? Decided once, when its cycle begins.
+         *   Jump (рваная)        — recentre and take the fresh random orientation.
+         *   Continue (продолжение)— inherit the offset & angle the previous
+         *     appearance ended on; only the travel/turn directions (from this
+         *     appearance's hash) change, so the grid flows on from where it was. */
+        if(cidx!=s_cidx){
+            if(flow==1 && s_cidx>=0){
+                uint32_t ph=fhash((uint32_t)s_cidx);              /* previous appearance */
+                float pTrav=(float)((ph>>10)&1023)/1023.0f*6.2831853f;
+                float pRdir=((ph>>20)&1)?1.0f:-1.0f;
+                float pDist=(float)move/100.0f*34.0f;            /* its full travel (la=1) */
+                s_baseOx += pDist*fcos(pTrav);
+                s_baseOy += pDist*fsin(pTrav);
+                s_baseAng+= pRdir*(float)rotate/100.0f*3.0f;
+            }else{
+                s_baseOx=0.0f; s_baseOy=0.0f; s_baseAng=axis;
+            }
+            s_cidx=cidx;
+        }
+
+        float dist=(float)move/100.0f*34.0f*la;                   /* distance travelled so far */
+        float ang =s_baseAng + rdir*(float)rotate/100.0f*3.0f*la; /* turned so far */
+        float ox=s_baseOx + dist*fcos(trav), oy=s_baseOy + dist*fsin(trav);
         float ct=fcos(ang), st=fsin(ang);
         float inv=1.0f/(float)step;                            /* grid step (cell px) */
         float cx=(float)W*0.5f, cy=(float)H*0.5f;

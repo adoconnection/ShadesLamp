@@ -819,10 +819,10 @@ rebuildGeometry();
 resize();
 requestAnimationFrame(loop);
 
-// Автозагрузка rainbow при запуске через http (приятный дефолт)
+// Автозагрузка дефолтной программы при запуске через http
 if (location.protocol.startsWith("http")){
-  fetch("programs/rainbow/main.wasm",{cache:"no-store"}).then(r=>r.ok?r.arrayBuffer():Promise.reject())
-    .then(b=>{loadWasm(new Uint8Array(b),"rainbow");document.getElementById("presetSel").value="rainbow";})
+  fetch("programs/hyper_net/main.wasm",{cache:"no-store"}).then(r=>r.ok?r.arrayBuffer():Promise.reject())
+    .then(b=>{loadWasm(new Uint8Array(b),"hyper_net");document.getElementById("presetSel").value="hyper_net";})
     .catch(()=>{});
 }
 </script>
