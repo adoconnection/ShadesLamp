@@ -123,7 +123,7 @@ EXPORT(update) void update(int tick_ms){
     float t=(float)tick_ms/1000.0f;
 
     /* Appearance lifecycle: active window then a dark pause, repeating. */
-    float onDur =0.3f+(float)appear/100.0f*2.2f;     /* seconds the net is injected */
+    float onDur =0.3f+(float)appear/100.0f*9.7f;     /* seconds the net is injected: 0.3..10 */
     float pauseDur=(float)pause/100.0f*4.0f;          /* seconds of dark gap */
     float cycle=onDur+pauseDur; if(cycle<0.05f)cycle=0.05f;
     int   cidx=(int)(t/cycle);
