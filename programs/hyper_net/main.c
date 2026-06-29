@@ -21,7 +21,10 @@ static const char META[] =
         "{\"id\":4,\"name\":\"Move\",\"type\":\"int\",\"min\":0,\"max\":100,\"default\":40,\"desc\":\"How far the grid travels (random direction)\"},"
         "{\"id\":5,\"name\":\"Appear\",\"type\":\"int\",\"min\":1,\"max\":100,\"default\":50,\"desc\":\"How long the net shows each time\"},"
         "{\"id\":6,\"name\":\"Pause\",\"type\":\"int\",\"min\":0,\"max\":100,\"default\":30,\"desc\":\"Dark pause between appearances\"},"
-        "{\"id\":7,\"name\":\"Step\",\"type\":\"int\",\"min\":2,\"max\":16,\"default\":5,\"desc\":\"Grid cell size in pixels\"}"
+        "{\"id\":7,\"name\":\"Step\",\"type\":\"int\",\"min\":2,\"max\":16,\"default\":5,\"desc\":\"Grid cell size in pixels\"},"
+        "{\"id\":8,\"name\":\"Enter\",\"type\":\"select\",\"options\":[\"Instant\",\"Dissolve\"],\"default\":0,\"desc\":\"Instant flash, or dissolve in over the current image\"},"
+        "{\"id\":9,\"name\":\"Exit\",\"type\":\"select\",\"options\":[\"Full fade\",\"Cut\"],\"default\":0,\"desc\":\"Fully fade out before the next appearance, or cut instantly\"},"
+        "{\"id\":10,\"name\":\"Fade len\",\"type\":\"int\",\"min\":1,\"max\":100,\"default\":40,\"desc\":\"Length of the dissolve-in / fade-out ramps\"}"
     "]}";
 
 EXPORT(get_meta_ptr) int get_meta_ptr(void){ return (int)META; }
@@ -85,6 +88,7 @@ EXPORT(update) void update(int tick_ms){
     int fade=get_param_i32(0), bright=get_param_i32(1), palParam=get_param_i32(2);
     int rotate=get_param_i32(3), move=get_param_i32(4), appear=get_param_i32(5), pause=get_param_i32(6);
     int step=get_param_i32(7);
+    int appearMode=get_param_i32(8), exitMode=get_param_i32(9), fadeLen=get_param_i32(10);
     dims();
     if(fade<1)fade=1; if(fade>100)fade=100;
     if(bright<1)bright=1; if(bright>255)bright=255;
@@ -94,6 +98,9 @@ EXPORT(update) void update(int tick_ms){
     if(pause<0)pause=0; if(pause>100)pause=100;
     if(step<2)step=2; if(step>16)step=16;
     if(palParam<0)palParam=0; if(palParam>4)palParam=4;
+    if(appearMode<0)appearMode=0; if(appearMode>1)appearMode=1;
+    if(exitMode<0)exitMode=0; if(exitMode>1)exitMode=1;
+    if(fadeLen<1)fadeLen=1; if(fadeLen>100)fadeLen=100;
 
     /* Fade the whole screen — this is the trail. Higher Fade = shorter trail. */
     int keep=256-fade*2; if(keep<40)keep=40; if(keep>254)keep=254;
@@ -133,12 +140,21 @@ EXPORT(update) void update(int tick_ms){
         float inv=1.0f/(float)step;                            /* grid step (cell px) */
         float cx=(float)W*0.5f, cy=(float)H*0.5f;
 
-        /* flash bright, hold, then fade to nothing over the tail — all while
-         * dist/ang keep advancing, so the net is still travelling as it fades */
-        float env, fadeStart=0.45f;
-        if(la<fadeStart) env=0.6f+0.4f*(1.0f-la/fadeStart);
-        else             env=0.6f*(1.0f-(la-fadeStart)/(1.0f-fadeStart));
-        if(env<0.0f)env=0.0f;
+        /* Appearance envelope — a 0..1 opacity multiplier on the injected net.
+         * It is *added over* the still-fading framebuffer (never cleared), so a
+         * dissolve-in is a true cross-fade onto the current image, not a draw on
+         * a blank screen. Both ramps last `fl` of the on-window (Fade len).
+         *   Appear: Instant = pop straight to full; Dissolve = ramp 0 -> 1.
+         *   Exit:   Full fade = ramp 1 -> 0 over the tail; Cut = stay full (the
+         *           old image then just decays via the trail).
+         * dist/ang keep advancing throughout, so the net is still travelling as
+         * it dissolves in or fades out. */
+        float fl=0.04f+(float)fadeLen/100.0f*0.50f;   /* ramp length: 4%..54% */
+        float env=1.0f;
+        if(appearMode==1 && la<fl) env=la/fl;                       /* dissolve in 0->1 */
+        if(exitMode==0 && la>1.0f-fl){ float e=(1.0f-la)/fl;        /* full fade out 1->0 */
+            if(e<env)env=e; }
+        if(env<0.0f)env=0.0f; if(env>1.0f)env=1.0f;
         int inten=(int)((float)bright*env);
 
         for(int y=0;y<H;y++){
