@@ -31,6 +31,24 @@ class ServerCallbacks : public BLEServerCallbacks {
         BLEDevice::startAdvertising();
     }
 
+#if defined(CONFIG_BLUEDROID_ENABLED)
+    // Negotiate a short link supervision timeout up-front, while the central is
+    // still in range and will honour the request. If the central later vanishes
+    // without a clean disconnect (out of range, phone call, pocket), the link is
+    // then declared lost in ~4 s instead of the BLE default (~20 s on Android).
+    // That matters because a stale "zombie" connection keeps a connection slot
+    // busy, which suppresses connectable advertising and locks out EVERY new
+    // central (phone AND laptop) until the timeout finally fires. With the short
+    // timeout, onDisconnect runs quickly, advertising restarts and the lamp is
+    // reconnectable in seconds.
+    //   intervals in 1.25 ms units (0x06=7.5 ms, 0x12=22.5 ms — match the
+    //   advertised slave-preferred range), latency 0, timeout in 10 ms units
+    //   (400 = 4000 ms, well above 2*maxInterval as the spec requires).
+    void onConnect(BLEServer* pServer, esp_ble_gatts_cb_param_t* param) override {
+        pServer->updateConnParams(param->connect.remote_bda, 0x06, 0x12, 0, 400);
+    }
+#endif
+
     void onDisconnect(BLEServer* pServer) override {
         Serial.printf("%s Client disconnected (remaining: %d)\r\n", TAG, pServer->getConnectedCount());
         // Reset MTU to default when client disconnects

@@ -131,8 +131,11 @@ public:
     // processPending() on the render task. Device config (name/hw) is kept.
     void requestClearAll();
 
-    // Process pending switch + deferred saves; call from loop()
-    void processPending();
+    // Process pending delete/wipe + deferred saves; call from loop().
+    // applySwitch=false leaves a queued program switch untouched so the
+    // caller's crossfade machine can pick it up on the next frame instead of
+    // applying it instantly (no fade).
+    void processPending(bool applySwitch = true);
 
     // Device name (persisted in config.json, used for BLE advertising)
     String getDeviceName() const;

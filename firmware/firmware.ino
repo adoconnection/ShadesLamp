@@ -46,10 +46,16 @@ void renderTask(void* param) {
 
     // Host-side crossfade on program switch: fade the old program out, swap,
     // then fade the new one in (dip to black). Switch is deferred until fade-out.
+    // Fade progress is counted in RENDERED frames, not wall time: the render
+    // task can be held for longer than the whole fade (BLE-busy freeze re-armed
+    // by notify bursts, flash I/O), and a wall-clock fade collapses into
+    // "freeze, then hard cut" — e.g. on playlist rotation, where EVT_PL_ADVANCE
+    // and the post-switch param-values push land inside the fade window. A
+    // skipped frame must pause the fade, not consume it.
     enum FadeState { FADE_IDLE, FADE_OUT, FADE_IN };
     FadeState fadeState = FADE_IDLE;
-    uint32_t  fadeStart = 0;
-    const uint32_t FADE_MS = 300;
+    uint32_t  fadeFrame = 0;
+    const uint32_t FADE_FRAMES = 9;   // ~300 ms at 30 FPS
 
     while (true) {
         // Transmit any queued BLE response from here (render task), NOT from the
@@ -70,14 +76,10 @@ void renderTask(void* param) {
             continue;
         }
 
-        // Freeze rendering during BLE bursts. Refreshing the WS2812 strip
-        // (show() disables interrupts for the bit-stream) while the radio is
-        // busy corrupts the timing and the panel flickers/tears. Holding the
-        // last latched frame keeps it rock-steady until BLE goes quiet.
-        if (bleService->isBleBusy()) {
-            vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(33));
-            continue;
-        }
+        // NOTE: a BLE-busy render freeze used to live here (hold the last
+        // latched frame while isBleBusy(), to keep WS2812 timing away from
+        // radio bursts). It never actually cured the flicker, but it did stall
+        // animations and crossfades around BLE traffic — disabled for now.
 
         uint32_t now = millis();
 
@@ -88,12 +90,10 @@ void renderTask(void* param) {
             programManager->processPending();
             bleService->notifyActiveProgram(programManager->getActiveId());
             fadeState = FADE_IN;
-            // processPending() loads the WASM program, which can take longer than
-            // FADE_MS. Start the fade-in clock AFTER that work (and refresh `now`)
-            // so the first frame is at scale 0 and the ramp isn't skipped — else
-            // the program pops to full brightness instead of fading in.
+            fadeFrame = 0;
+            // processPending() loads the WASM program, which can take a while;
+            // refresh `now` so the rotation tick below doesn't see a stale time.
             now = millis();
-            fadeStart = now;
         }
 
         // Lamp-driven playlist rotation: applies a pending position and advances
@@ -106,12 +106,15 @@ void renderTask(void* param) {
             if (programManager->hasPendingSwitch()) {
                 // Begin fading the current program out; apply the switch later.
                 fadeState = FADE_OUT;
-                fadeStart = now;
+                fadeFrame = 0;
             } else {
-                // No switch pending: run normally, handle deletes + deferred saves.
+                // No switch pending: run normally, handle deletes + deferred
+                // saves. Switches stay queued here (applySwitch=false): a BLE
+                // write can land between the check above and this call, and it
+                // must fade next frame, not hard-cut.
                 ledDriver->setFadeScale(256);
                 uint8_t prevActive = programManager->getActiveId();
-                programManager->processPending();
+                programManager->processPending(false);
                 uint8_t newActive = programManager->getActiveId();
                 if (newActive != prevActive) {
                     bleService->notifyActiveProgram(newActive);
@@ -120,8 +123,7 @@ void renderTask(void* param) {
         }
 
         if (fadeState == FADE_OUT) {
-            uint32_t el = now - fadeStart;
-            if (el >= FADE_MS) {
+            if (fadeFrame >= FADE_FRAMES) {
                 // Fade-out done: swap program (at black), then fade the new one in.
                 uint8_t prevActive = programManager->getActiveId();
                 ledDriver->setFadeScale(0);
@@ -132,17 +134,18 @@ void renderTask(void* param) {
                     Serial.printf("[MAIN] Program switched: %u -> %u\r\n", prevActive, newActive);
                 }
                 fadeState = FADE_IN;
-                fadeStart = millis();
+                fadeFrame = 0;
             } else {
-                ledDriver->setFadeScale((uint16_t)(256 - el * 256 / FADE_MS)); // 256 -> 0
+                fadeFrame++;
+                ledDriver->setFadeScale((uint16_t)(256 - fadeFrame * 256 / FADE_FRAMES)); // 256 -> 0
             }
         } else if (fadeState == FADE_IN) {
-            uint32_t el = now - fadeStart;
-            if (el >= FADE_MS) {
+            if (fadeFrame >= FADE_FRAMES) {
                 ledDriver->setFadeScale(256);
                 fadeState = FADE_IDLE;
             } else {
-                ledDriver->setFadeScale((uint16_t)(el * 256 / FADE_MS));         // 0 -> 256
+                fadeFrame++;
+                ledDriver->setFadeScale((uint16_t)(fadeFrame * 256 / FADE_FRAMES));       // 0 -> 256
             }
         }
 

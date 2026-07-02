@@ -230,6 +230,7 @@ static volatile bool     g_applyPending = false; // render task should apply g_i
 static volatile bool     g_clearPending = false; // render task should delete the state file
 static volatile bool     g_notifyStopPending = false; // render task should emit EVT_PL_STOPPED
 static volatile bool     g_stateDirty  = false; // render task should persist play state
+static volatile int      g_advanceNotifyIdx = -1; // EVT_PL_ADVANCE deferred until the switch lands (-1 = none)
 static uint32_t          g_stateDirtyMs = 0;    // millis() of last play/jump (debounce)
 static uint32_t          g_lastMs      = 0;    // render-task only
 
@@ -328,6 +329,7 @@ void playStart(uint8_t id, int index) {
     // Schedule a debounced persist (10 s after the last play/swipe).
     g_stateDirtyMs = millis();
     g_stateDirty = true;
+    g_advanceNotifyIdx = -1;         // a stale deferred advance is now obsolete
     if (n <= 0) { g_index = 0; g_applyPending = false; return; }
     if (index < 0 || index >= n) index = 0;
     g_index = index;
@@ -340,6 +342,7 @@ void stop() {
     if (g_playId < 0) return;
     g_playId = -1;
     g_applyPending = false;
+    g_advanceNotifyIdx = -1;         // don't announce an advance after stopping
     g_stateDirty = false;            // cancel any pending debounced save
     // Defer the flash delete + client notify to the render task so stop() is
     // safe to call from any context (BLE callback, touch task).
@@ -391,6 +394,16 @@ void tickRotation(ProgramManager* pm, BleService* ble, uint32_t now) {
     }
     if (g_playId < 0) return;
 
+    // A deferred EVT_PL_ADVANCE fires once the queued switch has actually been
+    // applied (the crossfade machine consumes it at the dip-to-black), so the
+    // app's index change lines up with the visible transition — old program
+    // already faded out, new one not shown yet — instead of preceding the fade.
+    if (g_advanceNotifyIdx >= 0 && !pm->hasPendingSwitch()) {
+        int idx = g_advanceNotifyIdx;
+        g_advanceNotifyIdx = -1;
+        if (ble) ble->notifyEvent(EVT_PL_ADVANCE, (uint8_t)idx);
+    }
+
     // Apply a freshly-requested position (play/jump/resume), even mid-fade.
     // If the requested program is missing, skip forward to the next playable
     // position and tell the app where we actually landed.
@@ -401,7 +414,7 @@ void tickRotation(ProgramManager* pm, BleService* ble, uint32_t now) {
         if (idx >= 0) {
             g_index = idx;
             if (applyPositionIndex(pm, (uint8_t)g_playId, idx)) g_lastMs = now;
-            if (idx != want && ble) ble->notifyEvent(EVT_PL_ADVANCE, (uint8_t)idx);
+            if (idx != want) g_advanceNotifyIdx = idx;
         }
         return;
     }
@@ -431,7 +444,7 @@ void tickRotation(ProgramManager* pm, BleService* ble, uint32_t now) {
     if (applyPositionIndex(pm, (uint8_t)g_playId, next)) {
         g_index = next;
         g_lastMs = now;
-        if (ble) ble->notifyEvent(EVT_PL_ADVANCE, (uint8_t)g_index);
+        g_advanceNotifyIdx = next;   // announced at the dip-to-black (see above)
     } else {
         g_lastMs = now;                            // skip a beat, retry next interval
         onPositionsChanged((uint8_t)g_playId);     // positions may have shrunk

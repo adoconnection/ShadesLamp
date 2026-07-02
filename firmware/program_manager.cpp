@@ -644,7 +644,7 @@ void ProgramManager::clearAllPrograms() {
     Serial.printf("%s Cleared all programs (%u removed)\r\n", TAG, (unsigned)ids.size());
 }
 
-void ProgramManager::processPending() {
+void ProgramManager::processPending(bool applySwitch) {
     // Handle async full wipe (must run on render task, not BLE core)
     if (_pendingClearAll) {
         _pendingClearAll = false;
@@ -660,7 +660,7 @@ void ProgramManager::processPending() {
 
     // Handle async program switch
     uint8_t pendingId = _pendingSwitchId;
-    if (pendingId != 0xFF) {
+    if (applySwitch && pendingId != 0xFF) {
         _pendingSwitchId = 0xFF;
         bool transient = _pendingTransientSwitch;
         _pendingTransientSwitch = false;
