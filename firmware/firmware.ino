@@ -53,9 +53,16 @@ void renderTask(void* param) {
     // and the post-switch param-values push land inside the fade window. A
     // skipped frame must pause the fade, not consume it.
     enum FadeState { FADE_IDLE, FADE_OUT, FADE_IN };
-    FadeState fadeState = FADE_IDLE;
-    uint32_t  fadeFrame = 0;
-    const uint32_t FADE_FRAMES = 9;   // ~300 ms at 30 FPS
+    const uint32_t FADE_FRAMES = 9;        // ~300 ms crossfade at 30 FPS
+    const uint32_t BOOT_FADE_FRAMES = 30;  // ~1 s power-on fade-in
+    // Boot: start "already faded out" at black, so the first pass through the
+    // machine applies any switch queued during setup (e.g. a resumed playlist
+    // position) and fades the result in over BOOT_FADE_FRAMES — instead of the
+    // program popping to full brightness on the first rendered frame.
+    FadeState fadeState = FADE_OUT;
+    uint32_t  fadeFrame = FADE_FRAMES;
+    uint32_t  fadeInFrames = FADE_FRAMES;  // length of the current fade-in
+    bool      bootFade = true;
 
     while (true) {
         // Transmit any queued BLE response from here (render task), NOT from the
@@ -91,6 +98,8 @@ void renderTask(void* param) {
             bleService->notifyActiveProgram(programManager->getActiveId());
             fadeState = FADE_IN;
             fadeFrame = 0;
+            fadeInFrames = FADE_FRAMES;
+            bootFade = false;
             // processPending() loads the WASM program, which can take a while;
             // refresh `now` so the rotation tick below doesn't see a stale time.
             now = millis();
@@ -135,17 +144,19 @@ void renderTask(void* param) {
                 }
                 fadeState = FADE_IN;
                 fadeFrame = 0;
+                fadeInFrames = bootFade ? BOOT_FADE_FRAMES : FADE_FRAMES;
+                bootFade = false;
             } else {
                 fadeFrame++;
                 ledDriver->setFadeScale((uint16_t)(256 - fadeFrame * 256 / FADE_FRAMES)); // 256 -> 0
             }
         } else if (fadeState == FADE_IN) {
-            if (fadeFrame >= FADE_FRAMES) {
+            if (fadeFrame >= fadeInFrames) {
                 ledDriver->setFadeScale(256);
                 fadeState = FADE_IDLE;
             } else {
                 fadeFrame++;
-                ledDriver->setFadeScale((uint16_t)(fadeFrame * 256 / FADE_FRAMES));       // 0 -> 256
+                ledDriver->setFadeScale((uint16_t)(fadeFrame * 256 / fadeInFrames));      // 0 -> 256
             }
         }
 
