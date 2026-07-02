@@ -786,7 +786,7 @@ const PRESETS = ["rainbow","plasma","aurora","ocean","lava","lava_lamp","flame",
  "warp","vortex","kaleidoscope","jellyfish","helix","hexagons","horizon","dna","moire","morphing",
  "cube","electrons","core","breathing","police","forest","whirl","fountains","tricolor",
  "flowers","grass","starfall","earth","rgb_cycle","random_blink","solid_color","matrix_test","tv","meteor_shower","trading","constellation",
- "tunnel","barberpole","ascension","mandala","laser_sky","tentacles","hyper_net","glitch"];
+ "tunnel","barberpole","ascension","mandala","laser_sky","tentacles","hyper_net","glitch","night"];
 
 // Загрузка встроенной программы по slug + запоминание выбора
 async function loadPreset(slug){
@@ -833,7 +833,7 @@ requestAnimationFrame(loop);
 
 // Автозагрузка программы при запуске через http: последняя выбранная или дефолт
 if (location.protocol.startsWith("http")){
-  let slug="snow";
+  let slug="night";
   try{ const s=localStorage.getItem("sim_prog"); if(s&&PRESETS.includes(s)) slug=s; }catch(e){}
   loadPreset(slug);
 }

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-07-02T21:00:00Z",
+  "updated": "2026-07-03T09:00:00Z",
   "featured": [
     "flame_particle",
     "spirals",
@@ -224,6 +224,11 @@
       "slug": "morphing",
       "meta": "programs/morphing/meta.json",
       "wasm": "programs/morphing/main.wasm"
+    },
+    {
+      "slug": "night",
+      "meta": "programs/night/meta.json",
+      "wasm": "programs/night/main.wasm"
     },
     {
       "slug": "ocean",
