@@ -833,7 +833,7 @@ requestAnimationFrame(loop);
 
 // Автозагрузка программы при запуске через http: последняя выбранная или дефолт
 if (location.protocol.startsWith("http")){
-  let slug="hyper_net";
+  let slug="snow";
   try{ const s=localStorage.getItem("sim_prog"); if(s&&PRESETS.includes(s)) slug=s; }catch(e){}
   loadPreset(slug);
 }
