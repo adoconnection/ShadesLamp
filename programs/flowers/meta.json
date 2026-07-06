@@ -4,7 +4,7 @@
   "desc": "Flowers sprout from the bottom, grow stems, bloom and gently wilt",
   "author": "Shades",
   "category": "Nature",
-  "version": "1.0.1",
+  "version": "1.2.0",
   "cover": {
     "from": "#1a4d1a",
     "to": "#ff69b4",
@@ -44,6 +44,14 @@
         "3": {
           "name": "Скорость",
           "desc": "Скорость роста и цветения"
+        },
+        "4": {
+          "name": "Оттенок неба",
+          "desc": "Цвет фонового неба (оттенок)"
+        },
+        "5": {
+          "name": "Свет неба",
+          "desc": "Яркость фонового неба (0 — выключено)"
         }
       }
     }
