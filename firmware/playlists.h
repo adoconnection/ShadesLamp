@@ -25,6 +25,16 @@ class BleService;
 
 namespace Playlists {
 
+    // Load every playlist file into the RAM store (call once at boot, after
+    // Storage::init). All reads below are served from RAM afterwards; writes
+    // update the store AND persist to flash (write-through).
+    void init();
+
+    // RAM-store sync for generic file commands that touch /playlists/*.json
+    // directly (CMD_WRITE_FILE / APPEND / DELETE): re-reads that file from
+    // flash into the store. Call after the flash operation succeeded.
+    void onFileChanged(const String& path);
+
     // JSON summary array: [{"id","name","mode","interval","count"}, ...]
     String listJson();
 

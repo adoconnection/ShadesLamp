@@ -16,7 +16,23 @@ static void path(char* buf, size_t n, uint8_t id) {
     snprintf(buf, n, "/playlists/%u.json", id);
 }
 
-static std::vector<uint8_t> listIds() {
+// ── RAM store ────────────────────────────────────────────────────────────────
+// All playlist files live in RAM after init(); flash is touched only to
+// persist writes (write-through) and once at boot. Accessed from the BLE task
+// (edits, GETs) and the render task (rotation), hence the mutex; critical
+// sections only copy Strings — no flash I/O and no JSON parsing inside.
+
+static String            g_store[MAX_PLAYLISTS];   // raw JSON, "" = absent
+static SemaphoreHandle_t g_storeMutex = nullptr;
+static bool              g_storeReady = false;
+
+// Set when any playlist changes so the render-task position cache (see
+// rotation engine below) rebuilds on the next tick. Playlist writes are rare
+// (user edits), so no need to check whether it's the playing one. volatile
+// bool: written from the BLE task, read on the render task.
+static volatile bool g_cacheDirty = true;
+
+static std::vector<uint8_t> listIdsFromFlash() {
     std::vector<uint8_t> ids;
     File dir = LittleFS.open("/playlists");
     if (!dir || !dir.isDirectory()) return ids;
@@ -38,9 +54,52 @@ static std::vector<uint8_t> listIds() {
     return ids;
 }
 
+void init() {
+    if (!g_storeMutex) g_storeMutex = xSemaphoreCreateMutex();
+    uint32_t t0 = millis();
+    int n = 0;
+    for (uint8_t id : listIdsFromFlash()) {
+        char p[40]; path(p, sizeof(p), id);
+        g_store[id] = Storage::loadFile(p);
+        if (g_store[id].length() > 0) n++;
+    }
+    g_storeReady = true;
+    Serial.printf("%s init: %d playlist(s) cached in RAM (%lu ms)\r\n", TAG, n, (unsigned long)(millis() - t0));
+}
+
+static std::vector<uint8_t> listIds() {
+    if (!g_storeReady) return listIdsFromFlash();
+    std::vector<uint8_t> ids;
+    xSemaphoreTake(g_storeMutex, portMAX_DELAY);
+    for (int i = 0; i < MAX_PLAYLISTS; i++)
+        if (g_store[i].length() > 0) ids.push_back((uint8_t)i);
+    xSemaphoreGive(g_storeMutex);
+    return ids;
+}
+
+// Raw JSON of one playlist from the RAM store ("" = absent).
+static String storeGet(uint8_t id) {
+    if (id >= MAX_PLAYLISTS) return String();
+    if (!g_storeReady) {
+        char p[40]; path(p, sizeof(p), id);
+        return Storage::loadFile(p);
+    }
+    xSemaphoreTake(g_storeMutex, portMAX_DELAY);
+    String s = g_store[id];
+    xSemaphoreGive(g_storeMutex);
+    return s;
+}
+
+static void storePut(uint8_t id, const String& json) {
+    if (id >= MAX_PLAYLISTS) return;
+    xSemaphoreTake(g_storeMutex, portMAX_DELAY);
+    g_store[id] = json;
+    xSemaphoreGive(g_storeMutex);
+    g_cacheDirty = true;
+}
+
 static bool load(uint8_t id, JsonDocument& doc) {
-    char p[40]; path(p, sizeof(p), id);
-    String s = Storage::loadFile(p);
+    String s = storeGet(id);
     if (s.length() == 0) return false;
     return deserializeJson(doc, s) == DeserializationError::Ok;
 }
@@ -49,7 +108,20 @@ static bool save(uint8_t id, JsonDocument& doc) {
     char p[40]; path(p, sizeof(p), id);
     String out;
     serializeJson(doc, out);
-    return Storage::writeFileEnsure(p, (const uint8_t*)out.c_str(), out.length());
+    bool ok = Storage::writeFileEnsure(p, (const uint8_t*)out.c_str(), out.length());
+    if (ok) storePut(id, out);
+    return ok;
+}
+
+void onFileChanged(const String& fpath) {
+    // "/playlists/{id}.json" written/appended/deleted via generic file
+    // commands: mirror the flash state back into the RAM store.
+    if (!fpath.startsWith("/playlists/") || !fpath.endsWith(".json")) return;
+    String idStr = fpath.substring(11, fpath.length() - 5);
+    int id = idStr.toInt();
+    if (id < 0 || id >= MAX_PLAYLISTS || (id == 0 && idStr != "0")) return;
+    storePut((uint8_t)id, Storage::loadFile(fpath.c_str()));
+    Serial.printf("%s RAM store refreshed for playlist %d (external write)\r\n", TAG, id);
 }
 
 String listJson() {
@@ -70,8 +142,7 @@ String listJson() {
 }
 
 String getJson(uint8_t id) {
-    char p[40]; path(p, sizeof(p), id);
-    return Storage::loadFile(p);
+    return storeGet(id);
 }
 
 int create(const String& name) {
@@ -102,7 +173,9 @@ bool rename(uint8_t id, const String& name) {
 
 bool remove(uint8_t id) {
     char p[40]; path(p, sizeof(p), id);
-    return Storage::deletePath(p);
+    bool ok = Storage::deletePath(p);
+    if (ok) storePut(id, String());
+    return ok;
 }
 
 bool setRotation(uint8_t id, uint8_t mode, uint16_t interval) {
@@ -263,60 +336,96 @@ static bool loadMeta(uint8_t id, int* outCount) {
     return true;
 }
 
-// Resolve a position object to a currently-installed program id, or -1 if its
+// ── Render-task position cache ──────────────────────────────────────────────
+// The rotation advance used to re-read + re-parse the playlist file from
+// LittleFS (twice: findPlayableIndex + applyPositionIndex) on the render task
+// while the outgoing program was still at full brightness — a visible freeze
+// right before the fade-out. The positions are cached in RAM instead; the
+// periodic advance path then does zero flash I/O. Rebuilt when g_cacheDirty is
+// set (any playlist write) or the playing id changes. Touched ONLY on the
+// render task, so no locking is needed on the vector itself.
+
+struct PosCache {
+    String guid;
+    String slug;
+    int    prog;
+    String params;   // serialized params array ("[]" when absent)
+};
+static std::vector<PosCache> g_cache;
+static int g_cacheId = -1;   // playlist id the cache holds (-1 = none)
+
+// Render task only. Cheap when the cache is already valid.
+static bool ensureCache(ProgramManager* pm, uint8_t id) {
+    if (!g_cacheDirty && g_cacheId == (int)id) return true;
+    g_cacheDirty = false;
+    g_cacheId = -1;
+    g_cache.clear();
+
+    JsonDocument doc;
+    if (!load(id, doc)) return false;
+    JsonArray pos = doc["positions"].as<JsonArray>();
+    if (pos) {
+        for (JsonObject o : pos) {
+            if (o.isNull()) continue;
+            PosCache e;
+            e.guid = (const char*)(o["guid"] | "");
+            e.slug = (const char*)(o["slug"] | "");
+            e.prog = o["prog"] | -1;
+            JsonArray pa = o["params"].as<JsonArray>();
+            if (pa) serializeJson(pa, e.params); else e.params = "[]";
+            g_cache.push_back(e);
+        }
+    }
+    g_cacheId = (int)id;
+
+    // Pull every program's meta into RAM now (guid/slug resolution needs it),
+    // so the lazy per-file loads don't land on a mid-rotation frame.
+    pm->warmAllMeta();
+    return true;
+}
+
+// Resolve a cached position to a currently-installed program id, or -1 if its
 // program is missing (deleted / not yet re-downloaded). Resolution order mirrors
 // the app (guid → slug → prog): the guid is authoritative when present; legacy
 // positions fall back to slug (a reliable stored identity) and only then to the
 // numeric `prog` slot, which drifts as programs are added/removed.
-static int resolvePosProgram(ProgramManager* pm, JsonObject o) {
-    const char* guid = o["guid"] | (const char*)nullptr;
-    if (guid && guid[0]) return pm->resolveGuid(String(guid));  // -1 if uninstalled
-    const char* slug = o["slug"] | (const char*)nullptr;
-    if (slug && slug[0]) {
-        int id = pm->resolveSlug(String(slug));
+static int resolvePosProgram(ProgramManager* pm, const PosCache& e) {
+    if (e.guid.length() > 0) return pm->resolveGuid(e.guid);    // -1 if uninstalled
+    if (e.slug.length() > 0) {
+        int id = pm->resolveSlug(e.slug);
         if (id >= 0) return id;
     }
-    int prog = o["prog"] | -1;
-    if (prog < 0 || prog > 255) return -1;
-    return pm->hasProgram((uint8_t)prog) ? prog : -1;           // verify still present
+    if (e.prog < 0 || e.prog > 255) return -1;
+    return pm->hasProgram((uint8_t)e.prog) ? e.prog : -1;       // verify still present
 }
 
 // Find the next index (within `count` steps from `start`, stepping by `dir`)
 // whose position resolves to an installed program. Returns -1 if the whole
 // playlist is currently unplayable (every program missing / empty).
+// Render task only (uses the cache).
 static int findPlayableIndex(ProgramManager* pm, uint8_t id, int start, int dir) {
-    JsonDocument doc;
-    if (!load(id, doc)) return -1;
-    JsonArray pos = doc["positions"].as<JsonArray>();
-    if (!pos) return -1;
-    int n = (int)pos.size();
+    if (!ensureCache(pm, id)) return -1;
+    int n = (int)g_cache.size();
     if (n <= 0) return -1;
     if (dir == 0) dir = 1;
     int i = ((start % n) + n) % n;
     for (int k = 0; k < n; k++) {
-        JsonObject o = pos[i].as<JsonObject>();
-        if (!o.isNull() && resolvePosProgram(pm, o) >= 0) return i;
+        if (resolvePosProgram(pm, g_cache[i]) >= 0) return i;
         i = (((i + dir) % n) + n) % n;
     }
     return -1;
 }
 
 // Issue the transient switch for position `index` of playlist `id`.
-// MUST run on the render task (calls pm->requestSwitchTransient).
+// MUST run on the render task (calls pm->requestSwitchTransient, uses the cache).
 // Returns false if the position's program is missing — caller skips it.
 static bool applyPositionIndex(ProgramManager* pm, uint8_t id, int index) {
-    JsonDocument doc;
-    if (!load(id, doc)) return false;
-    JsonArray pos = doc["positions"].as<JsonArray>();
-    if (!pos || index < 0 || index >= (int)pos.size()) return false;
-    JsonObject o = pos[index].as<JsonObject>();
-    if (o.isNull()) return false;
-    int prog = resolvePosProgram(pm, o);
+    if (!ensureCache(pm, id)) return false;
+    if (index < 0 || index >= (int)g_cache.size()) return false;
+    const PosCache& e = g_cache[index];
+    int prog = resolvePosProgram(pm, e);
     if (prog < 0) return false;   // program missing → skip this position
-    String params;
-    JsonArray pa = o["params"].as<JsonArray>();
-    if (pa) serializeJson(pa, params); else params = "[]";
-    pm->requestSwitchTransient((uint8_t)prog, params);
+    pm->requestSwitchTransient((uint8_t)prog, e.params);
     return true;
 }
 
@@ -324,6 +433,7 @@ void playStart(uint8_t id, int index) {
     int n = 0;
     if (!loadMeta(id, &n)) return;   // playlist missing
     g_playId = id;
+    g_cacheDirty = true;             // file may have been edited since last cached
     g_clearPending = false;          // we're (re)starting — don't let a deferred clear wipe the new state
     g_notifyStopPending = false;     // ...nor a deferred stop-notify cancel it in the app
     // Schedule a debounced persist (10 s after the last play/swipe).
@@ -356,6 +466,7 @@ void onRotationChanged(uint8_t id, uint8_t mode, uint16_t interval) {
 }
 
 void onPositionsChanged(uint8_t id) {
+    g_cacheDirty = true;
     if (g_playId != (int)id) return;
     int n = 0;
     if (!loadMeta(id, &n)) return;

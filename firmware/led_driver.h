@@ -2,7 +2,8 @@
 #define LED_DRIVER_H
 
 #include <Arduino.h>
-#include <Adafruit_NeoPixel.h>
+#include "driver/rmt_tx.h"
+#include "driver/rmt_encoder.h"
 
 // Color order presets (index used in config/BLE protocol)
 #define LED_ORDER_GRB  0  // default for WS2812
@@ -17,10 +18,37 @@
 // WS2812 draws ~20 mA per channel (R/G/B) when fully on at 5 V.
 #define LED_MA_PER_CHANNEL 20
 
+// Multi-panel layout limits. Each distinct pin becomes one RMT TX channel;
+// the ESP32-S3 has 4 of them. Panels sharing a pin are daisy-chained in
+// config order, so more than 4 panels means chaining.
+#define LED_MAX_PANELS 8
+#define LED_MAX_STRIPS 4
+
+// One physical LED panel placed on the logical canvas.
+// (x, y) is the canvas cell of the panel's footprint corner; y=0 is the
+// bottom row (canvas convention). (w, h) are the panel's own dimensions as
+// wired, before rotation. rot rotates the panel clockwise on the canvas, so
+// a 90/270 panel occupies an h*w footprint. zigzag means serpentine wiring:
+// odd local rows run right-to-left.
+struct LedPanel {
+    uint8_t  pin;
+    uint16_t x;
+    uint16_t y;
+    uint16_t w;
+    uint16_t h;
+    uint16_t rot;      // 0, 90, 180, 270 (clockwise)
+    bool     zigzag;
+};
+
 class LedDriver {
 public:
     LedDriver(uint8_t pin, uint16_t width, uint16_t height, bool zigzag = false, uint8_t colorOrder = LED_ORDER_GRB);
     ~LedDriver();
+
+    // Optional multi-panel layout; must be called before begin(). Without it
+    // a single full-canvas panel on the constructor pin/zigzag is assumed.
+    // Returns false (and keeps the previous layout) on invalid input.
+    bool setPanels(const LedPanel* panels, uint8_t count);
 
     void begin();
     void setPixel(uint16_t x, uint16_t y, uint8_t r, uint8_t g, uint8_t b);
@@ -45,6 +73,20 @@ public:
     uint16_t getFadeScale() const { return _fadeScale; }
 
 private:
+    // One RMT TX channel: all panels on one pin, chained in config order.
+    struct Strip {
+        uint8_t  pin;
+        uint32_t numPixels;
+        uint32_t*            lut;      // chain index -> framebuffer pixel index (LED_LUT_OFF = off-canvas)
+        uint8_t*             out;      // numPixels*3 wire-order bytes (internal RAM: read from RMT ISR)
+        rmt_channel_handle_t channel;
+        rmt_encoder_handle_t encoder;  // bytes+reset composite encoder (stateful, one per channel)
+        bool     dma;                  // channel runs on the (single) DMA-capable slot
+    };
+
+    bool buildStrips();   // group panels by pin, allocate LUTs/output buffers
+    bool initRmt(Strip& s, bool tryDma);
+
     uint8_t  _pin;
     uint16_t _width;
     uint16_t _height;
@@ -55,7 +97,12 @@ private:
     uint8_t* _framebuffer;          // RGB framebuffer in PSRAM
     uint32_t _maxCurrentMa;         // 0 = no current limit
     uint16_t _fadeScale;            // 0..256 global brightness (crossfade)
-    Adafruit_NeoPixel* _strip;
+
+    LedPanel _panels[LED_MAX_PANELS];
+    uint8_t  _panelCount;
+    Strip    _strips[LED_MAX_STRIPS];
+    uint8_t  _stripCount;
+
     SemaphoreHandle_t  _mutex;
 };
 

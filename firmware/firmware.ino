@@ -189,6 +189,10 @@ void setup() {
         while (true) { delay(1000); }
     }
 
+    // Preload every playlist into the RAM store: from here on all playlist
+    // reads (rotation, GETs) are RAM-only; flash is written only to persist.
+    Playlists::init();
+
     // Read hardware config from flash (before creating LedDriver)
     uint8_t ledPin = 48;
     uint16_t ledWidth = 1, ledHeight = 1;
@@ -196,11 +200,20 @@ void setup() {
     uint8_t ledColorOrder = 0; // 0=GRB (default WS2812)
     Storage::loadHardwareConfig(ledPin, ledWidth, ledHeight, ledZigzag, ledColorOrder);
 
+    // Optional multi-panel layout ("panels" array in config.json). When
+    // present it overrides the legacy single-panel pin/zigzag fields.
+    LedPanel ledPanels[LED_MAX_PANELS];
+    uint8_t ledPanelCount = Storage::loadPanelConfig(ledPanels, LED_MAX_PANELS);
+
     Serial.println();
     Serial.println("=================================");
     Serial.println("  Shades Lamp v1.0");
     Serial.println("  ESP32-S3 N16R8");
-    Serial.printf("  LED: %ux%u on GPIO %u%s\r\n", ledWidth, ledHeight, ledPin, ledZigzag ? " (zigzag)" : "");
+    if (ledPanelCount > 0) {
+        Serial.printf("  LED: %ux%u canvas, %u panel(s)\r\n", ledWidth, ledHeight, ledPanelCount);
+    } else {
+        Serial.printf("  LED: %ux%u on GPIO %u%s\r\n", ledWidth, ledHeight, ledPin, ledZigzag ? " (zigzag)" : "");
+    }
     Serial.println("=================================");
     Serial.println();
 
@@ -210,6 +223,9 @@ void setup() {
 
     // Create and initialize LED driver with config values
     ledDriver = new LedDriver(ledPin, ledWidth, ledHeight, ledZigzag, ledColorOrder);
+    if (ledPanelCount > 0) {
+        ledDriver->setPanels(ledPanels, ledPanelCount);
+    }
     ledDriver->begin();
     ledDriver->setMaxCurrent(2000); // limit estimated LED draw to ~2 A
 

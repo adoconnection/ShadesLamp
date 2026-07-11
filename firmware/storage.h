@@ -16,6 +16,8 @@
 // (/programs/{id}.wasm, /meta/{id}.json, /params/{id}.json) are migrated to
 // the new layout automatically during init().
 
+struct LedPanel;  // led_driver.h
+
 namespace Storage {
 
     // Mount LittleFS, format on first use, migrate legacy flat layout
@@ -54,6 +56,11 @@ namespace Storage {
     // Read hardware config (pin, width, height, zigzag, colorOrder) from /config.json
     // Leaves parameters unchanged if fields are missing
     void loadHardwareConfig(uint8_t& pin, uint16_t& width, uint16_t& height, bool& zigzag, uint8_t& colorOrder);
+
+    // Read the multi-panel layout ("panels" array) from /config.json into out.
+    // Returns the number of panels loaded, 0 if the key is absent/invalid
+    // (caller falls back to the legacy single-panel fields above).
+    uint8_t loadPanelConfig(LedPanel* out, uint8_t maxPanels);
 
     // Save param values for a single program to /programs/{id}/params.json
     bool saveParamValues(uint8_t id, const char* json);

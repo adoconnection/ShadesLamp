@@ -87,6 +87,14 @@ void ProgramManager::begin() {
         _resumeProgramId = _programs[0].id;
     }
 
+    // Preload every program's meta into RAM: all lookups (BLE GETs, playlist
+    // guid/slug resolution) are RAM-only afterwards; flash meta is re-read
+    // only when a program is (re)installed.
+    uint32_t t0 = millis();
+    warmAllMeta();
+    Serial.printf("%s Meta preloaded for %u programs (%lu ms)\r\n",
+                  TAG, _programs.size(), (unsigned long)(millis() - t0));
+
     Serial.printf("%s Ready, %u programs, active=%u\r\n", TAG, _programs.size(), _activeId);
 }
 
@@ -304,6 +312,10 @@ String ProgramManager::programGuid(uint8_t id) const {
     return _programs[idx].guid;
 }
 
+void ProgramManager::warmAllMeta() const {
+    for (const ProgramInfo& p : _programs) ensureMetaLoaded(p.id);
+}
+
 int ProgramManager::resolveGuid(const String& guid) const {
     if (guid.length() == 0) return -1;
     for (const ProgramInfo& p : _programs) {
@@ -396,22 +408,18 @@ bool ProgramManager::setProgramMeta(uint8_t id, const String& json) {
     // program whose meta never arrives stays unmarked and is wiped on reboot.
     Storage::markProgramInstalled(id);
 
-    // Update cached fields
-    JsonDocument richDoc;
-    if (!deserializeJson(richDoc, json)) {
-        xSemaphoreTake(_mutex, portMAX_DELAY);
-        if (richDoc.containsKey("author"))   _programs[idx].author = richDoc["author"].as<String>();
-        if (richDoc.containsKey("category")) _programs[idx].category = richDoc["category"].as<String>();
-        if (richDoc.containsKey("pulse"))    _programs[idx].pulse = richDoc["pulse"].as<String>();
-        if (richDoc.containsKey("cover")) {
-            String coverStr;
-            serializeJson(richDoc["cover"], coverStr);
-            _programs[idx].coverJson = coverStr;
-        }
-        xSemaphoreGive(_mutex);
-    }
+    // Write-through: refresh the FULL RAM copy (name/guid/slug/version too,
+    // not just the display fields) from the meta that was just persisted.
+    refreshMeta(id);
 
     return true;
+}
+
+void ProgramManager::refreshMeta(uint8_t id) {
+    int idx = findProgramIndex(id);
+    if (idx < 0) return;
+    _programs[idx].loaded = false;
+    ensureMetaLoaded(id);
 }
 
 String ProgramManager::getProgramParamsJson(uint8_t id) const {
@@ -538,11 +546,20 @@ void ProgramManager::setHardwareConfig(uint8_t pin, uint16_t width, uint16_t hei
     _ledHeight = height;
     _ledZigzag = zigzag;
     _ledColorOrder = colorOrder;
-    saveConfig();
+    // Explicit legacy single-panel config replaces any multi-panel layout.
+    saveConfig(true);
 }
 
-void ProgramManager::saveConfig() {
+void ProgramManager::saveConfig(bool dropPanels) {
     JsonDocument doc;
+    // Start from the existing file so keys this class doesn't own (e.g. the
+    // multi-panel "panels" layout) are preserved across saves.
+    String existing = Storage::loadConfig();
+    if (existing.length() > 0) {
+        deserializeJson(doc, existing);  // on parse error doc stays empty
+    }
+    if (dropPanels) doc.remove("panels");
+
     doc["active"] = _resumeProgramId;   // last manually-chosen program (resume target)
     doc["name"] = _deviceName;
     doc["ledPin"] = _ledPin;

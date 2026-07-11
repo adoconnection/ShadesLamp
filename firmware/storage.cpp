@@ -1,4 +1,5 @@
 #include "storage.h"
+#include "led_driver.h"
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 #include <algorithm>
@@ -338,6 +339,44 @@ void loadHardwareConfig(uint8_t& pin, uint16_t& width, uint16_t& height, bool& z
     if (doc.containsKey("ledColorOrder")) colorOrder = doc["ledColorOrder"].as<uint8_t>();
 
     Serial.printf("%s HW config: pin=%u, %ux%u, zigzag=%d, order=%u\r\n", TAG, pin, width, height, zigzag, colorOrder);
+}
+
+uint8_t loadPanelConfig(LedPanel* out, uint8_t maxPanels) {
+    String configStr = loadConfig();
+    if (configStr.length() == 0) return 0;
+
+    JsonDocument doc;
+    if (deserializeJson(doc, configStr)) return 0;
+
+    JsonArray arr = doc["panels"].as<JsonArray>();
+    if (arr.isNull()) return 0;
+
+    uint8_t count = 0;
+    for (JsonObject p : arr) {
+        if (count >= maxPanels) {
+            Serial.printf("%s Panel config: more than %u panels, extra ignored\r\n", TAG, maxPanels);
+            break;
+        }
+        LedPanel& lp = out[count];
+        lp.pin    = p["pin"] | 0;
+        lp.x      = p["x"] | 0;
+        lp.y      = p["y"] | 0;
+        lp.w      = p["w"] | 0;
+        lp.h      = p["h"] | 0;
+        lp.rot    = p["rot"] | 0;
+        lp.zigzag = p["zigzag"] | false;
+        if (lp.w == 0 || lp.h == 0 ||
+            (lp.rot != 0 && lp.rot != 90 && lp.rot != 180 && lp.rot != 270)) {
+            Serial.printf("%s Panel %u invalid (%ux%u rot=%u) — panel config ignored\r\n",
+                          TAG, count, lp.w, lp.h, lp.rot);
+            return 0;
+        }
+        count++;
+    }
+    if (count > 0) {
+        Serial.printf("%s Panel config: %u panel(s)\r\n", TAG, count);
+    }
+    return count;
 }
 
 bool saveParamValues(uint8_t id, const char* json) {

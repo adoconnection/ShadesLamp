@@ -64,6 +64,15 @@ public:
     // the guid does not).
     int resolveGuid(const String& guid) const;
 
+    // Force-load every program's meta into the RAM cache. Called once at boot
+    // (begin) so all meta lookups afterwards are RAM-only; playlists also call
+    // it when rebuilding the rotation position cache.
+    void warmAllMeta() const;
+
+    // Re-read one program's meta from flash into the RAM cache. Call after
+    // meta.json changes on disk (install, external file write).
+    void refreshMeta(uint8_t id);
+
     // Resolve a program slug to its current device id, or -1 if none installed.
     // Slug is the reliable stored identity for legacy positions whose numeric
     // `prog` slot has since drifted to a different program.
@@ -95,8 +104,11 @@ public:
     // Used by hardware controls to navigate next/previous.
     std::vector<uint8_t> getOrderedIds() const;
 
-    // Persist global config (active program, name, hw) to /config.json
-    void saveConfig();
+    // Persist global config (active program, name, hw) to /config.json.
+    // Merges into the existing file so unknown keys (e.g. the multi-panel
+    // "panels" layout) survive. dropPanels removes the panel layout — used
+    // when the legacy single-panel hw config is set explicitly over BLE.
+    void saveConfig(bool dropPanels = false);
 
     // Persist param values for a specific program to /params/{id}.json
     void saveActiveParams();

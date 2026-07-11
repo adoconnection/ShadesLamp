@@ -22,6 +22,18 @@
 // Global pointer for BLE callbacks
 BleService* g_bleService = nullptr;
 
+// Generic file commands (WRITE/APPEND/DELETE) can rewrite files that are
+// mirrored in RAM — the playlist store and the program meta cache. Re-sync
+// the mirrors after a successful flash mutation so runtime stays RAM-only.
+static void syncRamCaches(ProgramManager* pm, const String& path) {
+    Playlists::onFileChanged(path);
+    int id = -1, consumed = 0;
+    if (sscanf(path.c_str(), "/programs/%d/meta.json%n", &id, &consumed) == 1 &&
+        consumed == (int)path.length() && id >= 0 && id <= 255) {
+        pm->refreshMeta((uint8_t)id);
+    }
+}
+
 // ── BLE Server Callbacks ───────────────────────────────────────────────────
 
 class ServerCallbacks : public BLEServerCallbacks {
@@ -546,6 +558,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 }
                 bool ok = Storage::writeFileEnsure(path.c_str(), data, dlen);
                 Serial.printf("%s CMD WRITE_FILE '%s' %u bytes -> %s\r\n", TAG, path.c_str(), (unsigned)dlen, ok ? "OK" : "FAIL");
+                if (ok) syncRamCaches(pm, path);
                 g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false,\"err\":\"write failed\"}", !ok);
                 break;
             }
@@ -569,6 +582,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                     break;
                 }
                 bool ok = Storage::appendFileEnsure(path.c_str(), data, dlen);
+                if (ok) syncRamCaches(pm, path);
                 g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false,\"err\":\"append failed\"}", !ok);
                 break;
             }
@@ -585,6 +599,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 }
                 bool ok = Storage::deletePath(path.c_str());
                 Serial.printf("%s CMD DELETE_FILE '%s' -> %s\r\n", TAG, path.c_str(), ok ? "OK" : "FAIL");
+                if (ok) syncRamCaches(pm, path);
                 g_bleService->sendResponse(ok ? "{\"ok\":true}" : "{\"ok\":false,\"err\":\"delete failed\"}", !ok);
                 break;
             }
