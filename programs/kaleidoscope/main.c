@@ -4,6 +4,12 @@
  * Kaleidoscope - Symmetric rotating patterns with color transitions.
  * Pixels are colored based on angle and distance from center,
  * creating rotational symmetry on a cylindrical LED matrix.
+ *
+ * Optimized: the pixel->polar mapping (norm_dist, angle) is static per canvas
+ * size, so it's baked into per-pixel LUTs rebuilt only when W/H change. The
+ * three per-pixel sines/cosines go through a 256-entry sine table, and m_hsv is
+ * replaced by a 256-entry palette LUT (built once per palette change) scaled by
+ * the per-pixel brightness. Per-pixel host calls drop from ~7 to 0.
  */
 
 static const char META[] =
@@ -35,24 +41,25 @@ int get_meta_len(void) { return sizeof(META) - 1; }
 #define PI       3.14159265f
 #define HALF_PI  1.57079632f
 
-static float fsin(float x) { return m_sin(x); }
-
-static float fcos(float x) { return m_cos(x); }
-
-static float fmod_f(float x, float m) {
-    if (m == 0.0f) return 0.0f;
-    while (x < 0.0f) x += m;
-    while (x >= m) x -= m;
-    return x;
+/* 256-entry sine table (built once in init via native m_sin), then inline
+ * lookups replace per-pixel m_sin/m_cos. Linearly interpolated: here the sine
+ * feeds the hue index, which wraps at the palette seam, so a raw 256-step lookup
+ * would flip a few boundary pixels red<->magenta; interpolation keeps the error
+ * negligible. SINT[256] duplicates SINT[0] as the interpolation guard. */
+#define SIN_N 1024
+static float SINT[SIN_N + 1];
+static void init_sin(void) {
+    for (int i = 0; i < SIN_N; i++) SINT[i] = m_sin((float)i * TWO_PI / (float)SIN_N);
+    SINT[SIN_N] = SINT[0];
 }
-
-/* ---- HSV to RGB (native, hue 0..255) ---- */
-static void hsv2rgb(int hue, int sat, int val, int *r, int *g, int *b) {
-    int c = m_hsv(hue & 0xFF, sat, val);
-    *r = (c >> 16) & 255;
-    *g = (c >> 8) & 255;
-    *b = c & 255;
+static inline float fsin(float a) {
+    float idx = a * 162.9746617f + 16384.0f;  /* 1024/TWO_PI; 16384 = 16*1024, masks cleanly */
+    int i = (int)idx;
+    float f = idx - (float)i;
+    i &= (SIN_N - 1);
+    return SINT[i] + (SINT[i + 1] - SINT[i]) * f;
 }
+static inline float fcos(float a) { return fsin(a + HALF_PI); }
 
 /* ---- State ---- */
 #define MAX_W 64
@@ -62,8 +69,21 @@ static float time_offset;
 static int cur_w, cur_h;
 static int32_t prev_tick;
 
+/* Per-pixel polar LUTs (norm_dist 0..1, angle 0..TWO_PI), static per canvas. */
+static float NDIST[MAX_W * MAX_H];
+static float ANG[MAX_W * MAX_H];
+static int geo_w = -1, geo_h = -1;
+
+/* Palette LUT at full value, indexed by color value 0..255. */
+static uint8_t LR[256], LG[256], LB[256];
+static int pal_cached = -1;
+
+static uint8_t FB[MAX_W * MAX_H * 3];
+EXPORT(get_framebuffer) int get_framebuffer(void) { return (int)FB; }
+
 EXPORT(init)
 void init(void) {
+    init_sin();
     time_offset = 0.0f;
     prev_tick = 0;
     cur_w = get_width();
@@ -109,6 +129,44 @@ static void palette_color(int palette, float val, int *hue, int *sat) {
     }
 }
 
+/* Bake the palette into an RGB LUT at full value; per-pixel we scale by the
+ * pixel's brightness. m_hsv channels are linear in value, so LUT*val/255
+ * reproduces m_hsv(hue,sat,val) to within a couple of counts. */
+static void build_pal(int palette) {
+    if (palette == pal_cached) return;
+    pal_cached = palette;
+    for (int i = 0; i < 256; i++) {
+        int hue, sat;
+        palette_color(palette, (float)i / 255.0f, &hue, &sat);
+        int c = m_hsv(hue & 0xFF, sat, 255);
+        LR[i] = (c >> 16) & 255;
+        LG[i] = (c >> 8) & 255;
+        LB[i] = c & 255;
+    }
+}
+
+/* Rebuild the polar LUTs when the canvas size changes (one-off m_hypot/m_atan2
+ * per pixel instead of every frame). */
+static void build_geo(int W, int H) {
+    if (W == geo_w && H == geo_h) return;
+    geo_w = W; geo_h = H;
+    float cx = (float)W / 2.0f;
+    float cy = (float)H / 2.0f;
+    float max_dist = m_hypot(cx, cy);
+    if (max_dist < 1.0f) max_dist = 1.0f;
+    for (int x = 0; x < W; x++) {
+        for (int y = 0; y < H; y++) {
+            float dx = (float)x - cx;
+            float dy = (float)y - cy;
+            int p = y * W + x;
+            NDIST[p] = m_hypot(dx, dy) / max_dist;
+            float a = m_atan2(dy, dx);
+            if (a < 0.0f) a += TWO_PI;
+            ANG[p] = a;
+        }
+    }
+}
+
 EXPORT(update)
 void update(int tick_ms) {
     int speed    = get_param_i32(0);
@@ -136,63 +194,62 @@ void update(int tick_ms) {
     /* Keep time_offset from growing unbounded */
     if (time_offset > 1000.0f) time_offset -= 1000.0f;
 
-    float cx = (float)cur_w / 2.0f;
-    float cy = (float)cur_h / 2.0f;
-    float max_dist = m_hypot(cx, cy);
-    if (max_dist < 1.0f) max_dist = 1.0f;
+    build_geo(cur_w, cur_h);
+    build_pal(palette);
 
     /* Angular size of one segment */
     float seg_angle = TWO_PI / (float)segments;
+    float half_seg = seg_angle / 2.0f;
 
-    for (int x = 0; x < cur_w; x++) {
-        for (int y = 0; y < cur_h; y++) {
-            float dx = (float)x - cx;
-            float dy = (float)y - cy;
+    /* Frame-constant time terms, hoisted out of the pixel loop. */
+    float t2 = time_offset * 2.0f;
+    float t15 = time_offset * 1.5f;
+    float t3 = time_offset * 3.0f;
+    /* Global color rotation, reduced to its fractional part once per frame. */
+    float trot = time_offset * 0.1f;
+    trot = trot - (float)(int)trot;
+    if (trot < 0.0f) trot += 1.0f;
 
-            /* Distance from center, normalized 0-1 */
-            float dist = m_hypot(dx, dy);
-            float norm_dist = dist / max_dist;
-
-            /* Angle from center: -PI to PI -> 0 to TWO_PI */
-            float angle = m_atan2(dy, dx);
-            if (angle < 0.0f) angle += TWO_PI;
+    int W = cur_w, H = cur_h;
+    for (int x = 0; x < W; x++) {
+        for (int y = 0; y < H; y++) {
+            int p = y * W + x;
+            float norm_dist = NDIST[p];
+            float angle = ANG[p];
 
             /* Fold angle into a single segment for mirror symmetry */
-            float seg_pos = fmod_f(angle, seg_angle);
-            /* Mirror within segment: fold back after halfway */
-            float half_seg = seg_angle / 2.0f;
-            if (seg_pos > half_seg) {
-                seg_pos = seg_angle - seg_pos;
-            }
-            /* Normalize folded angle: 0 to 1 */
+            int k = (int)(angle / seg_angle);
+            float seg_pos = angle - (float)k * seg_angle;
+            if (seg_pos > half_seg) seg_pos = seg_angle - seg_pos;
             float folded = seg_pos / half_seg;
 
-            /* Generate color value from folded angle, distance, and time */
             /* Multiple overlapping wave functions for complexity */
-            float wave1 = fsin(folded * PI * 3.0f + time_offset * 2.0f + norm_dist * 8.0f);
-            float wave2 = fcos(norm_dist * PI * 5.0f - time_offset * 1.5f + folded * 4.0f);
-            float wave3 = fsin((folded + norm_dist) * PI * 2.0f + time_offset * 3.0f);
+            float wave1 = fsin(folded * PI * 3.0f + t2 + norm_dist * 8.0f);
+            float wave2 = fcos(norm_dist * PI * 5.0f - t15 + folded * 4.0f);
+            float wave3 = fsin((folded + norm_dist) * PI * 2.0f + t3);
 
             /* Combine waves: result in -3..3, normalize to 0..1 */
             float combined = (wave1 + wave2 + wave3) / 6.0f + 0.5f;
             if (combined < 0.0f) combined = 0.0f;
             if (combined > 1.0f) combined = 1.0f;
 
-            /* Add a slow global rotation component */
-            float color_val = fmod_f(combined + time_offset * 0.1f, 1.0f);
+            /* Add a slow global rotation component (fmod by 1) */
+            float color_val = combined + trot;
+            if (color_val >= 1.0f) color_val -= 1.0f;
 
-            /* Look up palette color */
-            int hue, sat;
-            palette_color(palette, color_val, &hue, &sat);
+            int idx = (int)(color_val * 255.0f);
+            if (idx < 0) idx = 0;
+            if (idx > 255) idx = 255;
 
             /* Modulate brightness by distance: slightly brighter near center */
             int val = bright - (int)(norm_dist * 40.0f);
             if (val < 1) val = 1;
             if (val > 255) val = 255;
 
-            int r, g, b;
-            hsv2rgb(hue, sat, val, &r, &g, &b);
-            set_pixel(x, y, r, g, b);
+            int o = p * 3;
+            FB[o]     = (uint8_t)(LR[idx] * val / 255);
+            FB[o + 1] = (uint8_t)(LG[idx] * val / 255);
+            FB[o + 2] = (uint8_t)(LB[idx] * val / 255);
         }
     }
 

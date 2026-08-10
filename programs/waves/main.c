@@ -31,18 +31,19 @@ int get_meta_ptr(void) { return (int)META; }
 EXPORT(get_meta_len)
 int get_meta_len(void) { return sizeof(META) - 1; }
 
-/* sine of an integer angle (0..255 per period), result -1..1 — native */
+/* sine of an integer angle (0..255 per period), result -1..1 — native.
+   Used for the surface height (per-column, few calls/frame): kept on the exact
+   host m_sin so the water line never shifts by a sub-pixel rounding and flips a
+   boundary pixel between lit/unlit. */
 static float fsin(int angle) {
     return m_sin((float)angle * (6.28318530f / 256.0f));
 }
 
-/* ---- HSV to RGB (native host primitive) ---- */
-static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
-    if (v < 0) v = 0; if (v > 255) v = 255;
-    if (s < 0) s = 0; if (s > 255) s = 255;
-    int c = m_hsv(h & 255, s, v);
-    *r = (c >> 16) & 255; *g = (c >> 8) & 255; *b = c & 255;
-}
+/* Same integer-angle sine via a 256-entry table, for the per-pixel shimmer
+   (H*W calls/frame): a direct index removes that inner-loop host call. Only
+   modulates brightness by ±0.1, so table-vs-host precision can't flip geometry. */
+static float SINT[256];
+static float fsin_t(int angle) { return SINT[angle & 255]; }
 
 /* ---- State ---- */
 #define MAX_W 64
@@ -51,10 +52,17 @@ static uint32_t phase;            /* travels with time*speed */
 static float surf[MAX_W];         /* surface height per column (px) */
 static float crest[MAX_W];        /* 0..1 how high this column's crest is */
 
+/* Per-frame depth colour LUT: water hue/sat depend only on depth (td), so bake
+   the full-value (v=255) RGB per depth index once and scale by the per-pixel
+   value. Rebuilt each frame because the Hue param can drift. */
+static uint8_t BR[256], BG[256], BB[256];
+
 EXPORT(init)
 void init(void) {
     prev_tick = 0;
     phase = 0;
+    for (int i = 0; i < 256; i++)
+        SINT[i] = m_sin((float)i * (6.28318530f / 256.0f));
 }
 
 EXPORT(update)
@@ -86,6 +94,15 @@ void update(int tick_ms) {
     float level_px = (float)level * 0.01f * (float)H;
     float amp_px   = (float)chop  * 0.01f * (float)H * 0.22f;
     float foam_amt = (float)foam_p * 0.01f;
+
+    /* depth colour LUT: index = (int)(td*255), matching the per-pixel td */
+    for (int i = 0; i < 256; i++) {
+        float td   = (float)i / 255.0f;
+        int   sat  = 205 + (int)(td * 50.0f);           /* deeper = richer */
+        int   phue = (hue + (int)(td * 16.0f)) & 255;   /* deep slightly bluer */
+        int   c    = m_hsv(phue, sat, 255);
+        BR[i] = (c >> 16) & 255; BG[i] = (c >> 8) & 255; BB[i] = c & 255;
+    }
 
     /* ---- 1. Build the wavy surface height for each column ----
        Integer wave numbers over the full width keep it seamless around
@@ -126,15 +143,20 @@ void update(int tick_ms) {
                 float vf = 0.40f + 0.60f * (1.0f - td);
 
                 /* gentle internal shimmer */
-                float sh = fsin(x * 34 + y * 19 + shph) * 0.10f;
+                float sh = fsin_t(x * 34 + y * 19 + shph) * 0.10f;
                 vf += sh * (1.0f - td);
                 if (vf < 0.0f) vf = 0.0f;
 
                 int val = (int)(vf * (float)bright * cov + 0.5f);
-                int sat = 205 + (int)(td * 50.0f);          /* deeper = richer */
-                int phue = (hue + (int)(td * 16.0f)) & 255; /* deep slightly bluer */
+                if (val < 0) val = 0; if (val > 255) val = 255;
 
-                hsv_to_rgb(phue, sat, val, &r, &g, &b);
+                /* colour from the depth LUT (hue/sat), scaled by value (HSV is
+                   linear in v, so this reproduces m_hsv(phue,sat,val)) */
+                int di = (int)(td * 255.0f);
+                if (di < 0) di = 0; if (di > 255) di = 255;
+                r = (BR[di] * val) / 255;
+                g = (BG[di] * val) / 255;
+                b = (BB[di] * val) / 255;
             }
 
             /* ---- foam: whitecaps near the crest line ---- */

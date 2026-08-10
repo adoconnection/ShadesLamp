@@ -64,9 +64,30 @@ static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
     *b = c & 255;
 }
 
+/* ---- Framebuffer fast-path + hue->RGB LUTs ---- */
+#define MAX_W 64
+#define MAX_H 64
+static uint8_t RGB[MAX_W * MAX_H * 3];
+EXPORT(get_framebuffer) int get_framebuffer(void) { return (int)RGB; }
+/* Column colors use only two saturations (220 body, 140 head). Precompute a
+ * full hue->RGB LUT for each at max value; the per-pixel work is then a scale
+ * by `val`, removing the per-pixel m_hsv host call entirely. */
+static uint8_t B_R[256], B_G[256], B_B[256];   /* sat 220 (body)  */
+static uint8_t H_R[256], H_G[256], H_B[256];   /* sat 140 (head)  */
+static int lut_built = 0;
+static void build_lut(void) {
+    if (lut_built) return;
+    lut_built = 1;
+    for (int h = 0; h < 256; h++) {
+        int c = m_hsv(h, 220, 255);
+        B_R[h] = (c >> 16) & 255; B_G[h] = (c >> 8) & 255; B_B[h] = c & 255;
+        c = m_hsv(h, 140, 255);
+        H_R[h] = (c >> 16) & 255; H_G[h] = (c >> 8) & 255; H_B[h] = c & 255;
+    }
+}
+
 /* ---- Multi-wave state ---- */
 #define MAX_WAVES 5
-#define MAX_W 64
 
 static float wave_target[MAX_WAVES][MAX_W];  /* peak height per column */
 static int   wave_hue[MAX_WAVES][MAX_W];     /* hue per column */
@@ -119,9 +140,12 @@ void update(int tick_ms) {
     int H = get_height();
     if (W > MAX_W) W = MAX_W;
     if (W < 1) W = 1;
+    if (H > MAX_H) H = MAX_H;
     if (H < 1) H = 1;
     if (num_waves > MAX_WAVES) num_waves = MAX_WAVES;
     if (num_waves < 1) num_waves = 1;
+
+    build_lut();
 
     rng_state ^= (uint32_t)tick_ms;
 
@@ -165,9 +189,7 @@ void update(int tick_ms) {
     }
 
     /* ---- Clear display ---- */
-    for (int x = 0; x < W; x++)
-        for (int y = 0; y < H; y++)
-            set_pixel(x, y, 0, 0, 0);
+    m_fill(RGB, W * H, 0);
 
     /* Animation speed */
     float phase_speed = 0.45f;
@@ -241,10 +263,17 @@ void update(int tick_ms) {
                 if (val > 255) val = 255;
                 if (val < 1) continue;
 
-                int sat = (y == head_y) ? 140 : 220;
-                int r, g, b;
-                hsv_to_rgb(hue, sat, val, &r, &g, &b);
-                set_pixel(x, y, r, g, b);
+                /* head pixel uses sat 140 LUT, body uses sat 220 LUT */
+                int o = (y * W + x) * 3;
+                if (y == head_y) {
+                    RGB[o]     = (uint8_t)(H_R[hue] * val >> 8);
+                    RGB[o + 1] = (uint8_t)(H_G[hue] * val >> 8);
+                    RGB[o + 2] = (uint8_t)(H_B[hue] * val >> 8);
+                } else {
+                    RGB[o]     = (uint8_t)(B_R[hue] * val >> 8);
+                    RGB[o + 1] = (uint8_t)(B_G[hue] * val >> 8);
+                    RGB[o + 2] = (uint8_t)(B_B[hue] * val >> 8);
+                }
             }
         }
     }

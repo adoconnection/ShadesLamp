@@ -66,6 +66,22 @@ static uint8_t fb_hue[MAX_W * MAX_H];
 static uint8_t fb_sat[MAX_W * MAX_H];
 static uint8_t fb_val[MAX_W * MAX_H];
 
+/* RGB framebuffer fast-path (row-major (y*W+x)*3) + hue->RGB LUT at full sat.
+ * Lit trail pixels always carry sat=255, so a single 256-entry hue LUT scaled
+ * by value replaces the per-pixel m_hsv host call in the present loop. */
+static uint8_t RGB[MAX_W * MAX_H * 3];
+EXPORT(get_framebuffer) int get_framebuffer(void) { return (int)RGB; }
+static uint8_t LR[256], LG[256], LB[256];
+static int lut_built = 0;
+static void build_lut(void) {
+    if (lut_built) return;
+    lut_built = 1;
+    for (int h = 0; h < 256; h++) {
+        int c = m_hsv(h, 255, 255);
+        LR[h] = (c >> 16) & 255; LG[h] = (c >> 8) & 255; LB[h] = c & 255;
+    }
+}
+
 static int cur_w, cur_h;
 static int32_t prev_tick;
 #define FB(x,y) ((x) * cur_h + (y))
@@ -254,17 +270,20 @@ void update(int tick_ms) {
         wu_draw(fx, fy, (uint8_t)p_bright, hue);
     }
 
-    /* Render framebuffer to display */
+    /* Render framebuffer to display via LUT (no per-pixel m_hsv) */
+    build_lut();
     for (int x = 0; x < cur_w; x++) {
         for (int y = 0; y < cur_h; y++) {
             int fi = FB(x, y);
             int v = (int)fb_val[fi];
+            int o = (y * cur_w + x) * 3;
             if (v < 1) {
-                set_pixel(x, y, 0, 0, 0);
+                RGB[o] = 0; RGB[o + 1] = 0; RGB[o + 2] = 0;
             } else {
-                int r, g, b;
-                hsv2rgb(fb_hue[fi], fb_sat[fi], v, &r, &g, &b);
-                set_pixel(x, y, r, g, b);
+                int h = fb_hue[fi];
+                RGB[o]     = (uint8_t)(LR[h] * v >> 8);
+                RGB[o + 1] = (uint8_t)(LG[h] * v >> 8);
+                RGB[o + 2] = (uint8_t)(LB[h] * v >> 8);
             }
         }
     }

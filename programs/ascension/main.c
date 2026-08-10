@@ -99,19 +99,30 @@ EXPORT(update) void update(int tick_ms){
     float halfW=(float)W*0.5f;
     float invH=1.0f/(float)(H>1?H-1:1);
 
+    /* The plume profile depends only on (x, stream) and the pulse only on
+     * (y, stream): factor them out of the pixel loop. The per-pixel work
+     * collapses to `streams` multiply-adds — no divide, no sine — which is
+     * what keeps a 32x48 canvas within the 33 ms frame budget in wasm3.
+     * Same terms, same summation order: the picture is bit-identical. */
+    static float fall[8][MAX_W];                  /* soft plume profile */
+    for(int p=0;p<streams;p++){
+        for(int x=0;x<W;x++){
+            float dx=(float)x-cx[p];
+            if(dx>halfW)dx-=(float)W; else if(dx<-halfW)dx+=(float)W;
+            fall[p][x]=sig2/(sig2+dx*dx);
+        }
+    }
+
     for(int y=0;y<H;y++){
         float ny=(float)y*invH;
         float env=0.25f+0.75f*(1.0f-ny);          /* source bright at base, fades up */
         int   hidx=(int)(ny*150.0f)+(int)(t*25.0f); /* hue shifts with height & time */
+        float pulse[8];                           /* travels up */
+        for(int p=0;p<streams;p++)
+            pulse[p]=0.5f+0.5f*fsin(ny*tf - t*2.0f + (float)p*1.7f);
         for(int x=0;x<W;x++){
             float shade=0.0f;
-            for(int p=0;p<streams;p++){
-                float dx=(float)x-cx[p];
-                if(dx>halfW)dx-=(float)W; else if(dx<-halfW)dx+=(float)W;
-                float fall=sig2/(sig2+dx*dx);                 /* soft plume profile */
-                float pulse=0.5f+0.5f*fsin(ny*tf - t*2.0f + (float)p*1.7f); /* travels up */
-                shade+=fall*pulse;
-            }
+            for(int p=0;p<streams;p++) shade+=fall[p][x]*pulse[p];
             shade*=env;
             putpx(x,y,hidx,(int)(shade*(float)bright));
         }

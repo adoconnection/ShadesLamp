@@ -4,7 +4,7 @@
   "desc": "Synchronized fountain columns rising to different heights and fading on return",
   "author": "Shades",
   "category": "Particles",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "cover": {
     "from": "#1a0533",
     "to": "#ff6b35",

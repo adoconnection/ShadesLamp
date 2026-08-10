@@ -91,6 +91,22 @@ static uint8_t fb_hue[MAX_W * MAX_H];
 static uint8_t fb_sat[MAX_W * MAX_H];
 static uint8_t fb_val[MAX_W * MAX_H];
 
+/* RGB framebuffer fast-path (row-major (y*W+x)*3) + hue->RGB LUT at full sat.
+ * Flame pixels always carry sat=255, so a single hue LUT scaled by value
+ * replaces the per-pixel m_hsv host call across the whole canvas. */
+static uint8_t RGB[MAX_W * MAX_H * 3];
+EXPORT(get_framebuffer) int get_framebuffer(void) { return (int)RGB; }
+static uint8_t LR[256], LG[256], LB[256];
+static int lut_built = 0;
+static void build_lut(void) {
+    if (lut_built) return;
+    lut_built = 1;
+    for (int h = 0; h < 256; h++) {
+        int c = m_hsv(h, 255, 255);
+        LR[h] = (c >> 16) & 255; LG[h] = (c >> 8) & 255; LB[h] = c & 255;
+    }
+}
+
 #define FB(x,y) ((x) * cur_h + (y))
 
 static int cur_w, cur_h;
@@ -171,18 +187,20 @@ static void spark_draw(float fx, float fy, uint8_t bright, uint8_t hue_val, int 
         if (sat < 50) sat = 50;
         hsv2rgb(hue_val, sat, v, &r, &g, &b);
 
-        /* Read current pixel, add spark on top */
+        /* Base = flame at this pixel (sat=255) via LUT — recomputed rather than
+         * read back from RGB so overlapping sparks overwrite (never stack), the
+         * same way the old set_pixel present behaved. */
         int fi = FB(px, py);
         int cv = (int)fb_val[fi] * global_bri / 255;
         if (cv > 0) {
-            int cr, cg, cb;
-            hsv2rgb(fb_hue[fi], fb_sat[fi], cv, &cr, &cg, &cb);
-            r += cr; if (r > 255) r = 255;
-            g += cg; if (g > 255) g = 255;
-            b += cb; if (b > 255) b = 255;
+            int h = fb_hue[fi];
+            r += LR[h] * cv >> 8; if (r > 255) r = 255;
+            g += LG[h] * cv >> 8; if (g > 255) g = 255;
+            b += LB[h] * cv >> 8; if (b > 255) b = 255;
         }
 
-        set_pixel(px, py, r, g, b);
+        int o = (py * cur_w + px) * 3;
+        RGB[o] = (uint8_t)r; RGB[o + 1] = (uint8_t)g; RGB[o + 2] = (uint8_t)b;
     }
 }
 
@@ -324,17 +342,20 @@ void update(int tick_ms) {
         steps++;
     }
 
-    /* ======== STEP 4: Render flame from framebuffer ======== */
+    /* ======== STEP 4: Render flame from framebuffer via LUT ======== */
+    build_lut();
     for (int x = 0; x < cur_w; x++) {
         for (int y = 0; y < cur_h; y++) {
             int fi = FB(x, y);
             int v = (int)fb_val[fi] * bright / 255;
+            int o = (y * cur_w + x) * 3;
             if (v < 1) {
-                set_pixel(x, y, 0, 0, 0);
+                RGB[o] = 0; RGB[o + 1] = 0; RGB[o + 2] = 0;
             } else {
-                int r, g, b;
-                hsv2rgb(fb_hue[fi], fb_sat[fi], v, &r, &g, &b);
-                set_pixel(x, y, r, g, b);
+                int h = fb_hue[fi];
+                RGB[o]     = (uint8_t)(LR[h] * v >> 8);
+                RGB[o + 1] = (uint8_t)(LG[h] * v >> 8);
+                RGB[o + 2] = (uint8_t)(LB[h] * v >> 8);
             }
         }
     }

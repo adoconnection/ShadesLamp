@@ -5,6 +5,13 @@
  * from the center. Uses axial hex coordinates to map each pixel to
  * a hex cell, then colors based on cell distance from center + time.
  * Designed for a cylindrical LED matrix (Y=0 is bottom).
+ *
+ * Optimized: the hex geometry (which cell a pixel belongs to, its distance
+ * from the centre cell, the in-cell edge factor and cell identity) is static
+ * per canvas size / scale, so it's baked into per-pixel byte LUTs rebuilt only
+ * when W/H/scale change. The two per-pixel sines go through a 256-entry sine
+ * table, and m_hsv is replaced by a 256-entry palette LUT scaled by the
+ * per-pixel brightness. Per-pixel host calls drop from ~4 to 0.
  */
 
 static const char META[] =
@@ -38,9 +45,23 @@ int get_meta_len(void) { return sizeof(META) - 1; }
 #define SQRT3    1.73205080f
 #define SQRT3_2  0.86602540f  /* sqrt(3)/2 */
 
-static float fsin(float x) { return m_sin(x); }
-
-static float fcos(float x) { return m_cos(x); }
+/* 256-entry sine table (built once in init via native m_sin). Linearly
+ * interpolated: the sine feeds the hue index (which wraps at the palette seam),
+ * so a raw 256-step lookup would flip a few boundary pixels; interpolation keeps
+ * the error negligible. SINT[256] duplicates SINT[0] as the interpolation guard. */
+#define SIN_N 1024
+static float SINT[SIN_N + 1];
+static void init_sin(void) {
+    for (int i = 0; i < SIN_N; i++) SINT[i] = m_sin((float)i * TWO_PI / (float)SIN_N);
+    SINT[SIN_N] = SINT[0];
+}
+static inline float fsin(float a) {
+    float idx = a * 162.9746617f + 16384.0f;  /* 1024/TWO_PI; 16384 = 16*1024, masks cleanly */
+    int i = (int)idx;
+    float f = idx - (float)i;
+    i &= (SIN_N - 1);
+    return SINT[i] + (SINT[i + 1] - SINT[i]) * f;
+}
 
 static float fabs_f(float x) { return x < 0.0f ? -x : x; }
 
@@ -55,14 +76,6 @@ static float floor_f(float x) {
     int i = (int)x;
     if ((float)i > x) i--;
     return (float)i;
-}
-
-/* ---- HSV to RGB (native, hue 0..255) ---- */
-static void hsv2rgb(int hue, int sat, int val, int *r, int *g, int *b) {
-    int c = m_hsv(hue & 0xFF, sat, val);
-    *r = (c >> 16) & 255;
-    *g = (c >> 8) & 255;
-    *b = c & 255;
 }
 
 /* ---- Palette functions ---- */
@@ -92,6 +105,24 @@ static void palette_color(int palette, float val, int *hue, int *sat) {
             *hue = v;
             *sat = 255;
             break;
+    }
+}
+
+/* Bake the palette into an RGB LUT at full value; per-pixel we scale by the
+ * pixel's brightness. m_hsv channels are linear in value, so LUT*val/255
+ * reproduces m_hsv(hue,sat,val) to within a couple of counts. */
+static uint8_t LR[256], LG[256], LB[256];
+static int pal_cached = -1;
+static void build_pal(int palette) {
+    if (palette == pal_cached) return;
+    pal_cached = palette;
+    for (int i = 0; i < 256; i++) {
+        int hue, sat;
+        palette_color(palette, (float)i / 255.0f, &hue, &sat);
+        int c = m_hsv(hue & 0xFF, sat, 255);
+        LR[i] = (c >> 16) & 255;
+        LG[i] = (c >> 8) & 255;
+        LB[i] = c & 255;
     }
 }
 
@@ -147,9 +178,78 @@ static int hex_distance(int q, int r) {
 #define MAX_W 64
 #define MAX_H 64
 
+/* Per-pixel static geometry LUTs, rebuilt when W/H/scale change. */
+static uint8_t HDIST[MAX_W * MAX_H];   /* hex distance from centre cell */
+static uint8_t HQMOD[MAX_W * MAX_H];   /* hq & 3 */
+static uint8_t CELLID[MAX_W * MAX_H];  /* (hq*7 + hr*13) & 0xFF */
+static uint8_t EDGE[MAX_W * MAX_H];    /* edge_factor * 255 */
+static int geo_w = -1, geo_h = -1, geo_scale = -1;
+
+static uint8_t FB[MAX_W * MAX_H * 3];
+EXPORT(get_framebuffer) int get_framebuffer(void) { return (int)FB; }
+
 EXPORT(init)
 void init(void) {
-    /* Nothing to initialize - purely per-frame computation */
+    init_sin();
+}
+
+/* Rebuild the hex-geometry LUTs (one-off m_hypot + hex rounding per pixel
+ * instead of every frame). */
+static void build_geo(int W, int H, int scale) {
+    if (W == geo_w && H == geo_h && scale == geo_scale) return;
+    geo_w = W; geo_h = H; geo_scale = scale;
+
+    float hex_size = (float)scale * 0.5f + 1.0f;
+    float cx = (float)W * 0.5f;
+    float cy = (float)H * 0.5f;
+
+    /* Find center hex cell for reference */
+    float center_fq = (2.0f / 3.0f * cx) / hex_size;
+    float center_fr = (-1.0f / 3.0f * cx + SQRT3 / 3.0f * cy) / hex_size;
+    int center_q, center_r;
+    hex_round(center_fq, center_fr, &center_q, &center_r);
+
+    for (int x = 0; x < W; x++) {
+        for (int y = 0; y < H; y++) {
+            float px = (float)x;
+            float py = (float)y;
+
+            /* Convert pixel to fractional axial hex coordinates, round to cell */
+            float fq = (2.0f / 3.0f * px) / hex_size;
+            float fr = (-1.0f / 3.0f * px + SQRT3 / 3.0f * py) / hex_size;
+            int hq, hr;
+            hex_round(fq, fr, &hq, &hr);
+
+            /* Distance of this hex cell from the center hex cell */
+            int dist = hex_distance(hq - center_q, hr - center_r);
+            if (dist > 255) dist = 255;
+
+            /* Distance from pixel to hex cell center for edge detection */
+            float cell_px = hex_size * (3.0f / 2.0f * (float)hq);
+            float cell_py = hex_size * (SQRT3_2 * (float)hq + SQRT3 * (float)hr);
+            float dx = px - cell_px;
+            float dy = py - cell_py;
+            float pixel_dist = m_hypot(dx, dy);
+
+            float inner_dist = pixel_dist / (hex_size * 0.9f);
+            if (inner_dist > 1.0f) inner_dist = 1.0f;
+
+            /* Edge darkening: dim pixels near hexagon boundaries */
+            float edge_factor;
+            if (inner_dist > 0.55f) {
+                edge_factor = 1.0f - (inner_dist - 0.55f) * 2.2f;
+                if (edge_factor < 0.0f) edge_factor = 0.0f;
+            } else {
+                edge_factor = 1.0f;
+            }
+
+            int p = y * W + x;
+            HDIST[p]  = (uint8_t)dist;
+            HQMOD[p]  = (uint8_t)(hq & 3);
+            CELLID[p] = (uint8_t)((hq * 7 + hr * 13) & 0xFF);
+            EDGE[p]   = (uint8_t)(edge_factor * 255.0f + 0.5f);
+        }
+    }
 }
 
 EXPORT(update)
@@ -170,92 +270,51 @@ void update(int tick_ms) {
     if (scale < 1) scale = 1;
     if (scale > 20) scale = 20;
 
-    /* Hex cell size in pixels */
-    float hex_size = (float)scale * 0.5f + 1.0f;
+    build_geo(W, H, scale);
+    build_pal(palette);
 
     /* Time phase for wave animation */
     float t = (float)tick_ms * (float)speed * 0.00003f;
-
-    /* Center of the display in pixel coordinates */
-    float cx = (float)W * 0.5f;
-    float cy = (float)H * 0.5f;
-
-    /* Find center hex cell for reference */
-    float center_fq = (2.0f / 3.0f * cx) / hex_size;
-    float center_fr = (-1.0f / 3.0f * cx + SQRT3 / 3.0f * cy) / hex_size;
-    int center_q, center_r;
-    hex_round(center_fq, center_fr, &center_q, &center_r);
+    float t13 = t * 1.3f;
+    /* Global color rotation, reduced to its fractional part once per frame. */
+    float trot = t * 0.05f;
+    trot = trot - floor_f(trot);
 
     for (int x = 0; x < W; x++) {
         for (int y = 0; y < H; y++) {
-            float px = (float)x;
-            float py = (float)y;
-
-            /* Convert pixel to fractional axial hex coordinates */
-            float fq = (2.0f / 3.0f * px) / hex_size;
-            float fr = (-1.0f / 3.0f * px + SQRT3 / 3.0f * py) / hex_size;
-
-            /* Round to nearest hex cell */
-            int hq, hr;
-            hex_round(fq, fr, &hq, &hr);
-
-            /* Distance of this hex cell from the center hex cell */
-            int dq = hq - center_q;
-            int dr = hr - center_r;
-            int dist = hex_distance(dq, dr);
-
-            /* Compute distance from pixel to hex cell center for edge detection */
-            /* Convert hex cell center back to pixel coordinates */
-            float cell_px = hex_size * (3.0f / 2.0f * (float)hq);
-            float cell_py = hex_size * (SQRT3_2 * (float)hq + SQRT3 * (float)hr);
-            float dx = px - cell_px;
-            float dy = py - cell_py;
-            float pixel_dist = m_hypot(dx, dy);
-
-            /* Normalized distance within cell (0 = center, 1 = edge) */
-            float inner_dist = pixel_dist / (hex_size * 0.9f);
-            if (inner_dist > 1.0f) inner_dist = 1.0f;
+            int p = y * W + x;
+            int dist = HDIST[p];
 
             /* Wave value based on hex distance from center + time */
             float wave = fsin(t - (float)dist * 0.6f);
             /* Secondary wave for complexity */
-            float wave2 = fsin(t * 1.3f + (float)dist * 0.4f + (float)(hq & 3) * 0.5f);
+            float wave2 = fsin(t13 + (float)dist * 0.4f + (float)HQMOD[p] * 0.5f);
             /* Combine waves: 0.0 to 1.0 */
             float combined = (wave + wave2) * 0.25f + 0.5f;
             if (combined < 0.0f) combined = 0.0f;
             if (combined > 1.0f) combined = 1.0f;
 
-            /* Add hex cell identity for color variation */
-            float cell_id = (float)((hq * 7 + hr * 13) & 0xFF) / 255.0f;
-            float color_val = combined * 0.7f + cell_id * 0.3f;
-            /* Shift by time for global color rotation */
-            color_val = color_val + t * 0.05f;
-            /* Wrap to 0-1 */
-            color_val = color_val - floor_f(color_val);
+            /* Add hex cell identity for color variation, then global rotation */
+            float cell_id = (float)CELLID[p] / 255.0f;
+            float color_val = combined * 0.7f + cell_id * 0.3f + trot;
+            if (color_val >= 1.0f) color_val -= 1.0f;
 
-            /* Get palette color */
-            int hue, sat;
-            palette_color(palette, color_val, &hue, &sat);
+            int idx = (int)(color_val * 255.0f);
+            if (idx < 0) idx = 0;
+            if (idx > 255) idx = 255;
 
             /* Brightness: pulse based on wave, dim at cell edges for hex outline */
             float pulse = 0.6f + 0.4f * combined;
-            /* Edge darkening: dim pixels near hexagon boundaries */
-            float edge_factor;
-            if (inner_dist > 0.55f) {
-                /* Strong darkening near edges for visible hex grid */
-                edge_factor = 1.0f - (inner_dist - 0.55f) * 2.2f;
-                if (edge_factor < 0.0f) edge_factor = 0.0f;
-            } else {
-                edge_factor = 1.0f;
-            }
+            float edge_factor = (float)EDGE[p] / 255.0f;
 
             int val = (int)((float)bright * pulse * edge_factor);
             if (val < 0) val = 0;
             if (val > 255) val = 255;
 
-            int r, g, b;
-            hsv2rgb(hue, sat, val, &r, &g, &b);
-            set_pixel(x, y, r, g, b);
+            int o = p * 3;
+            FB[o]     = (uint8_t)(LR[idx] * val / 255);
+            FB[o + 1] = (uint8_t)(LG[idx] * val / 255);
+            FB[o + 2] = (uint8_t)(LB[idx] * val / 255);
         }
     }
 

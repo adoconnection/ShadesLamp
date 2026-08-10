@@ -69,6 +69,13 @@ static float gland_at(int r, int c){
     return GLAND[r][c];
 }
 
+/* Coverage buffer: per-pixel max cloud mask, filled per frame by scattering
+ * each cloud only over its bounding box instead of testing every cloud at every
+ * pixel. 64x64 covers the tallest panel (32x48). */
+#define MAX_W 64
+#define MAX_H 64
+static float cloud_cov[MAX_W * MAX_H];
+
 #define MAX_CLOUDS 8
 static float   cl_jit[MAX_CLOUDS]; /* per-cloud jitter within its slot (0..1) */
 static float   cl_y[MAX_CLOUDS];   /* centre y offset below the very top */
@@ -110,6 +117,8 @@ void update(int tick_ms){
     int H = get_height();
     if (W < 1) W = 1;
     if (H < 1) H = 1;
+    if (W > MAX_W) W = MAX_W;
+    if (H > MAX_H) H = MAX_H;
     if (horiz < 0) horiz = 0;
     if (horiz > 100) horiz = 100;
 
@@ -185,6 +194,47 @@ void update(int tick_ms){
     float grH  = (float)horizonY;
     if (grH < 1.0f) grH = 1.0f;
 
+    /* Scatter each cloud into the coverage buffer over its bounding box only.
+     * The mask cells span gx/gy in (-1,5), i.e. a pixel offset of (-3,3)*cscale
+     * from the cloud centre, so 3*cscale is the half-extent in px. The exact
+     * per-pixel mask (max over clouds) is preserved: the bbox is a superset of
+     * the covered pixels and the same continue-checks run inside. */
+    if (nClouds > 0){
+        for (int i = 0; i < W * H; i++) cloud_cov[i] = 0.0f;
+        float halfspan = 3.0f * cscale;
+        int fullx = (2.0f * halfspan + 2.0f) >= (float)W;   /* window wraps whole width */
+        for (int i = 0; i < nClouds; i++){
+            int y0 = (int)(cyc[i] - halfspan) - 1; if (y0 < 0) y0 = 0;
+            int y1 = (int)(cyc[i] + halfspan) + 1; if (y1 > H - 1) y1 = H - 1;
+            int x0, x1;
+            if (fullx){ x0 = 0; x1 = W - 1; }
+            else { x0 = (int)(cl_x[i] - halfspan) - 1; x1 = (int)(cl_x[i] + halfspan) + 1; }
+            for (int y = y0; y <= y1; y++){
+                float gy = ((float)y - cyc[i]) / cscale + 2.0f;
+                if (gy <= -1.0f || gy >= 5.0f) continue;
+                int r0 = (int)gy; if (gy < 0.0f && (float)r0 != gy) r0--;
+                float fy2 = gy - (float)r0;
+                for (int xi = x0; xi <= x1; xi++){
+                    int x = xi;
+                    if (!fullx){ x %= W; if (x < 0) x += W; }
+                    float ddx = (float)x - cl_x[i];
+                    if (ddx >  (float)W * 0.5f) ddx -= (float)W;   /* wrap */
+                    if (ddx < -(float)W * 0.5f) ddx += (float)W;
+                    float gx = ddx / cscale + 2.0f;
+                    if (gx <= -1.0f || gx >= 5.0f) continue;
+                    if (cl_flip[i]) gx = 4.0f - gx;
+                    int c0 = (int)gx; if (gx < 0.0f && (float)c0 != gx) c0--;
+                    float fx2 = gx - (float)c0;
+                    float top = gland_at(r0,   c0) + (gland_at(r0,   c0+1) - gland_at(r0,   c0)) * fx2;
+                    float bot = gland_at(r0+1, c0) + (gland_at(r0+1, c0+1) - gland_at(r0+1, c0)) * fx2;
+                    float m   = top + (bot - top) * fy2;
+                    int idx = y * W + x;
+                    if (m > cloud_cov[idx]) cloud_cov[idx] = m;
+                }
+            }
+        }
+    }
+
     for (int y = 0; y < H; y++){
         Col base;
         if (y >= horizonY){
@@ -201,28 +251,10 @@ void update(int tick_ms){
 
             /* clouds — Greenland shape, sampled bilinearly at the cloud's
              * fractional position so the edges are soft and the drift smooth.
-             * Drawn regardless of the horizon so they're never clipped. */
+             * Drawn regardless of the horizon so they're never clipped. The
+             * per-pixel max mask was precomputed above into cloud_cov. */
             if (nClouds > 0){
-                float mask = 0.0f;
-                for (int i = 0; i < nClouds; i++){
-                    float ddx = (float)x - cl_x[i];
-                    if (ddx >  (float)W * 0.5f) ddx -= (float)W;   /* wrap */
-                    if (ddx < -(float)W * 0.5f) ddx += (float)W;
-                    /* map pixel offset -> mask cells, scaled by cloud size */
-                    float gx = ddx / cscale + 2.0f;               /* mask column coord */
-                    float gy = ((float)y - cyc[i]) / cscale + 2.0f;/* mask row coord */
-                    if (gx <= -1.0f || gx >= 5.0f || gy <= -1.0f || gy >= 5.0f) continue;
-                    if (cl_flip[i]) gx = 4.0f - gx;        /* mirror for variety */
-
-                    int c0 = (int)gx; if (gx < 0.0f && (float)c0 != gx) c0--;
-                    int r0 = (int)gy; if (gy < 0.0f && (float)r0 != gy) r0--;
-                    float fx2 = gx - (float)c0;
-                    float fy2 = gy - (float)r0;
-                    float top = gland_at(r0,   c0) + (gland_at(r0,   c0+1) - gland_at(r0,   c0)) * fx2;
-                    float bot = gland_at(r0+1, c0) + (gland_at(r0+1, c0+1) - gland_at(r0+1, c0)) * fx2;
-                    float m   = top + (bot - top) * fy2;
-                    if (m > mask) mask = m;
-                }
+                float mask = cloud_cov[y * W + x];
                 if (mask > 0.0f){
                     float a = mask * 0.92f;
                     r = (int)(r + (cloudC.r - r) * a);

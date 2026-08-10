@@ -26,8 +26,8 @@ int get_meta_len(void) {
     return sizeof(META) - 1;
 }
 
-/* ---- Max supported pixels: 32x32 = 1024 ---- */
-#define MAX_PIXELS 1024
+/* ---- Max supported pixels: 64x64 = 4096 (covers 32x48 = 1536) ---- */
+#define MAX_PIXELS 4096
 
 /* Per-pixel state */
 static int px_r[MAX_PIXELS];

@@ -165,6 +165,10 @@ void update(int tick_ms) {
             if (sh < 1.0f) sh = 1.0f;
             float hh = sh * 0.5f;
 
+            /* Slight brightness variation along X for cloth texture.
+             * Depends only on (col_x, t, s), not y — compute once per column. */
+            float cloth = 0.85f + 0.15f * fsin(col_x * TWO_PI * 3.0f + t * 0.5f + (float)s);
+
             /* Draw the stripe column */
             int y_start = (int)(cy - hh);
             int y_end = (int)(cy + hh);
@@ -180,9 +184,6 @@ void update(int tick_ms) {
                     edge_fade = 1.0f - (dist_from_center - hh * 0.6f) / (hh * 0.4f);
                     if (edge_fade < 0.0f) edge_fade = 0.0f;
                 }
-
-                /* Slight brightness variation along X for cloth texture */
-                float cloth = 0.85f + 0.15f * fsin(col_x * TWO_PI * 3.0f + t * 0.5f + (float)s);
 
                 int r = clamp255((int)((float)colors[s][0] * edge_fade * cloth));
                 int g = clamp255((int)((float)colors[s][1] * edge_fade * cloth));

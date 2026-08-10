@@ -50,6 +50,9 @@ static float fabsf2(float x) { return x < 0.0f ? -x : x; }
 static float fracf(float x)  { return x - (float)((int)x); }
 static int   clampi(int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
+#define MAX_W 64
+static float cola_wave[MAX_W];   /* cola ribbon height per column (per frame) */
+
 /* ---- PRNG / per-pixel hash ---- */
 static uint32_t hash3(int x, int y, int t) {
     uint32_t h = (uint32_t)x * 374761393u + (uint32_t)y * 668265263u
@@ -83,7 +86,7 @@ static void scene_testcard(float u, float v, int *r, int *g, int *b) {
     }
 }
 
-static void scene_cola(float u, float v, float t, int *r, int *g, int *b) {
+static void scene_cola(float u, float v, float wave, int *r, int *g, int *b) {
     float ax = fabsf2(u - 0.5f);
     float hw;                                   /* bottle half-width vs height */
     if      (v < 0.10f) hw = 0.0f;
@@ -101,8 +104,8 @@ static void scene_cola(float u, float v, float t, int *r, int *g, int *b) {
     } else {
         *r = 200; *g = 14; *b = 30;             /* Coca-Cola red */
     }
-    /* iconic dynamic ribbon: white wave across the lower background */
-    float wave = 0.82f + 0.07f * fsin(u * TWO_PI + t * 2.0f);
+    /* iconic dynamic ribbon: white wave across the lower background.
+       `wave` is precomputed per column (depends only on u and t). */
     if (!isBottle && fabsf2(v - wave) < 0.045f) { *r = 250; *g = 250; *b = 245; }
 }
 
@@ -111,9 +114,9 @@ static void scene_news(float u, float v, float t, int *r, int *g, int *b) {
     if (v < 0.10f) { *r = 175; *g = 30; *b = 30; }   /* top banner */
 
     float dx = u - 0.5f, dy = v - 0.34f;
-    float d  = m_hypot(dx, dy);
-    if (d < 0.125f) { *r = 205; *g = 160; *b = 120; }      /* head (skin) */
-    if (d < 0.135f && v < 0.30f) { *r = 60; *g = 42; *b = 30; } /* hair */
+    float d2 = dx * dx + dy * dy;                            /* compare squared: no per-pixel hypot */
+    if (d2 < 0.125f * 0.125f) { *r = 205; *g = 160; *b = 120; }      /* head (skin) */
+    if (d2 < 0.135f * 0.135f && v < 0.30f) { *r = 60; *g = 42; *b = 30; } /* hair */
 
     if (v > 0.46f && v < 0.78f) {                /* shoulders / suit */
         float sw = 0.18f + (v - 0.46f) * 0.7f;
@@ -128,9 +131,9 @@ static void scene_news(float u, float v, float t, int *r, int *g, int *b) {
     if (v >= 0.92f) { *r = 20; *g = 20; *b = 24; }
 }
 
-static void scene_ad(float u, float v, float t, int *r, int *g, int *b) {
+static void scene_ad(float u, float v, float t, float pr, int *r, int *g, int *b) {
     float dx = u - 0.5f, dy = v - 0.5f;
-    float d  = m_hypot(dx, dy);
+    float d  = m_hypot(dx, dy);                   /* radial: feeds the ring gradient, kept exact */
     int phase = ((int)(t / 0.45f)) & 1;          /* colour blink */
     int c1r,c1g,c1b, c2r,c2g,c2b;
     if (phase) { c1r=255;c1g=210;c1b=40; c2r=220;c2g=30;c2b=40; }
@@ -139,8 +142,7 @@ static void scene_ad(float u, float v, float t, int *r, int *g, int *b) {
     float ring = fracf(d * 6.0f - t * 2.5f);     /* expanding rings */
     if (ring < 0.5f) { *r=c1r; *g=c1g; *b=c1b; } else { *r=c2r; *g=c2g; *b=c2b; }
 
-    float pr = 0.12f + 0.05f * fsin(t * 6.0f);   /* pulsing centre disk */
-    if (d < pr) { *r = 255; *g = 255; *b = 255; }
+    if (d < pr) { *r = 255; *g = 255; *b = 255; } /* pulsing centre disk (pr precomputed per frame) */
 
     int blink = ((int)(t / 0.30f)) & 1;          /* blinking bezel */
     if ((u < 0.06f || u > 0.94f || v < 0.05f || v > 0.95f) && blink) {
@@ -154,13 +156,16 @@ static float seg_ax[MAXSEG], seg_ay[MAXSEG], seg_bx[MAXSEG], seg_by[MAXSEG];
 static int   seg_n;
 static float run_hx, run_hy, run_hr, run_thick;
 
-static float seg_dist(float px, float py, float ax, float ay, float bx, float by) {
+/* squared distance from point to segment: the caller only threshold-compares it,
+   so comparing squared values (vs run_thick^2) drops the per-pixel/per-segment
+   hypot while staying value-preserving (sqrt is monotonic). */
+static float seg_dist2(float px, float py, float ax, float ay, float bx, float by) {
     float dx = bx - ax, dy = by - ay;
     float l2 = dx*dx + dy*dy;
     float tt = (l2 > 0.0f) ? ((px-ax)*dx + (py-ay)*dy) / l2 : 0.0f;
     if (tt < 0.0f) tt = 0.0f; if (tt > 1.0f) tt = 1.0f;
     float ex = px - (ax + tt*dx), ey = py - (ay + tt*dy);
-    return m_hypot(ex, ey);
+    return ex*ex + ey*ey;
 }
 static void addseg(float ax, float ay, float bx, float by) {
     if (seg_n >= MAXSEG) return;
@@ -226,12 +231,12 @@ static void scene_runner(float px, float py, float t, int w, int h, int *r, int 
     float hdx = px - run_hx, hdy = py - run_hy;
     int onFig = (hdx*hdx + hdy*hdy < run_hr*run_hr);
     if (!onFig) {
-        float md = 1e9f;
+        float md2 = 1e18f;
         for (int i = 0; i < seg_n; i++) {
-            float d = seg_dist(px, py, seg_ax[i], seg_ay[i], seg_bx[i], seg_by[i]);
-            if (d < md) md = d;
+            float d2 = seg_dist2(px, py, seg_ax[i], seg_ay[i], seg_bx[i], seg_by[i]);
+            if (d2 < md2) md2 = d2;
         }
-        if (md < run_thick) onFig = 1;
+        if (md2 < run_thick * run_thick) onFig = 1;
     }
     if (onFig) { *r = 235; *g = 235; *b = 228; }
 }
@@ -268,6 +273,7 @@ void update(int tick_ms) {
     int h = get_height();
     if (w < 1) w = 1;
     if (h < 1) h = 1;
+    if (w > MAX_W) w = MAX_W;
     float fw = (float)w;
     float fh = (h > 1) ? (float)(h - 1) : 1.0f;
     float t  = (float)tick_ms / 1000.0f;
@@ -293,7 +299,20 @@ void update(int tick_ms) {
 
     int grainP = 2 + noise * 40 / 100;           /* speck probability /1000 */
 
-    if (!transition && channel == 4) runner_prepare(t, w, h);
+    /* per-frame precompute for the active scene (hoisted out of the pixel loop) */
+    float ad_pr = 0.0f;
+    if (!transition) {
+        if (channel == 1) {                      /* cola: ribbon height per column */
+            for (int x = 0; x < w; x++) {
+                float u = (float)x / fw;
+                cola_wave[x] = 0.82f + 0.07f * fsin(u * TWO_PI + t * 2.0f);
+            }
+        } else if (channel == 3) {               /* ad: pulsing centre-disk radius */
+            ad_pr = 0.12f + 0.05f * fsin(t * 6.0f);
+        } else if (channel == 4) {
+            runner_prepare(t, w, h);
+        }
+    }
 
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
@@ -311,9 +330,9 @@ void update(int tick_ms) {
             } else {
                 switch (channel) {
                     case 0: scene_testcard(u, vr, &r, &g, &b); break;
-                    case 1: scene_cola(u, vr, t, &r, &g, &b); break;
+                    case 1: scene_cola(u, vr, cola_wave[x], &r, &g, &b); break;
                     case 2: scene_news(u, vr, t, &r, &g, &b); break;
-                    case 3: scene_ad(u, vr, t, &r, &g, &b); break;
+                    case 3: scene_ad(u, vr, t, ad_pr, &r, &g, &b); break;
                     default: scene_runner(u * fw, vr * (float)h, t, w, h, &r, &g, &b); break;
                 }
                 apply_mode(mode, &r, &g, &b);

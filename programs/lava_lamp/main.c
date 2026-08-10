@@ -72,6 +72,12 @@ static void warm_color(int heat, int brightness, int *r, int *g, int *b) {
     *b = b0 * brightness / 255;
 }
 
+/* ---- Framebuffer fast-path ---- */
+#define MAX_W 64
+#define MAX_H 64
+static uint8_t FB[MAX_W * MAX_H * 3];
+EXPORT(get_framebuffer) int get_framebuffer(void) { return (int)FB; }
+
 /* ---- Blob state ---- */
 #define MAX_BLOBS 6
 
@@ -171,7 +177,31 @@ void update(int tick_ms) {
         }
     }
 
-    /* Clear and render blobs using metaball-like field */
+    /* Clear and render blobs using metaball-like field.
+     * The per-pixel body reduces to load+add+divide+accumulate by hoisting the
+     * scaled-and-squared horizontal/vertical distances out of the pixel loop:
+     * dx²[i][x] depends only on the blob and column, dy²[i][y] only on the row.
+     * Same integer arithmetic in the same order -> bit-identical output. */
+    static int dx_sq[MAX_BLOBS][MAX_W];
+    static int dy_sq[MAX_BLOBS][MAX_H];
+    static int rr65536[MAX_BLOBS];
+    float half_w = (float)W * 0.5f;
+    for (int i = 0; i < count; i++) {
+        rr65536[i] = blob_radius[i] * blob_radius[i] * 65536;
+        for (int px = 0; px < W; px++) {
+            float fdx = (float)px - blob_x[i];
+            if (fdx > half_w) fdx -= (float)W;
+            if (fdx < -half_w) fdx += (float)W;
+            int dx = (int)(fdx * 16.0f);
+            dx_sq[i][px] = dx * dx;
+        }
+        for (int py = 0; py < H; py++) {
+            float fdy = (float)py - blob_y[i];
+            int dy = (int)(fdy * 16.0f);
+            dy_sq[i][py] = dy * dy;
+        }
+    }
+
     for (int py = 0; py < H; py++) {
         for (int px = 0; px < W; px++) {
             int total_field = 0;
@@ -179,22 +209,11 @@ void update(int tick_ms) {
             int weight_sum = 0;
 
             for (int i = 0; i < count; i++) {
-                /* Distance to blob center with horizontal wrap */
-                float fdx = (float)px - blob_x[i];
-                float half_w = (float)W * 0.5f;
-                if (fdx > half_w) fdx -= (float)W;
-                if (fdx < -half_w) fdx += (float)W;
-                float fdy = (float)py - blob_y[i];
-
-                /* Integer distance squared approximation */
-                int dx = (int)(fdx * 16.0f);
-                int dy = (int)(fdy * 16.0f);
-                int dist_sq = dx * dx + dy * dy;
+                int dist_sq = dx_sq[i][px] + dy_sq[i][py];
                 if (dist_sq < 1) dist_sq = 1;
 
                 /* Influence: r^2 * K / dist_sq */
-                int r = blob_radius[i];
-                int influence = (r * r * 65536) / dist_sq;
+                int influence = rr65536[i] / dist_sq;
                 if (influence > 255) influence = 255;
 
                 total_field += influence;
@@ -204,17 +223,18 @@ void update(int tick_ms) {
 
             if (total_field > 255) total_field = 255;
 
+            int o = (py * W + px) * 3;
             if (total_field > 25) {
                 int heat = (weight_sum > 0) ? (heat_accum / weight_sum) : 180;
                 int val = total_field * bright / 255;
                 if (val > 255) val = 255;
                 int r, g, b;
                 warm_color(heat, val, &r, &g, &b);
-                set_pixel(px, py, r, g, b);
+                FB[o] = (uint8_t)r; FB[o + 1] = (uint8_t)g; FB[o + 2] = (uint8_t)b;
             } else {
                 /* Very dark warm background glow */
                 int bg = total_field * bright / (255 * 10);
-                set_pixel(px, py, bg, 0, 0);
+                FB[o] = (uint8_t)bg; FB[o + 1] = 0; FB[o + 2] = 0;
             }
         }
     }

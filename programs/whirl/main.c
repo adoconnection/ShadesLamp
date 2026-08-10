@@ -108,8 +108,10 @@ static void hsv2rgb(int h, int s, int v, int *r, int *g, int *b) {
 }
 
 /* ---- Framebuffer for fade/trail effect ---- */
-#define MAX_W 32
-#define MAX_H 32
+/* 64x64 covers the tallest panel (32x48); buffers are column-major planes
+ * (x*MAX_H + y), so MAX_H is the column stride. */
+#define MAX_W 64
+#define MAX_H 64
 static uint8_t fb_r[MAX_W * MAX_H];
 static uint8_t fb_g[MAX_W * MAX_H];
 static uint8_t fb_b[MAX_W * MAX_H];
