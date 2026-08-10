@@ -53,9 +53,11 @@ namespace Storage {
     // Load config JSON from /config.json (returns "" if not found)
     String loadConfig();
 
-    // Read hardware config (pin, width, height, zigzag, colorOrder) from /config.json
-    // Leaves parameters unchanged if fields are missing
-    void loadHardwareConfig(uint8_t& pin, uint16_t& width, uint16_t& height, bool& zigzag, uint8_t& colorOrder);
+    // Read hardware config (pin, width, height, zigzag, colorOrder, rotation,
+    // mirror, maxCurrentMa) from /config.json. Leaves parameters unchanged if
+    // fields are missing
+    void loadHardwareConfig(uint8_t& pin, uint16_t& width, uint16_t& height, bool& zigzag, uint8_t& colorOrder,
+                            uint16_t& rotation, bool& mirror, uint32_t& maxCurrentMa);
 
     // Read the multi-panel layout ("panels" array) from /config.json into out.
     // Returns the number of panels loaded, 0 if the key is absent/invalid

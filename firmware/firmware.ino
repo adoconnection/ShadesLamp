@@ -17,6 +17,7 @@
 #include "playlists.h"
 
 #include <Update.h>
+#include "esp_task_wdt.h"
 
 // setup() runs in the Arduino loopTask. programManager->begin() activates the
 // saved program, which executes the WASM init() through the wasm3 interpreter —
@@ -26,6 +27,23 @@ SET_LOOP_TASK_STACK_SIZE(32 * 1024);
 
 // Touch sensor (digital, active-HIGH) for hardware power/program control
 static const uint8_t TOUCH_PIN = 1;
+
+// ── Crash-loop guard ───────────────────────────────────────────────────────
+// If the lamp keeps dying young (crash/watchdog/brownout within the first
+// BOOT_GUARD_OK_MS, BOOT_GUARD_LIMIT times in a row), the active program is
+// almost certainly the culprit — boot without one so the lamp stays reachable
+// over BLE. Only abnormal resets count: unplugging or OTA restarts don't.
+#define BOOT_GUARD_PATH   "/boot_guard"
+#define BOOT_GUARD_LIMIT  3
+#define BOOT_GUARD_OK_MS  20000UL
+
+// A hung WASM program (endless loop in update()) never reboots on its own, so
+// the render task is subscribed to the task watchdog: a tick stuck for longer
+// than this panics and reboots — which the boot guard above then counts.
+#define RENDER_WDT_TIMEOUT_MS 10000UL
+
+static bool g_safeMode = false;         // this boot runs with no active program
+static bool g_bootGuardCleared = false; // counter reset after surviving 20 s
 
 // ── Global Objects ─────────────────────────────────────────────────────────
 
@@ -43,6 +61,13 @@ void renderTask(void* param) {
     uint32_t startTick = millis();
 
     Serial.printf("[MAIN] Render task started on core %d\r\n", xPortGetCoreID());
+
+    // Watchdog: a WASM program stuck in an endless loop hangs this task
+    // forever without rebooting — subscribe so a stuck tick panics and the
+    // crash-loop guard can eventually boot into safe mode.
+    if (esp_task_wdt_add(NULL) == ESP_OK) {
+        Serial.println("[MAIN] Render task subscribed to task watchdog");
+    }
 
     // Host-side crossfade on program switch: fade the old program out, swap,
     // then fade the new one in (dip to black). Switch is deferred until fade-out.
@@ -65,6 +90,8 @@ void renderTask(void* param) {
     bool      bootFade = true;
 
     while (true) {
+        esp_task_wdt_reset();
+
         // Transmit any queued BLE response from here (render task), NOT from the
         // BLE callback — sending a large multi-chunk reply inline on the BLE
         // stack task starves the notify tx-buffers and the reply stalls after a
@@ -189,6 +216,24 @@ void setup() {
         while (true) { delay(1000); }
     }
 
+    // Crash-loop guard: count consecutive early deaths (abnormal resets only —
+    // unplugging or an OTA restart resets the streak).
+    esp_reset_reason_t rr = esp_reset_reason();
+    bool abnormalReset = (rr == ESP_RST_PANIC || rr == ESP_RST_INT_WDT ||
+                          rr == ESP_RST_TASK_WDT || rr == ESP_RST_WDT ||
+                          rr == ESP_RST_BROWNOUT);
+    int prevFails = Storage::loadFile(BOOT_GUARD_PATH).toInt();
+    int bootFails = abnormalReset ? prevFails + 1 : 0;
+    if (bootFails != prevFails) {
+        Storage::saveFile(BOOT_GUARD_PATH, String(bootFails).c_str());
+    }
+    g_bootGuardCleared = (bootFails == 0);  // nothing to clear on a clean boot
+    g_safeMode = (bootFails >= BOOT_GUARD_LIMIT);
+    if (abnormalReset) {
+        Serial.printf("[MAIN] Abnormal reset (reason %d), early-death count: %d%s\r\n",
+                      rr, bootFails, g_safeMode ? " -> SAFE MODE" : "");
+    }
+
     // Preload every playlist into the RAM store: from here on all playlist
     // reads (rotation, GETs) are RAM-only; flash is written only to persist.
     Playlists::init();
@@ -198,7 +243,11 @@ void setup() {
     uint16_t ledWidth = 1, ledHeight = 1;
     bool ledZigzag = false;
     uint8_t ledColorOrder = 0; // 0=GRB (default WS2812)
-    Storage::loadHardwareConfig(ledPin, ledWidth, ledHeight, ledZigzag, ledColorOrder);
+    uint16_t ledRotation = 0;  // wiring orientation: 0/90/180/270 clockwise
+    bool ledMirror = false;    //  + optional mirror (for reflected wiring)
+    uint32_t ledMaxCurrent = 2000;  // estimated LED draw cap, mA (0 = no limit)
+    Storage::loadHardwareConfig(ledPin, ledWidth, ledHeight, ledZigzag, ledColorOrder, ledRotation, ledMirror,
+                                ledMaxCurrent);
 
     // Optional multi-panel layout ("panels" array in config.json). When
     // present it overrides the legacy single-panel pin/zigzag fields.
@@ -222,28 +271,36 @@ void setup() {
     Serial.printf("[MAIN] Free PSRAM: %u bytes\r\n", ESP.getFreePsram());
 
     // Create and initialize LED driver with config values
-    ledDriver = new LedDriver(ledPin, ledWidth, ledHeight, ledZigzag, ledColorOrder);
+    ledDriver = new LedDriver(ledPin, ledWidth, ledHeight, ledZigzag, ledColorOrder, ledRotation, ledMirror);
     if (ledPanelCount > 0) {
         ledDriver->setPanels(ledPanels, ledPanelCount);
     }
     ledDriver->begin();
-    ledDriver->setMaxCurrent(2000); // limit estimated LED draw to ~2 A
+    ledDriver->setMaxCurrent(ledMaxCurrent);
 
     // Create engine and manager with dynamic pointers
     wasmEngine = new WasmEngine(ledDriver, &paramStore);
     programManager = new ProgramManager(wasmEngine, &paramStore, ledDriver);
     bleService = new BleService(programManager, ledDriver);
 
-    // Initialize program manager (loads programs from flash, activates saved program)
-    programManager->begin();
+    // Initialize program manager (loads programs from flash, activates saved
+    // program — unless the crash-loop guard put us in safe mode).
+    programManager->begin(g_safeMode);
 
     // One-time: stamp stable guids onto legacy playlist positions so they keep
     // resolving after a program is deleted/updated/re-downloaded.
     Playlists::migrateGuids(programManager);
 
-    // Resume a playlist that was rotating before the last reboot (the render task
-    // applies the saved position on its first tick).
-    Playlists::resumeFromState();
+    if (g_safeMode) {
+        // Don't resume the playlist either, and forget it persistently — the
+        // next (clean) boot must not walk into the same crash.
+        Playlists::clearResumeState();
+        Serial.println("[MAIN] SAFE MODE: no program activated; pick one via the app");
+    } else {
+        // Resume a playlist that was rotating before the last reboot (the render
+        // task applies the saved position on its first tick).
+        Playlists::resumeFromState();
+    }
 
     // Initialize BLE service (use device name from config, default: "Shades LED Lamp")
     bleService->begin(programManager->getDeviceName().c_str());
@@ -251,6 +308,18 @@ void setup() {
     // Initialize hardware touch button
     g_touch = new TouchInput(TOUCH_PIN, /*activeLow=*/false);
     g_touch->begin(bleService, programManager);
+
+    // Task watchdog: 10 s and PANIC on trigger (Arduino's default only logs a
+    // warning, which would let a hung WASM tick spin forever). Idle tasks are
+    // deliberately unwatched — only the render task subscribes, so a starved
+    // idle task during BLE bursts can't reboot the lamp.
+    esp_task_wdt_config_t wdtCfg = {};
+    wdtCfg.timeout_ms = RENDER_WDT_TIMEOUT_MS;
+    wdtCfg.idle_core_mask = 0;
+    wdtCfg.trigger_panic = true;
+    if (esp_task_wdt_reconfigure(&wdtCfg) != ESP_OK && esp_task_wdt_init(&wdtCfg) != ESP_OK) {
+        Serial.println("[MAIN] Task WDT setup failed — hang protection inactive");
+    }
 
     // Create render task on Core 1 (BLE runs on Core 0)
     BaseType_t taskResult = xTaskCreatePinnedToCore(
@@ -377,6 +446,15 @@ static void performBleOta(uint8_t* img, size_t size) {
 
 void loop() {
     if (g_touch) g_touch->tick();
+
+    // Crash-loop guard: survived long enough — this boot counts as healthy.
+    if (!g_bootGuardCleared && millis() >= BOOT_GUARD_OK_MS) {
+        g_bootGuardCleared = true;
+        Storage::saveFile(BOOT_GUARD_PATH, "0");
+        if (g_safeMode) {
+            Serial.println("[MAIN] SAFE MODE boot stable, guard counter reset");
+        }
+    }
 
     // Firmware image received over BLE? Flash it here (loop has the large stack).
     if (bleService) {

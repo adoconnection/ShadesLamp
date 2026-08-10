@@ -388,11 +388,13 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
 
                 float tempC = temperatureRead();   // ESP32-S3 internal die sensor (°C)
 
-                char resp[256];
+                char resp[320];
                 snprintf(resp, sizeof(resp),
-                    "{\"ok\":true,\"build\":%u,\"pin\":%u,\"width\":%u,\"height\":%u,\"zigzag\":%s,\"colorOrder\":%u,\"colorOrderName\":\"%s\",\"serial\":\"%s\",\"temp\":%.1f}",
+                    "{\"ok\":true,\"build\":%u,\"pin\":%u,\"width\":%u,\"height\":%u,\"zigzag\":%s,\"colorOrder\":%u,\"colorOrderName\":\"%s\",\"rotation\":%u,\"mirror\":%s,\"maxCurrent\":%u,\"serial\":\"%s\",\"temp\":%.1f}",
                     (unsigned)FW_BUILD, pm->getLedPin(), pm->getLedWidth(), pm->getLedHeight(),
-                    pm->getLedZigzag() ? "true" : "false", order, orderName, serial, tempC);
+                    pm->getLedZigzag() ? "true" : "false", order, orderName,
+                    pm->getLedRotation(), pm->getLedMirror() ? "true" : "false",
+                    (unsigned)pm->getLedMaxCurrent(), serial, tempC);
                 Serial.printf("%s CMD GET_HW_CONFIG: %s\r\n", TAG, resp);
                 g_bleService->sendResponse(String(resp));
                 break;
@@ -400,7 +402,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
 
             case CMD_SET_HW_CONFIG: {
                 if (payloadLen < 6) {
-                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"need 6+ bytes: pin(1)+width(2)+height(2)+zigzag(1)+[colorOrder(1)]\"}", true);
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"need 6+ bytes: pin(1)+width(2)+height(2)+zigzag(1)+[colorOrder(1)]+[rotQ(1)]+[mirror(1)]+[maxMa(2)]\"}", true);
                     break;
                 }
                 uint8_t pin = payload[0];
@@ -409,15 +411,31 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 memcpy(&h, payload + 3, 2);
                 bool zigzag = payload[5] != 0;
                 uint8_t colorOrder = (payloadLen >= 7) ? payload[6] : pm->getLedColorOrder();
+                // Optional orientation: rot as quarter turns (0..3 = 0/90/180/270 cw), mirror flag.
+                uint8_t rotQ = (payloadLen >= 8) ? payload[7] : (uint8_t)(pm->getLedRotation() / 90);
+                bool mirror = (payloadLen >= 9) ? (payload[8] != 0) : pm->getLedMirror();
+                // Optional current cap in mA, uint16 LE (0 = no limit).
+                uint16_t maxMa16;
+                uint32_t maxCurrentMa = pm->getLedMaxCurrent();
+                if (payloadLen >= 11) {
+                    memcpy(&maxMa16, payload + 9, 2);
+                    maxCurrentMa = maxMa16;
+                }
 
-                if (pin > 48 || w == 0 || w > 1024 || h == 0 || h > 1024) {
+                if (pin > 48 || w == 0 || w > 1024 || h == 0 || h > 1024 || rotQ > 3) {
                     g_bleService->sendResponse("{\"ok\":false,\"err\":\"invalid values\"}", true);
                     break;
                 }
                 if (colorOrder >= 6) colorOrder = 0;
+                uint16_t rotation = (uint16_t)rotQ * 90;
 
-                Serial.printf("%s CMD SET_HW_CONFIG: pin=%u, %ux%u, zigzag=%d, order=%u\r\n", TAG, pin, w, h, zigzag, colorOrder);
-                pm->setHardwareConfig(pin, w, h, zigzag, colorOrder);
+                Serial.printf("%s CMD SET_HW_CONFIG: pin=%u, %ux%u, zigzag=%d, order=%u, rot=%u, mirror=%d, maxMa=%u\r\n",
+                              TAG, pin, w, h, zigzag, colorOrder, rotation, mirror, maxCurrentMa);
+                pm->setHardwareConfig(pin, w, h, zigzag, colorOrder, rotation, mirror, maxCurrentMa);
+
+                // The current cap doesn't need the reboot — apply it live.
+                LedDriver* led = g_bleService->getLedDriver();
+                if (led) led->setMaxCurrent(maxCurrentMa);
                 g_bleService->sendResponse("{\"ok\":true,\"reboot\":true}");
                 break;
             }

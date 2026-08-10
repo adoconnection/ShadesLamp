@@ -29,7 +29,9 @@
 // bottom row (canvas convention). (w, h) are the panel's own dimensions as
 // wired, before rotation. rot rotates the panel clockwise on the canvas, so
 // a 90/270 panel occupies an h*w footprint. zigzag means serpentine wiring:
-// odd local rows run right-to-left.
+// odd local rows run right-to-left. mirror flips the panel along its local X
+// (applied after zigzag, before rot) — for wiring that is a mirror image of
+// the standard layout; rotations alone cannot express it.
 struct LedPanel {
     uint8_t  pin;
     uint16_t x;
@@ -38,11 +40,17 @@ struct LedPanel {
     uint16_t h;
     uint16_t rot;      // 0, 90, 180, 270 (clockwise)
     bool     zigzag;
+    bool     mirror;
 };
 
 class LedDriver {
 public:
-    LedDriver(uint8_t pin, uint16_t width, uint16_t height, bool zigzag = false, uint8_t colorOrder = LED_ORDER_GRB);
+    // rotation (0/90/180/270, clockwise) and mirror orient the implicit
+    // single full-canvas panel; ignored when setPanels() supplies a layout.
+    // For 90/270 width/height are still the CANVAS dimensions (the panel's
+    // wired dims are the swapped pair).
+    LedDriver(uint8_t pin, uint16_t width, uint16_t height, bool zigzag = false, uint8_t colorOrder = LED_ORDER_GRB,
+              uint16_t rotation = 0, bool mirror = false);
     ~LedDriver();
 
     // Optional multi-panel layout; must be called before begin(). Without it
@@ -93,6 +101,8 @@ private:
     uint16_t _numPixels;
 
     bool     _zigzag;
+    uint16_t _rotation;             // orientation of the implicit single panel
+    bool     _mirror;
     uint8_t  _colorOrder;
     uint8_t* _framebuffer;          // RGB framebuffer in PSRAM
     uint32_t _maxCurrentMa;         // 0 = no current limit

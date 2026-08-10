@@ -325,7 +325,8 @@ String loadConfig() {
     return content;
 }
 
-void loadHardwareConfig(uint8_t& pin, uint16_t& width, uint16_t& height, bool& zigzag, uint8_t& colorOrder) {
+void loadHardwareConfig(uint8_t& pin, uint16_t& width, uint16_t& height, bool& zigzag, uint8_t& colorOrder,
+                        uint16_t& rotation, bool& mirror, uint32_t& maxCurrentMa) {
     String configStr = loadConfig();
     if (configStr.length() == 0) return;
 
@@ -337,8 +338,12 @@ void loadHardwareConfig(uint8_t& pin, uint16_t& width, uint16_t& height, bool& z
     if (doc.containsKey("ledHeight"))     height     = doc["ledHeight"].as<uint16_t>();
     if (doc.containsKey("ledZigzag"))     zigzag     = doc["ledZigzag"].as<bool>();
     if (doc.containsKey("ledColorOrder")) colorOrder = doc["ledColorOrder"].as<uint8_t>();
+    if (doc.containsKey("ledRotation"))   rotation   = doc["ledRotation"].as<uint16_t>();
+    if (doc.containsKey("ledMirror"))     mirror     = doc["ledMirror"].as<bool>();
+    if (doc.containsKey("ledMaxCurrent")) maxCurrentMa = doc["ledMaxCurrent"].as<uint32_t>();
 
-    Serial.printf("%s HW config: pin=%u, %ux%u, zigzag=%d, order=%u\r\n", TAG, pin, width, height, zigzag, colorOrder);
+    Serial.printf("%s HW config: pin=%u, %ux%u, zigzag=%d, order=%u, rot=%u, mirror=%d, maxMa=%u\r\n",
+                  TAG, pin, width, height, zigzag, colorOrder, rotation, mirror, maxCurrentMa);
 }
 
 uint8_t loadPanelConfig(LedPanel* out, uint8_t maxPanels) {
@@ -365,6 +370,7 @@ uint8_t loadPanelConfig(LedPanel* out, uint8_t maxPanels) {
         lp.h      = p["h"] | 0;
         lp.rot    = p["rot"] | 0;
         lp.zigzag = p["zigzag"] | false;
+        lp.mirror = p["mirror"] | false;
         if (lp.w == 0 || lp.h == 0 ||
             (lp.rot != 0 && lp.rot != 90 && lp.rot != 180 && lp.rot != 270)) {
             Serial.printf("%s Panel %u invalid (%ux%u rot=%u) — panel config ignored\r\n",

@@ -478,6 +478,10 @@ void onDeleted(uint8_t id) {
     if (g_playId == (int)id) stop();
 }
 
+void clearResumeState() {
+    clearState();
+}
+
 void resumeFromState() {
     String s = Storage::loadFile(PL_STATE_PATH);
     if (s.length() == 0) return;

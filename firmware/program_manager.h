@@ -31,8 +31,10 @@ class ProgramManager {
 public:
     ProgramManager(WasmEngine* engine, ParamStore* paramStore, LedDriver* ledDriver);
 
-    // Load all programs from storage, read config, activate saved program
-    void begin();
+    // Load all programs from storage, read config, activate saved program.
+    // safeMode (crash-loop guard): activate nothing and persistently clear
+    // the resume target, so the lamp boots reachable-but-dark.
+    void begin(bool safeMode = false);
 
     // Switch to a different program by ID
     bool switchProgram(uint8_t id);
@@ -107,7 +109,7 @@ public:
     // Persist global config (active program, name, hw) to /config.json.
     // Merges into the existing file so unknown keys (e.g. the multi-panel
     // "panels" layout) survive. dropPanels removes the panel layout — used
-    // when the legacy single-panel hw config is set explicitly over BLE.
+    // when SET_HW_CONFIG actually changes the single-panel geometry.
     void saveConfig(bool dropPanels = false);
 
     // Persist param values for a specific program to /params/{id}.json
@@ -159,7 +161,11 @@ public:
     uint16_t getLedHeight() const;
     bool     getLedZigzag() const;
     uint8_t  getLedColorOrder() const;
-    void setHardwareConfig(uint8_t pin, uint16_t width, uint16_t height, bool zigzag, uint8_t colorOrder);
+    uint16_t getLedRotation() const;
+    bool     getLedMirror() const;
+    uint32_t getLedMaxCurrent() const;
+    void setHardwareConfig(uint8_t pin, uint16_t width, uint16_t height, bool zigzag, uint8_t colorOrder,
+                           uint16_t rotation = 0, bool mirror = false, uint32_t maxCurrentMa = 2000);
 
 private:
     int findProgramIndex(uint8_t id) const;
@@ -185,6 +191,9 @@ private:
     uint16_t _ledHeight;
     bool     _ledZigzag;
     uint8_t  _ledColorOrder;
+    uint16_t _ledRotation;   // 0/90/180/270, clockwise
+    bool     _ledMirror;
+    uint32_t _ledMaxCurrent; // estimated LED draw cap, mA (0 = no limit)
 
     std::vector<uint8_t> _order;  // custom display order (program IDs)
 

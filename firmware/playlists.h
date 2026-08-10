@@ -92,6 +92,10 @@ namespace Playlists {
     // ProgramManager::begin()). Applies the saved position on the next tick.
     void resumeFromState();
 
+    // Delete the persisted play state without starting playback. Used by the
+    // crash-loop guard (safe mode) instead of resumeFromState().
+    void clearResumeState();
+
     // Live engine state for the GET_STATE command. playingId() = -1 when idle.
     int playingId();
     int currentIndex();

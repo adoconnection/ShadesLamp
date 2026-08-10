@@ -18,6 +18,9 @@ ProgramManager::ProgramManager(WasmEngine* engine, ParamStore* paramStore, LedDr
     , _ledHeight(1)
     , _ledZigzag(false)
     , _ledColorOrder(0)
+    , _ledRotation(0)
+    , _ledMirror(false)
+    , _ledMaxCurrent(2000)
     , _paramsDirty(false)
     , _lastParamDirtyTime(0)
     , _pendingSwitchId(0xFF)
@@ -31,8 +34,8 @@ ProgramManager::ProgramManager(WasmEngine* engine, ParamStore* paramStore, LedDr
     _mutex = xSemaphoreCreateMutex();
 }
 
-void ProgramManager::begin() {
-    Serial.printf("%s Initializing...\r\n", TAG);
+void ProgramManager::begin(bool safeMode) {
+    Serial.printf("%s Initializing...%s\r\n", TAG, safeMode ? " (SAFE MODE)" : "");
 
     // Register all program IDs (no file reads, just directory listing)
     std::vector<uint8_t> ids = Storage::listPrograms();
@@ -66,25 +69,35 @@ void ProgramManager::begin() {
         }
     }
 
-    // If we have a saved active program, switch to it
-    if (_activeId != 0xFF) {
-        int idx = findProgramIndex(_activeId);
-        if (idx >= 0) {
-            Serial.printf("%s Activating saved program %u\r\n", TAG, _activeId);
-            uint8_t savedId = _activeId;
-            _activeId = 0xFF; // Reset so switchProgram doesn't skip
-            switchProgram(savedId);
-        } else {
-            Serial.printf("%s Saved active program %u not found\r\n", TAG, _activeId);
-            _activeId = 0xFF;
+    if (safeMode) {
+        // Crash-loop guard tripped: boot with NO active program so the lamp
+        // stays reachable over BLE. Forget the resume target persistently —
+        // the next clean boot must not walk straight back into the crash.
+        Serial.printf("%s SAFE MODE: skipping program activation\r\n", TAG);
+        _activeId = 0xFF;
+        _resumeProgramId = 0xFF;
+        saveConfig();
+    } else {
+        // If we have a saved active program, switch to it
+        if (_activeId != 0xFF) {
+            int idx = findProgramIndex(_activeId);
+            if (idx >= 0) {
+                Serial.printf("%s Activating saved program %u\r\n", TAG, _activeId);
+                uint8_t savedId = _activeId;
+                _activeId = 0xFF; // Reset so switchProgram doesn't skip
+                switchProgram(savedId);
+            } else {
+                Serial.printf("%s Saved active program %u not found\r\n", TAG, _activeId);
+                _activeId = 0xFF;
+            }
         }
-    }
 
-    // If no active program but we have programs, activate the first one
-    if (_activeId == 0xFF && !_programs.empty()) {
-        Serial.printf("%s No saved active program, activating first available\r\n", TAG);
-        switchProgram(_programs[0].id);
-        _resumeProgramId = _programs[0].id;
+        // If no active program but we have programs, activate the first one
+        if (_activeId == 0xFF && !_programs.empty()) {
+            Serial.printf("%s No saved active program, activating first available\r\n", TAG);
+            switchProgram(_programs[0].id);
+            _resumeProgramId = _programs[0].id;
+        }
     }
 
     // Preload every program's meta into RAM: all lookups (BLE GETs, playlist
@@ -539,15 +552,25 @@ uint16_t ProgramManager::getLedWidth() const { return _ledWidth; }
 uint16_t ProgramManager::getLedHeight() const { return _ledHeight; }
 bool ProgramManager::getLedZigzag() const { return _ledZigzag; }
 uint8_t ProgramManager::getLedColorOrder() const { return _ledColorOrder; }
+uint16_t ProgramManager::getLedRotation() const { return _ledRotation; }
+bool ProgramManager::getLedMirror() const { return _ledMirror; }
+uint32_t ProgramManager::getLedMaxCurrent() const { return _ledMaxCurrent; }
 
-void ProgramManager::setHardwareConfig(uint8_t pin, uint16_t width, uint16_t height, bool zigzag, uint8_t colorOrder) {
+void ProgramManager::setHardwareConfig(uint8_t pin, uint16_t width, uint16_t height, bool zigzag, uint8_t colorOrder,
+                                       uint16_t rotation, bool mirror, uint32_t maxCurrentMa) {
+    // A changed single-panel geometry replaces any multi-panel layout; tweaks
+    // that don't touch geometry (orientation, color order, current cap) keep it.
+    bool geometryChanged = pin != _ledPin || width != _ledWidth ||
+                           height != _ledHeight || zigzag != _ledZigzag;
     _ledPin = pin;
     _ledWidth = width;
     _ledHeight = height;
     _ledZigzag = zigzag;
     _ledColorOrder = colorOrder;
-    // Explicit legacy single-panel config replaces any multi-panel layout.
-    saveConfig(true);
+    _ledRotation = rotation;
+    _ledMirror = mirror;
+    _ledMaxCurrent = maxCurrentMa;
+    saveConfig(geometryChanged);
 }
 
 void ProgramManager::saveConfig(bool dropPanels) {
@@ -567,6 +590,9 @@ void ProgramManager::saveConfig(bool dropPanels) {
     doc["ledHeight"] = _ledHeight;
     doc["ledZigzag"] = _ledZigzag;
     doc["ledColorOrder"] = _ledColorOrder;
+    doc["ledRotation"] = _ledRotation;
+    doc["ledMirror"] = _ledMirror;
+    doc["ledMaxCurrent"] = _ledMaxCurrent;
 
     String output;
     serializeJson(doc, output);
@@ -740,6 +766,9 @@ void ProgramManager::loadConfig() {
     if (doc.containsKey("ledHeight")) _ledHeight = doc["ledHeight"].as<uint16_t>();
     if (doc.containsKey("ledZigzag")) _ledZigzag = doc["ledZigzag"].as<bool>();
     if (doc.containsKey("ledColorOrder")) _ledColorOrder = doc["ledColorOrder"].as<uint8_t>();
+    if (doc.containsKey("ledRotation"))   _ledRotation   = doc["ledRotation"].as<uint16_t>();
+    if (doc.containsKey("ledMirror"))     _ledMirror     = doc["ledMirror"].as<bool>();
+    if (doc.containsKey("ledMaxCurrent")) _ledMaxCurrent = doc["ledMaxCurrent"].as<uint32_t>();
 
     if (doc.containsKey("active")) {
         _activeId = doc["active"].as<uint8_t>();

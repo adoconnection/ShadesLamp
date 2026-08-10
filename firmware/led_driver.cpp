@@ -123,12 +123,15 @@ static esp_err_t createLedEncoder(rmt_encoder_handle_t* ret) {
 
 // ── LedDriver ───────────────────────────────────────────────────────────────
 
-LedDriver::LedDriver(uint8_t pin, uint16_t width, uint16_t height, bool zigzag, uint8_t colorOrder)
+LedDriver::LedDriver(uint8_t pin, uint16_t width, uint16_t height, bool zigzag, uint8_t colorOrder,
+                     uint16_t rotation, bool mirror)
     : _pin(pin)
     , _width(width)
     , _height(height)
     , _numPixels(width * height)
     , _zigzag(zigzag)
+    , _rotation(rotation == 90 || rotation == 180 || rotation == 270 ? rotation : 0)
+    , _mirror(mirror)
     , _colorOrder(colorOrder < LED_ORDER_COUNT ? colorOrder : LED_ORDER_GRB)
     , _framebuffer(nullptr)
     , _maxCurrentMa(0)
@@ -241,6 +244,7 @@ bool LedDriver::buildStrips() {
             uint16_t ly = pos / p.w;
             uint16_t sx = pos % p.w;
             uint16_t lx = (p.zigzag && (ly & 1)) ? (p.w - 1 - sx) : sx;
+            if (p.mirror) lx = p.w - 1 - lx;
 
             // Canvas is y-up (y=0 = bottom row), rot is the panel's physical
             // clockwise rotation as seen facing the lamp: CW 90 maps local
@@ -342,14 +346,18 @@ void LedDriver::begin() {
     memset(_framebuffer, 0, bufSize);
 
     // No explicit layout: one full-canvas panel on the constructor pin.
+    // Constructor width/height are canvas dims; for a 90/270 orientation the
+    // panel's own wired dims are the swapped pair.
     if (_panelCount == 0) {
+        bool quarter = (_rotation == 90 || _rotation == 270);
         _panels[0].pin = _pin;
         _panels[0].x = 0;
         _panels[0].y = 0;
-        _panels[0].w = _width;
-        _panels[0].h = _height;
-        _panels[0].rot = 0;
+        _panels[0].w = quarter ? _height : _width;
+        _panels[0].h = quarter ? _width : _height;
+        _panels[0].rot = _rotation;
         _panels[0].zigzag = _zigzag;
+        _panels[0].mirror = _mirror;
         _panelCount = 1;
     }
 
