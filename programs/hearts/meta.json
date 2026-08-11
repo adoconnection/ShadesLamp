@@ -1,24 +1,26 @@
 {
   "guid": "7a3e1c92-5b4d-4e8a-9f21-6c0d8b2a1e34",
-  "version": "1.0.1",
-  "name": "Hearts",
-  "desc": "White and pink hearts gently floating and spinning",
+  "version": "2.0.0",
+  "name": "Shapes",
+  "desc": "Hearts, stars or squares gently floating and spinning",
   "author": "Shades",
   "category": "Particles",
   "cover": {"from": "#2A1020", "to": "#FFD6E8", "via": "#FF6FA5", "angle": 150},
   "pulse": "#FF6FA5",
-  "tags": ["hearts", "love", "pink", "romantic", "floating"],
+  "tags": ["shapes", "hearts", "stars", "squares", "floating", "romantic"],
   "i18n": {
     "ru": {
-      "name": "Сердечки",
-      "desc": "Бело-розовые сердечки плавно парят и вращаются",
+      "name": "Формы",
+      "desc": "Сердечки, звёздочки или квадраты плавно парят и вращаются",
       "params": {
-        "0": {"name": "Количество", "desc": "Число сердечек"},
-        "1": {"name": "Размер", "desc": "Размер сердечка в пикселях"},
+        "0": {"name": "Количество", "desc": "Число фигур"},
+        "1": {"name": "Размер", "desc": "Размер фигуры в пикселях"},
         "2": {"name": "Скорость", "desc": "Как быстро они парят"},
         "3": {"name": "Вращение", "desc": "Скорость вращения"},
         "4": {"name": "Яркость", "desc": "Общая яркость"},
-        "5": {"name": "Розовость", "desc": "Белые (0) — розовые (100)"}
+        "5": {"name": "Розовость", "desc": "Белые (0) — розовые (100), для бело-розовой палитры"},
+        "6": {"name": "Форма", "desc": "Какая фигура парит", "options": ["Сердечки", "Звёздочки", "Квадраты"]},
+        "7": {"name": "Палитра", "desc": "Цветовая схема (палитры лазеров)", "options": ["Бело-розовая", "Зелёная", "UV Neon", "Радуга", "Жёлто-красно-зелёная", "Маджента-циан"]}
       }
     }
   }
