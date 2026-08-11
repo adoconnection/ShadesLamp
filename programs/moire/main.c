@@ -43,18 +43,52 @@ int get_meta_len(void) { return sizeof(META) - 1; }
 static float fsin(float x) { return m_sin(x); }
 static float fcos(float x) { return m_cos(x); }
 
-/* ---- HSV to RGB — native ---- */
+/* ---- Interpolated sine table: the per-pixel trig runs in-wasm instead of
+ * one host call per pixel. 1024 steps + lerp keeps the error ~5e-6 —
+ * invisible after the 0..255 quantization. ---- */
+static float SINT[1025];
+static inline float tsin(float a) {
+    float u = a * (1024.0f / TWO_PI);
+    int   i = (int)u;
+    float f = u - (float)i;
+    if (f < 0.0f) { f += 1.0f; i -= 1; }
+    int i0 = i & 1023;
+    return SINT[i0] + (SINT[i0 + 1] - SINT[i0]) * f;
+}
+static inline float tcos(float a) { return tsin(a + HALF_PI); }
+
+/* ---- HSV to RGB: in-wasm copy of the host m_hsv algorithm (bit-identical
+ * output, no host-call round trip per pixel) ---- */
 static void hsv2rgb(int hue, int sat, int val, int *r, int *g, int *b) {
-    int c = m_hsv(hue & 0xFF, sat, val);
-    *r = (c >> 16) & 255; *g = (c >> 8) & 255; *b = c & 255;
+    if (val < 0) val = 0; if (val > 255) val = 255;
+    if (sat == 0) { *r = *g = *b = val; return; }
+    int hh = hue & 0xFF;
+    int region = hh / 43;
+    int rem = (hh - region * 43) * 6;
+    int p = (val * (255 - sat)) >> 8;
+    int q = (val * (255 - ((sat * rem) >> 8))) >> 8;
+    int t = (val * (255 - ((sat * (255 - rem)) >> 8))) >> 8;
+    switch (region) {
+        case 0:  *r = val; *g = t;   *b = p;   break;
+        case 1:  *r = q;   *g = val; *b = p;   break;
+        case 2:  *r = p;   *g = val; *b = t;   break;
+        case 3:  *r = p;   *g = q;   *b = val; break;
+        case 4:  *r = t;   *g = p;   *b = val; break;
+        default: *r = val; *g = p;   *b = q;   break;
+    }
 }
 
 #define MAX_W 64
 #define MAX_H 64
+static uint8_t FB[MAX_W * MAX_H * 3];
+EXPORT(get_framebuffer)
+int get_framebuffer(void) { return (int)FB; }
 
 EXPORT(init)
 void init(void) {
-    /* Purely per-frame computation, nothing to initialize */
+    for (int i = 0; i <= 1024; i++) {
+        SINT[i] = m_sin((float)(i & 1023) * (TWO_PI / 1024.0f));
+    }
 }
 
 /* shortest signed horizontal delta on a cylinder of width W (wraps seamlessly) */
@@ -64,16 +98,9 @@ static float wrap_dx(float dx, float W) {
     return dx;
 }
 
-/* spatial phase of one source at (x,y); geometry depends on pattern type.
- * The moire fringe is the *difference* of two sources' phases (the envelope),
- * the visible ripple is their *sum* (the carrier). */
-static float source_phase(int pattern, float dx, float dy, float freq, float angle) {
-    if (pattern == 1) {                       /* Lines: rotated axis projection */
-        return (dx * fcos(angle) + dy * fsin(angle)) * freq;
-    }
-    float dist = m_hypot(dx, dy);             /* Circles: radial distance */
-    return dist * freq;
-}
+/* The moire fringe is the *difference* of two sources' phases (the envelope),
+ * the visible ripple is their *sum* (the carrier). Source phases are computed
+ * inline in the pixel loop from per-column/per-row precomputed deltas. */
 
 EXPORT(update)
 void update(int tick_ms) {
@@ -120,31 +147,53 @@ void update(int tick_ms) {
 
     float base_hue = t * 12.0f;
 
+    /* Frame constants that the old code recomputed per pixel (host trig) */
+    float ca = fcos(angle_a), sa = fsin(angle_a);
+    float cb = fcos(angle_b), sb = fsin(angle_b);
+
+    /* Per-column horizontal deltas: the cylinder wrap runs W times per
+     * frame instead of W*H times. dax/dbx for the two offset sources,
+     * dgx for the grid's shared centre; squared copies for Circles. */
+    static float dax[MAX_W], dbx[MAX_W], dgx[MAX_W];
+    static float dax2[MAX_W], dbx2[MAX_W];
     for (int x = 0; x < W; x++) {
-        for (int y = 0; y < H; y++) {
+        dax[x] = wrap_dx((float)x - ax, (float)W);
+        dbx[x] = wrap_dx((float)x - bx, (float)W);
+        dgx[x] = wrap_dx((float)x - cx, (float)W);
+        dax2[x] = dax[x] * dax[x];
+        dbx2[x] = dbx[x] * dbx[x];
+    }
+
+    for (int y = 0; y < H; y++) {
+        float dy_g = (float)y - cy;
+        float da_y = (float)y - ay, da_y2 = da_y * da_y;
+        float db_y = (float)y - by, db_y2 = db_y * db_y;
+        uint8_t* row = FB + (uint32_t)y * W * 3;
+
+        for (int x = 0; x < W; x++) {
             float env, car;
             if (pattern == 2) {
                 /* Grid: two perpendicular line-moires (rotational grid moire).
                  * A small angle difference between the two grids is what
                  * actually produces the interference. */
-                float dx = wrap_dx((float)x - cx, (float)W);
-                float dy = (float)y - cy;
-                float ca = fcos(angle_a), sa = fsin(angle_a);
-                float cb = fcos(angle_b), sb = fsin(angle_b);
-                float pa1 = ( dx*ca + dy*sa) * freq, pb1 = ( dx*cb + dy*sb) * freq;
-                float pa2 = (-dx*sa + dy*ca) * freq, pb2 = (-dx*sb + dy*cb) * freq;
-                env = fcos((pa1 - pb1) * 0.5f) * fcos((pa2 - pb2) * 0.5f);
-                car = 0.5f * fsin((pa1 + pb1) * 0.5f - rp)
-                    + 0.5f * fsin((pa2 + pb2) * 0.5f - rp);
-            } else {                             /* Circles (offset sources) / Lines */
-                float da_x = wrap_dx((float)x - ax, (float)W);
-                float da_y = (float)y - ay;
-                float db_x = wrap_dx((float)x - bx, (float)W);
-                float db_y = (float)y - by;
-                float pa = source_phase(pattern, da_x, da_y, freq, angle_a);
-                float pb = source_phase(pattern, db_x, db_y, freq, angle_b);
-                env = fcos((pa - pb) * 0.5f);    /* standing moire fringe */
-                car = fsin((pa + pb) * 0.5f - rp); /* travelling ripple */
+                float dx = dgx[x];
+                float pa1 = ( dx*ca + dy_g*sa) * freq, pb1 = ( dx*cb + dy_g*sb) * freq;
+                float pa2 = (-dx*sa + dy_g*ca) * freq, pb2 = (-dx*sb + dy_g*cb) * freq;
+                env = tcos((pa1 - pb1) * 0.5f) * tcos((pa2 - pb2) * 0.5f);
+                car = 0.5f * tsin((pa1 + pb1) * 0.5f - rp)
+                    + 0.5f * tsin((pa2 + pb2) * 0.5f - rp);
+            } else {
+                float pa, pb;
+                if (pattern == 1) {              /* Lines: rotated axis projection */
+                    pa = (dax[x] * ca + da_y * sa) * freq;
+                    pb = (dbx[x] * cb + db_y * sb) * freq;
+                } else {                         /* Circles: radial distance
+                                                    (native wasm sqrt, no host call) */
+                    pa = __builtin_sqrtf(dax2[x] + da_y2) * freq;
+                    pb = __builtin_sqrtf(dbx2[x] + db_y2) * freq;
+                }
+                env = tcos((pa - pb) * 0.5f);    /* standing moire fringe */
+                car = tsin((pa + pb) * 0.5f - rp); /* travelling ripple */
             }
 
             /* clean fringe brightness from the envelope; ripple = gentle shimmer */
@@ -160,7 +209,7 @@ void update(int tick_ms) {
 
             int r, g, b;
             hsv2rgb(hue, sat, val, &r, &g, &b);
-            set_pixel(x, y, r, g, b);
+            row[x * 3] = (uint8_t)r; row[x * 3 + 1] = (uint8_t)g; row[x * 3 + 2] = (uint8_t)b;
         }
     }
 
