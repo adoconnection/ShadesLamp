@@ -43,21 +43,42 @@ static uint32_t rng_next(void) {
 static float fsin(float x) { return m_sin(x); }
 static float fcos(float x) { return m_cos(x); }
 
-/* ---- HSV to RGB (native host primitive) ---- */
+/* ---- HSV to RGB: in-wasm copy of the host m_hsv algorithm. Bit-identical
+ * to the host call, but ~25 interpreted ops instead of a host-call round
+ * trip — this runs once per pixel, where the call overhead dominates. ---- */
 static void hsv2rgb(int hue, int sat, int val, int *r, int *g, int *b) {
-    int c = m_hsv(hue & 0xFF, sat, val);
-    *r = (c >> 16) & 255;
-    *g = (c >> 8) & 255;
-    *b = c & 255;
+    if (val < 0) val = 0; if (val > 255) val = 255;
+    if (sat < 0) sat = 0; if (sat > 255) sat = 255;
+    if (sat == 0) { *r = *g = *b = val; return; }
+    int hh = hue & 0xFF;
+    int region = hh / 43;
+    int rem = (hh - region * 43) * 6;
+    int p = (val * (255 - sat)) >> 8;
+    int q = (val * (255 - ((sat * rem) >> 8))) >> 8;
+    int t = (val * (255 - ((sat * (255 - rem)) >> 8))) >> 8;
+    switch (region) {
+        case 0:  *r = val; *g = t;   *b = p;   break;
+        case 1:  *r = q;   *g = val; *b = p;   break;
+        case 2:  *r = p;   *g = val; *b = t;   break;
+        case 3:  *r = p;   *g = q;   *b = val; break;
+        case 4:  *r = t;   *g = p;   *b = val; break;
+        default: *r = val; *g = p;   *b = q;   break;
+    }
 }
 
-/* ---- Frame buffer for trail fade (8-bit, subtractive) ---- */
+/* ---- Frame buffer: doubles as the trail state (subtractive fade reads the
+ * previous frame back from here) and the draw() source. ---- */
 #define MAX_W 64
 #define MAX_H 64
 static float col_phase[MAX_W];
-static uint8_t prev_r[MAX_W][MAX_H];
-static uint8_t prev_g[MAX_W][MAX_H];
-static uint8_t prev_b[MAX_W][MAX_H];
+static uint8_t FB[MAX_W * MAX_H * 3];
+EXPORT(get_framebuffer)
+int get_framebuffer(void) { return (int)FB; }
+
+/* sin/cos of the y-only part of the vert_wave argument, so the per-pixel
+ * sine collapses to sin(A+B) = SY*cos(B) + CY*sin(B) with B per column. */
+static float SY[MAX_H];
+static float CY[MAX_H];
 
 EXPORT(init)
 void init(void) {
@@ -65,13 +86,11 @@ void init(void) {
     for (int i = 0; i < MAX_W; i++) {
         col_phase[i] = (float)(rng_next() % 1000) * TWO_PI / 1000.0f;
     }
-    for (int x = 0; x < MAX_W; x++) {
-        for (int y = 0; y < MAX_H; y++) {
-            prev_r[x][y] = 0;
-            prev_g[x][y] = 0;
-            prev_b[x][y] = 0;
-        }
+    for (int y = 0; y < MAX_H; y++) {
+        SY[y] = fsin((float)y * 0.45f);
+        CY[y] = fcos((float)y * 0.45f);
     }
+    for (uint32_t i = 0; i < sizeof(FB); i++) FB[i] = 0;
 }
 
 EXPORT(update)
@@ -101,6 +120,14 @@ void update(int tick_ms) {
     int step = 25 - (glow_param * 21) / 100;
     if (step < 1) step = 1;
 
+    /* y-only factors, hoisted out of the column loop */
+    float y_fade_lut[MAX_H];
+    for (int y = 0; y < H; y++) {
+        float y_norm = (float)y / (float)H;
+        float y_fade = 1.0f - y_norm;
+        y_fade_lut[y] = y_fade * y_fade;
+    }
+
     for (int x = 0; x < W; x++) {
         float fx = (float)x;
         float phase = col_phase[x];
@@ -127,18 +154,17 @@ void update(int tick_ms) {
         int hue_offset = (int)(fsin(fx * 0.35f + t * 0.18f) * 18.0f);
         int col_hue = (base_hue + hue_offset) & 0xFF;
 
-        for (int y = 0; y < H; y++) {
-            float fy = (float)y;
-            float fH = (float)H;
+        /* Column part of the vert_wave angle: two host sines per column
+         * replace one per pixel (sin(A+B) identity with the SY/CY tables) */
+        float vb = t * 1.20f + phase;
+        float vsin = fsin(vb);
+        float vcos = fcos(vb);
 
-            /* Aurora "hangs": brightest at small y, fading toward large y.
-             * (Preserve established visual behavior across orientations.) */
-            float y_norm = fy / fH;
-            float y_fade = 1.0f - y_norm;
-            y_fade = y_fade * y_fade;
+        for (int y = 0; y < H; y++) {
+            float y_fade = y_fade_lut[y];
 
             /* Vertical wave structure (shimmering folds) */
-            float vert_wave = fsin(fy * 0.45f + t * 1.20f + phase) * 0.16f + 0.84f;
+            float vert_wave = (SY[y] * vcos + CY[y] * vsin) * 0.16f + 0.84f;
             if (vert_wave < 0.0f) vert_wave = 0.0f;
 
             /* Combine smoothly */
@@ -164,23 +190,19 @@ void update(int tick_ms) {
 
             /* Subtractive trail fade: prev decays by `step` per frame,
              * output = max(target, prev_after_decay). Pixel brightens
-             * instantly to its target, then walks back down linearly. */
-            int faded_r = prev_r[x][y] - step;
-            int faded_g = prev_g[x][y] - step;
-            int faded_b = prev_b[x][y] - step;
+             * instantly to its target, then walks back down linearly.
+             * The previous frame is read back from FB itself. */
+            uint8_t* px = FB + ((uint32_t)y * W + x) * 3;
+            int faded_r = px[0] - step;
+            int faded_g = px[1] - step;
+            int faded_b = px[2] - step;
             if (faded_r < 0) faded_r = 0;
             if (faded_g < 0) faded_g = 0;
             if (faded_b < 0) faded_b = 0;
 
-            int out_r = (target_r > faded_r) ? target_r : faded_r;
-            int out_g = (target_g > faded_g) ? target_g : faded_g;
-            int out_b = (target_b > faded_b) ? target_b : faded_b;
-
-            prev_r[x][y] = (uint8_t)out_r;
-            prev_g[x][y] = (uint8_t)out_g;
-            prev_b[x][y] = (uint8_t)out_b;
-
-            set_pixel(x, y, out_r, out_g, out_b);
+            px[0] = (uint8_t)((target_r > faded_r) ? target_r : faded_r);
+            px[1] = (uint8_t)((target_g > faded_g) ? target_g : faded_g);
+            px[2] = (uint8_t)((target_b > faded_b) ? target_b : faded_b);
         }
     }
 
