@@ -104,11 +104,21 @@ void renderTask(void* param) {
             continue;
         }
 
-        // Skip rendering when power is off (LEDs stay dark)
+        // Skip rendering when power is off (LEDs stay dark). The BLE task
+        // already cleared the strip in setPower(), but a frame that was
+        // mid-render on this task can latch AFTER that clear and stick —
+        // so wipe once more from here, the last writer, on the transition.
+        static bool wasPoweredOn = true;
         if (!bleService->isPowerOn()) {
+            if (wasPoweredOn) {
+                ledDriver->clear();
+                ledDriver->show();
+                wasPoweredOn = false;
+            }
             vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(100));
             continue;
         }
+        wasPoweredOn = true;
 
         // NOTE: a BLE-busy render freeze used to live here (hold the last
         // latched frame while isBleBusy(), to keep WS2812 timing away from
