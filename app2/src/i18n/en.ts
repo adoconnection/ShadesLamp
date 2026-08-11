@@ -111,6 +111,7 @@ export const en = {
   programsSection: 'PROGRAMS',
   deviceSection: 'DEVICE',
   power: 'Power',
+  brightness: 'Brightness',
   clearMemory: 'Clear memory',
   clearMemoryTitle: 'Clear memory?',
   clearMemoryMsg: 'All uploaded programs will be erased from the lamp. The device name and settings are kept.',

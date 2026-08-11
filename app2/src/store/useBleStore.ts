@@ -17,6 +17,8 @@ interface BleState {
   deviceMac: string;
   deviceInfo: DeviceInfo;
   powerOn: boolean;
+  // Global lamp brightness, 0..255 (mirrors the firmware value).
+  brightness: number;
   // Background data load after a connection is established. `syncProgress` is
   // non-null while program metadata is still streaming in; `playlistsLoading`
   // is true while the lamp's playlists are being fetched. Both drive the UI
@@ -28,6 +30,7 @@ interface BleState {
   setDeviceMac: (mac: string) => void;
   setDeviceInfo: (info: Partial<DeviceInfo>) => void;
   setPowerOn: (on: boolean) => void;
+  setBrightness: (brightness: number) => void;
   setSyncProgress: (p: { done: number; total: number } | null) => void;
   setPlaylistsLoading: (loading: boolean) => void;
   reset: () => void;
@@ -39,6 +42,7 @@ export const useBleStore = create<BleState>((set) => ({
   deviceMac: '',
   deviceInfo: DEFAULT_DEVICE_INFO,
   powerOn: true,
+  brightness: 255,
   syncProgress: null,
   playlistsLoading: false,
   setConnectionState: (connectionState) => set({ connectionState }),
@@ -46,7 +50,8 @@ export const useBleStore = create<BleState>((set) => ({
   setDeviceMac: (deviceMac) => set({ deviceMac }),
   setDeviceInfo: (info) => set((s) => ({ deviceInfo: { ...s.deviceInfo, ...info } })),
   setPowerOn: (powerOn) => set({ powerOn }),
+  setBrightness: (brightness) => set({ brightness }),
   setSyncProgress: (syncProgress) => set({ syncProgress }),
   setPlaylistsLoading: (playlistsLoading) => set({ playlistsLoading }),
-  reset: () => set({ connectionState: 'disconnected', deviceId: null, deviceMac: '', deviceInfo: DEFAULT_DEVICE_INFO, powerOn: true, syncProgress: null, playlistsLoading: false }),
+  reset: () => set({ connectionState: 'disconnected', deviceId: null, deviceMac: '', deviceInfo: DEFAULT_DEVICE_INFO, powerOn: true, brightness: 255, syncProgress: null, playlistsLoading: false }),
 }));

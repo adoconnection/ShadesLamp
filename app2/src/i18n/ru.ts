@@ -112,6 +112,7 @@ export const ru: Record<StringKey, string> = {
   programsSection: 'ПРОГРАММЫ',
   deviceSection: 'УСТРОЙСТВО',
   power: 'Питание',
+  brightness: 'Яркость',
   clearMemory: 'Очистить память',
   clearMemoryTitle: 'Очистить память?',
   clearMemoryMsg: 'Все загруженные программы будут удалены с лампы. Имя и настройки устройства сохранятся.',

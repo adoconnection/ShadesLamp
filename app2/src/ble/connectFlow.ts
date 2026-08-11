@@ -33,7 +33,7 @@ export async function connectAndLoadDevice(
   deviceId: string,
   onDisconnected?: () => void,
 ): Promise<Device> {
-  const { setConnectionState, setDeviceId, setDeviceMac, setDeviceInfo, setPowerOn, setSyncProgress, setPlaylistsLoading } = useBleStore.getState();
+  const { setConnectionState, setDeviceId, setDeviceMac, setDeviceInfo, setPowerOn, setBrightness, setSyncProgress, setPlaylistsLoading } = useBleStore.getState();
   const { setPrograms, setActiveId } = useProgramStore.getState();
 
   setConnectionState('connecting');
@@ -139,6 +139,7 @@ export async function connectAndLoadDevice(
   setPrograms(base);
   setActiveId(activeId);
   setPowerOn(powerOn);
+  if (hwConfig.ok && typeof hwConfig.brightness === 'number') setBrightness(hwConfig.brightness);
 
   // Seed marketplace installed state from what we know now; refined once the
   // background meta load completes (some slugs only arrive with the meta).

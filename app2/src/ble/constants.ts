@@ -56,6 +56,8 @@ export const CMD = {
   PL_STOP:         0x3D,
   PL_STATE:        0x3E,
   PL_SET_POS:      0x3F,
+  GET_BRIGHTNESS:  0x40,
+  SET_BRIGHTNESS:  0x41,
 } as const;
 
 // Upload pipeline payload types (UPLOAD_START byte after the 4-byte size)

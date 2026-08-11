@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Alert, Pressable, Modal, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -6,12 +6,13 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { useBleStore } from '../store/useBleStore';
 import { useProgramStore } from '../store/useProgramStore';
-import { reboot, setPower, getHwConfig, clearStorage, setDeviceName } from '../ble/commands';
+import { reboot, setPower, getHwConfig, clearStorage, setDeviceName, setBrightness } from '../ble/commands';
 import { refreshPrograms } from '../ble/connectFlow';
 import NavButton from '../components/NavButton';
 import Card from '../components/Card';
 import SectionLabel from '../components/SectionLabel';
 import SettingsRow from '../components/SettingsRow';
+import Slider from '../components/Slider';
 import { BackIcon, EditIcon } from '../components/Icon';
 import { t } from '../i18n';
 import { fonts } from '../theme/typography';
@@ -21,13 +22,36 @@ type Props = NativeStackScreenProps<RootStackParamList, 'DeviceSettings'>;
 
 export default function DeviceSettingsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { deviceInfo, connectionState, powerOn, setPowerOn, setDeviceInfo } = useBleStore();
+  const { deviceInfo, connectionState, powerOn, setPowerOn, setDeviceInfo, brightness, setBrightness: setBrightnessLocal } = useBleStore();
   const { programs } = useProgramStore();
   const [renameOpen, setRenameOpen] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const connected = connectionState === 'connected';
 
   const openRename = () => { setNameInput(deviceInfo.name); setRenameOpen(true); };
+
+  // Brightness slider: update the store instantly, but throttle the BLE writes
+  // (trailing-edge, ~120 ms) so a drag doesn't flood the command queue. The
+  // firmware applies each value live and persists it debounced on its side.
+  const brightnessTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const brightnessPending = useRef<number | null>(null);
+  useEffect(() => () => { if (brightnessTimer.current) clearTimeout(brightnessTimer.current); }, []);
+
+  const handleBrightness = (pct: number) => {
+    const value = Math.round((pct * 255) / 100);
+    setBrightnessLocal(value);
+    if (!connected) return;
+    brightnessPending.current = value;
+    if (brightnessTimer.current) return;             // a send is already scheduled
+    brightnessTimer.current = setTimeout(async () => {
+      brightnessTimer.current = null;
+      const v = brightnessPending.current;
+      brightnessPending.current = null;
+      if (v != null) {
+        try { await setBrightness(v); } catch (err) { console.warn('Brightness error:', err); }
+      }
+    }, 120);
+  };
 
   const saveName = async () => {
     const name = nameInput.trim();
@@ -157,7 +181,18 @@ export default function DeviceSettingsScreen({ navigation }: Props) {
 
       <SectionLabel>{t('programsSection')}</SectionLabel>
       <Card>
-        <SettingsRow label={t('installed')} detail={String(programs.length)} last />
+        <SettingsRow label={t('installed')} detail={String(programs.length)} />
+        <View style={[styles.brightnessBlock, !connected && styles.brightnessDisabled]}>
+          <Text style={styles.brightnessLabel}>{t('brightness')}</Text>
+          <Slider
+            value={Math.round((brightness * 100) / 255)}
+            min={1}
+            max={100}
+            onChange={handleBrightness}
+            formatValue={(v) => `${v}%`}
+            disabled={!connected}
+          />
+        </View>
       </Card>
 
       <SectionLabel>{t('deviceSection')}</SectionLabel>
@@ -273,6 +308,9 @@ const styles = StyleSheet.create({
     gap: 14,
     marginTop: 16,
   },
+  brightnessBlock: { padding: 14, paddingHorizontal: 16, gap: 10 },
+  brightnessDisabled: { opacity: 0.4 },
+  brightnessLabel: { fontSize: 14, color: colors.text },
   footer: { paddingHorizontal: 24, paddingTop: 20 },
   footerText: { fontFamily: fonts.mono, fontSize: 11, color: 'rgba(250,250,247,0.35)', lineHeight: 18 },
 });

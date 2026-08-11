@@ -282,6 +282,19 @@ export async function setMeta(programId: number, meta: object): Promise<any> {
   return queue.enqueue(() => writeCommand(new Uint8Array([CMD.UPLOAD_FINISH])));
 }
 
+// Global brightness (0..255). SET applies live on the lamp; the firmware
+// persists it to /config.json with a debounce, so it's safe to stream while
+// the user drags a slider.
+export async function getBrightness(): Promise<number> {
+  const result = await queue.enqueue(() => writeCommand(new Uint8Array([CMD.GET_BRIGHTNESS])));
+  return result.brightness;
+}
+
+export async function setBrightness(value: number): Promise<any> {
+  const b = Math.max(0, Math.min(255, Math.round(value)));
+  return queue.enqueue(() => writeCommand(new Uint8Array([CMD.SET_BRIGHTNESS, b])));
+}
+
 export async function getPower(): Promise<boolean> {
   const result = await queue.enqueue(() => writeCommand(new Uint8Array([CMD.GET_POWER])));
   return result.power;
