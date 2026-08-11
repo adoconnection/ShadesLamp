@@ -21,6 +21,7 @@ ProgramManager::ProgramManager(WasmEngine* engine, ParamStore* paramStore, LedDr
     , _ledRotation(0)
     , _ledMirror(false)
     , _ledMaxCurrent(2000)
+    , _ledBrightness(255)
     , _paramsDirty(false)
     , _lastParamDirtyTime(0)
     , _pendingSwitchId(0xFF)
@@ -555,6 +556,13 @@ uint8_t ProgramManager::getLedColorOrder() const { return _ledColorOrder; }
 uint16_t ProgramManager::getLedRotation() const { return _ledRotation; }
 bool ProgramManager::getLedMirror() const { return _ledMirror; }
 uint32_t ProgramManager::getLedMaxCurrent() const { return _ledMaxCurrent; }
+uint8_t ProgramManager::getLedBrightness() const { return _ledBrightness; }
+
+void ProgramManager::setLedBrightness(uint8_t brightness) {
+    if (_ledBrightness == brightness) return;
+    _ledBrightness = brightness;
+    requestConfigSave();   // debounced: sliders send a burst of values
+}
 
 void ProgramManager::setHardwareConfig(uint8_t pin, uint16_t width, uint16_t height, bool zigzag, uint8_t colorOrder,
                                        uint16_t rotation, bool mirror, uint32_t maxCurrentMa) {
@@ -593,6 +601,7 @@ void ProgramManager::saveConfig(bool dropPanels) {
     doc["ledRotation"] = _ledRotation;
     doc["ledMirror"] = _ledMirror;
     doc["ledMaxCurrent"] = _ledMaxCurrent;
+    doc["ledBrightness"] = _ledBrightness;
 
     String output;
     serializeJson(doc, output);
@@ -769,6 +778,7 @@ void ProgramManager::loadConfig() {
     if (doc.containsKey("ledRotation"))   _ledRotation   = doc["ledRotation"].as<uint16_t>();
     if (doc.containsKey("ledMirror"))     _ledMirror     = doc["ledMirror"].as<bool>();
     if (doc.containsKey("ledMaxCurrent")) _ledMaxCurrent = doc["ledMaxCurrent"].as<uint32_t>();
+    if (doc.containsKey("ledBrightness")) _ledBrightness = doc["ledBrightness"].as<uint8_t>();
 
     if (doc.containsKey("active")) {
         _activeId = doc["active"].as<uint8_t>();

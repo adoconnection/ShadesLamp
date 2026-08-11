@@ -388,13 +388,13 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
 
                 float tempC = temperatureRead();   // ESP32-S3 internal die sensor (°C)
 
-                char resp[320];
+                char resp[352];
                 snprintf(resp, sizeof(resp),
-                    "{\"ok\":true,\"build\":%u,\"pin\":%u,\"width\":%u,\"height\":%u,\"zigzag\":%s,\"colorOrder\":%u,\"colorOrderName\":\"%s\",\"rotation\":%u,\"mirror\":%s,\"maxCurrent\":%u,\"serial\":\"%s\",\"temp\":%.1f}",
+                    "{\"ok\":true,\"build\":%u,\"pin\":%u,\"width\":%u,\"height\":%u,\"zigzag\":%s,\"colorOrder\":%u,\"colorOrderName\":\"%s\",\"rotation\":%u,\"mirror\":%s,\"maxCurrent\":%u,\"brightness\":%u,\"serial\":\"%s\",\"temp\":%.1f}",
                     (unsigned)FW_BUILD, pm->getLedPin(), pm->getLedWidth(), pm->getLedHeight(),
                     pm->getLedZigzag() ? "true" : "false", order, orderName,
                     pm->getLedRotation(), pm->getLedMirror() ? "true" : "false",
-                    (unsigned)pm->getLedMaxCurrent(), serial, tempC);
+                    (unsigned)pm->getLedMaxCurrent(), pm->getLedBrightness(), serial, tempC);
                 Serial.printf("%s CMD GET_HW_CONFIG: %s\r\n", TAG, resp);
                 g_bleService->sendResponse(String(resp));
                 break;
@@ -502,6 +502,28 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
                 Serial.printf("%s Power %s\r\n", TAG, on ? "ON" : "OFF");
                 char buf[32];
                 snprintf(buf, sizeof(buf), "{\"ok\":true,\"power\":%s}", on ? "true" : "false");
+                g_bleService->sendResponse(buf);
+                break;
+            }
+
+            case CMD_GET_BRIGHTNESS: {
+                char buf[40];
+                snprintf(buf, sizeof(buf), "{\"ok\":true,\"brightness\":%u}", pm->getLedBrightness());
+                g_bleService->sendResponse(buf);
+                break;
+            }
+
+            case CMD_SET_BRIGHTNESS: {
+                if (payloadLen < 1) {
+                    g_bleService->sendResponse("{\"ok\":false,\"err\":\"missing payload\"}", true);
+                    break;
+                }
+                uint8_t b = payload[0];
+                LedDriver* led = g_bleService->getLedDriver();
+                if (led) led->setBrightness(b);   // applies from the next frame
+                pm->setLedBrightness(b);          // debounced persist to /config.json
+                char buf[40];
+                snprintf(buf, sizeof(buf), "{\"ok\":true,\"brightness\":%u}", b);
                 g_bleService->sendResponse(buf);
                 break;
             }

@@ -167,6 +167,11 @@ public:
     void setHardwareConfig(uint8_t pin, uint16_t width, uint16_t height, bool zigzag, uint8_t colorOrder,
                            uint16_t rotation = 0, bool mirror = false, uint32_t maxCurrentMa = 2000);
 
+    // Global brightness (0..255). Applied live by the caller; persisted here
+    // with the debounced config save so slider drags don't wear the flash.
+    uint8_t getLedBrightness() const;
+    void setLedBrightness(uint8_t brightness);
+
 private:
     int findProgramIndex(uint8_t id) const;
     // Overlay param values into the active ParamStore in memory only (no flash
@@ -194,6 +199,7 @@ private:
     uint16_t _ledRotation;   // 0/90/180/270, clockwise
     bool     _ledMirror;
     uint32_t _ledMaxCurrent; // estimated LED draw cap, mA (0 = no limit)
+    uint8_t  _ledBrightness; // global brightness 0..255 (255 = full)
 
     std::vector<uint8_t> _order;  // custom display order (program IDs)
 

@@ -75,6 +75,12 @@ public:
     void     setMaxCurrent(uint32_t maxMa);
     uint32_t getMaxCurrent() const { return _maxCurrentMa; }
 
+    // Global user brightness (0..255, 255 = full). Persisted in config and
+    // applied in show() before current limiting, so a dimmed frame also draws
+    // proportionally less estimated current.
+    void     setBrightness(uint8_t b);
+    uint8_t  getBrightness() const { return _brightness; }
+
     // Global brightness scale applied in show() (8.8 fixed: 256 = full).
     // Used for host-side crossfade on program switch.
     void     setFadeScale(uint16_t scale256) { _fadeScale = scale256 > 256 ? 256 : scale256; }
@@ -107,6 +113,8 @@ private:
     uint8_t* _framebuffer;          // RGB framebuffer in PSRAM
     uint32_t _maxCurrentMa;         // 0 = no current limit
     uint16_t _fadeScale;            // 0..256 global brightness (crossfade)
+    uint8_t  _brightness;           // user brightness 0..255 (255 = full)
+    uint16_t _brightScale256;       // precomputed brightness in 8.8 fixed point
 
     LedPanel _panels[LED_MAX_PANELS];
     uint8_t  _panelCount;

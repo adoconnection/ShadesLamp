@@ -326,7 +326,7 @@ String loadConfig() {
 }
 
 void loadHardwareConfig(uint8_t& pin, uint16_t& width, uint16_t& height, bool& zigzag, uint8_t& colorOrder,
-                        uint16_t& rotation, bool& mirror, uint32_t& maxCurrentMa) {
+                        uint16_t& rotation, bool& mirror, uint32_t& maxCurrentMa, uint8_t& brightness) {
     String configStr = loadConfig();
     if (configStr.length() == 0) return;
 
@@ -341,9 +341,10 @@ void loadHardwareConfig(uint8_t& pin, uint16_t& width, uint16_t& height, bool& z
     if (doc.containsKey("ledRotation"))   rotation   = doc["ledRotation"].as<uint16_t>();
     if (doc.containsKey("ledMirror"))     mirror     = doc["ledMirror"].as<bool>();
     if (doc.containsKey("ledMaxCurrent")) maxCurrentMa = doc["ledMaxCurrent"].as<uint32_t>();
+    if (doc.containsKey("ledBrightness")) brightness   = doc["ledBrightness"].as<uint8_t>();
 
-    Serial.printf("%s HW config: pin=%u, %ux%u, zigzag=%d, order=%u, rot=%u, mirror=%d, maxMa=%u\r\n",
-                  TAG, pin, width, height, zigzag, colorOrder, rotation, mirror, maxCurrentMa);
+    Serial.printf("%s HW config: pin=%u, %ux%u, zigzag=%d, order=%u, rot=%u, mirror=%d, maxMa=%u, bright=%u\r\n",
+                  TAG, pin, width, height, zigzag, colorOrder, rotation, mirror, maxCurrentMa, brightness);
 }
 
 uint8_t loadPanelConfig(LedPanel* out, uint8_t maxPanels) {

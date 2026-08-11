@@ -256,8 +256,9 @@ void setup() {
     uint16_t ledRotation = 0;  // wiring orientation: 0/90/180/270 clockwise
     bool ledMirror = false;    //  + optional mirror (for reflected wiring)
     uint32_t ledMaxCurrent = 2000;  // estimated LED draw cap, mA (0 = no limit)
+    uint8_t ledBrightness = 255;    // global brightness (255 = full)
     Storage::loadHardwareConfig(ledPin, ledWidth, ledHeight, ledZigzag, ledColorOrder, ledRotation, ledMirror,
-                                ledMaxCurrent);
+                                ledMaxCurrent, ledBrightness);
 
     // Optional multi-panel layout ("panels" array in config.json). When
     // present it overrides the legacy single-panel pin/zigzag fields.
@@ -287,6 +288,7 @@ void setup() {
     }
     ledDriver->begin();
     ledDriver->setMaxCurrent(ledMaxCurrent);
+    ledDriver->setBrightness(ledBrightness);
 
     // Create engine and manager with dynamic pointers
     wasmEngine = new WasmEngine(ledDriver, &paramStore);

@@ -136,6 +136,8 @@ LedDriver::LedDriver(uint8_t pin, uint16_t width, uint16_t height, bool zigzag, 
     , _framebuffer(nullptr)
     , _maxCurrentMa(0)
     , _fadeScale(256)
+    , _brightness(255)
+    , _brightScale256(256)
     , _panelCount(0)
     , _stripCount(0)
 {
@@ -407,18 +409,19 @@ void LedDriver::commit(const uint8_t* rgb) {
 void LedDriver::show() {
     xSemaphoreTake(_mutex, portMAX_DELAY);
 
-    // Optional current limiting: estimate total draw and, if it exceeds the
-    // configured budget, scale every channel down by a single fixed-point factor.
+    // Global user brightness first, then optional current limiting: estimate
+    // the draw of the already-dimmed frame and, if it exceeds the configured
+    // budget, scale every channel down by a single fixed-point factor.
     // scale256 is 8.8 fixed point: 256 == 1.0 (no scaling).
-    uint16_t scale256 = 256;
+    uint16_t scale256 = _brightScale256;
     if (_maxCurrentMa > 0) {
         uint64_t channelSum = 0;
         size_t total = (size_t)_numPixels * 3;
         for (size_t i = 0; i < total; i++) channelSum += _framebuffer[i];
         // Each channel at value 255 draws ~LED_MA_PER_CHANNEL mA.
-        uint32_t estimatedMa = (uint32_t)(channelSum * LED_MA_PER_CHANNEL / 255);
+        uint32_t estimatedMa = (uint32_t)(((channelSum * scale256) >> 8) * LED_MA_PER_CHANNEL / 255);
         if (estimatedMa > _maxCurrentMa) {
-            scale256 = (uint16_t)(((uint64_t)_maxCurrentMa * 256) / estimatedMa);
+            scale256 = (uint16_t)(((uint64_t)scale256 * _maxCurrentMa) / estimatedMa);
         }
     }
 
@@ -485,6 +488,15 @@ void LedDriver::setMaxCurrent(uint32_t maxMa) {
     _maxCurrentMa = maxMa;
     xSemaphoreGive(_mutex);
     Serial.printf("%s Max current limit: %u mA%s\r\n", TAG, maxMa, maxMa == 0 ? " (disabled)" : "");
+}
+
+void LedDriver::setBrightness(uint8_t b) {
+    xSemaphoreTake(_mutex, portMAX_DELAY);
+    _brightness = b;
+    // Round so 255 maps exactly to 256 (no scaling in show()).
+    _brightScale256 = (uint16_t)(((uint16_t)b * 256 + 127) / 255);
+    xSemaphoreGive(_mutex);
+    Serial.printf("%s Brightness: %u/255\r\n", TAG, b);
 }
 
 void LedDriver::clear() {
