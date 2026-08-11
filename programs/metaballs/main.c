@@ -95,6 +95,19 @@ static int blob_rsq[MAX_BLOBS];      /* r^2 * 65536 for the influence calc */
 static int matrix_w, matrix_h;
 static uint32_t frame;
 
+/* Framebuffer fast-path: one draw() copy instead of W*H set_pixel host calls */
+#define MAX_W 64
+#define MAX_H 64
+static uint8_t FB[MAX_W * MAX_H * 3];
+EXPORT(get_framebuffer)
+int get_framebuffer(void) { return (int)FB; }
+
+/* Per-frame squared half-distances: dxx depends only on the column and dyy
+ * only on the row, so (dxx/16)^2 and (dyy/16)^2 are hoisted out of the pixel
+ * loop — the per-pixel blob body collapses to add + divide + accumulate. */
+static int dx2[MAX_BLOBS][MAX_W];
+static int dy2[MAX_BLOBS][MAX_H];
+
 EXPORT(init)
 void init(void) {
     matrix_w = get_width();
@@ -185,26 +198,33 @@ void update(int tick_ms) {
     }
 
     int half_w = W * 128;
+    if (W > MAX_W) W = MAX_W;
+    if (H > MAX_H) H = MAX_H;
+
+    for (int i = 0; i < count; i++) {
+        for (int px = 0; px < W; px++) {
+            int dxx = blob_x[i] - (px * 256 + 128);
+            if (dxx > half_w) dxx -= W * 256;
+            if (dxx < -half_w) dxx += W * 256;
+            int dx_r = dxx / 16;
+            dx2[i][px] = dx_r * dx_r;
+        }
+        for (int py = 0; py < H; py++) {
+            int dy_r = (blob_y[i] - (py * 256 + 128)) / 16;
+            dy2[i][py] = dy_r * dy_r;
+        }
+    }
 
     /* Render */
     for (int py = 0; py < H; py++) {
+        uint8_t* row = FB + (uint32_t)py * W * 3;
         for (int px = 0; px < W; px++) {
-            int px256 = px * 256 + 128;
-            int py256 = py * 256 + 128;
-
             int raw_total = 0;       /* uncapped field strength */
             long rsum = 0, gsum = 0, bsum = 0;
             int wsum = 0;
 
             for (int i = 0; i < count; i++) {
-                int dxx = blob_x[i] - px256;
-                if (dxx > half_w) dxx -= W * 256;
-                if (dxx < -half_w) dxx += W * 256;
-                int dyy = blob_y[i] - py256;
-
-                int dx_r = dxx / 16;
-                int dy_r = dyy / 16;
-                int dist_sq = dx_r * dx_r + dy_r * dy_r;
+                int dist_sq = dx2[i][px] + dy2[i][py];
                 if (dist_sq < 1) dist_sq = 1;
 
                 int influence = blob_rsq[i] / dist_sq;   /* 256 * (r/d)^2 */
@@ -242,9 +262,11 @@ void update(int tick_ms) {
                 if (r > 255) r = 255;
                 if (g > 255) g = 255;
                 if (b > 255) b = 255;
-                set_pixel(px, py, r, g, b);
+                row[px * 3]     = (uint8_t)r;
+                row[px * 3 + 1] = (uint8_t)g;
+                row[px * 3 + 2] = (uint8_t)b;
             } else {
-                set_pixel(px, py, 0, 0, 0);
+                row[px * 3] = row[px * 3 + 1] = row[px * 3 + 2] = 0;
             }
         }
     }
