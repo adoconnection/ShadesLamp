@@ -1,332 +1,307 @@
 #include "api.h"
 
 /*
- * Fireworks — Rockets launch from bottom, explode into particles.
- * 4 explosion types: burst, chrysanthemum, palm, ring.
- * Y=0 is the bottom of the display.
+ * Fireworks 2 — rockets climb on a slightly parabolic arc, shedding orange
+ * exhaust sparks, then burst into anti-aliased shells that leave glowing
+ * trails (frame fade). Shell types: Peony (white core then colour),
+ * Chrysanthemum (long tails), Palm (thick rising branches), Ring, Willow
+ * (golden sparks that drift down slowly), Crackle (sparks pop into white
+ * mini-bursts), Double (two-colour inner + outer shell). Palettes pick the
+ * shell colours. Rendered into a framebuffer with m_blend for sub-pixel
+ * motion; X wraps around the cylinder. Y=0 is the bottom.
  */
 
-/* ---- Metadata JSON ---- */
 static const char META[] =
     "{\"name\":\"Fireworks\","
     "\"desc\":\"Rockets launch upward and explode into colorful particle bursts\","
     "\"params\":["
-        "{\"id\":0,\"name\":\"Count\",\"type\":\"int\","
-         "\"min\":1,\"max\":10,\"default\":5,"
-         "\"desc\":\"Number of simultaneous fireworks\"},"
-        "{\"id\":1,\"name\":\"Brightness\",\"type\":\"int\","
-         "\"min\":1,\"max\":255,\"default\":200,"
-         "\"desc\":\"Overall brightness\"}"
+        "{\"id\":0,\"name\":\"Count\",\"type\":\"int\",\"min\":1,\"max\":10,\"default\":5,\"desc\":\"Number of simultaneous fireworks\"},"
+        "{\"id\":1,\"name\":\"Brightness\",\"type\":\"int\",\"min\":1,\"max\":255,\"default\":200,\"desc\":\"Overall brightness\"},"
+        "{\"id\":2,\"name\":\"Type\",\"type\":\"select\",\"options\":[\"Auto\",\"Peony\",\"Chrysanthemum\",\"Palm\",\"Ring\",\"Willow\",\"Crackle\",\"Double\"],\"default\":0,\"desc\":\"Shell type, or a random mix\"},"
+        "{\"id\":3,\"name\":\"Palette\",\"type\":\"select\",\"options\":[\"Auto\",\"Gold\",\"Red-White-Blue\",\"Rainbow\",\"Pastel\",\"Neon\"],\"default\":0,\"desc\":\"Shell colours\"},"
+        "{\"id\":4,\"name\":\"Trail\",\"type\":\"int\",\"min\":0,\"max\":100,\"default\":40,\"desc\":\"Length of the glowing trails\"},"
+        "{\"id\":5,\"name\":\"Gravity\",\"type\":\"int\",\"min\":0,\"max\":100,\"default\":40,\"desc\":\"How fast sparks fall\"},"
+        "{\"id\":6,\"name\":\"Launch Rate\",\"type\":\"int\",\"min\":1,\"max\":100,\"default\":50,\"desc\":\"How often rockets launch\"},"
+        "{\"id\":7,\"name\":\"Sparks\",\"type\":\"int\",\"min\":1,\"max\":100,\"default\":50,\"desc\":\"Sparks per shell\"}"
     "]}";
 
-EXPORT(get_meta_ptr)
-int get_meta_ptr(void) { return (int)META; }
+EXPORT(get_meta_ptr) int get_meta_ptr(void){ return (int)META; }
+EXPORT(get_meta_len) int get_meta_len(void){ return sizeof(META)-1; }
 
-EXPORT(get_meta_len)
-int get_meta_len(void) { return sizeof(META) - 1; }
+#define MAX_W 64
+#define MAX_H 64
+static uint8_t FB[MAX_W*MAX_H*3];
+EXPORT(get_framebuffer) int get_framebuffer(void){ return (int)FB; }
+static int W=32,H=48;
 
-/* ---- PRNG (xorshift32) ---- */
-static uint32_t rng_state = 92731;
+/* ---- PRNG ---- */
+static uint32_t rng=92731;
+static uint32_t rnd(void){ uint32_t x=rng; x^=x<<13; x^=x>>17; x^=x<<5; rng=x; return x; }
+static int rrange(int lo,int hi){ if(lo>=hi)return lo; return lo+(int)(rnd()%(uint32_t)(hi-lo)); }
+static float frand(void){ return (float)(rnd()&0xFFFF)/65536.0f; }
 
-static uint32_t rng_next(void) {
-    uint32_t x = rng_state;
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    rng_state = x;
-    return x;
+#define TWO_PI 6.28318530f
+
+/* ---- shells ---- */
+#define MAX_FW 10
+#define PER_FW 64
+#define MAX_P (MAX_FW*PER_FW)
+#define MAX_M 192            /* micro sparks: rocket exhaust + crackle children */
+
+#define PH_IDLE 0
+#define PH_ROCKET 1
+#define PH_BURST 2
+
+#define T_PEONY 0
+#define T_CHRYS 1
+#define T_PALM 2
+#define T_RING 3
+#define T_WILLOW 4
+#define T_CRACKLE 5
+#define T_DOUBLE 6
+#define T_COUNT 7
+
+static int   fw_phase[MAX_FW], fw_type[MAX_FW], fw_timer[MAX_FW], fw_age[MAX_FW];
+static float fw_x[MAX_FW], fw_y[MAX_FW], fw_vx[MAX_FW], fw_vy[MAX_FW], fw_ty[MAX_FW];
+static int   fw_hue[MAX_FW], fw_sat[MAX_FW], fw_hue2[MAX_FW], fw_sat2[MAX_FW];
+static int   fw_flash[MAX_FW];          /* ms of burst flash remaining */
+
+/* shell sparks (slice per shell) */
+static float p_x[MAX_P], p_y[MAX_P], p_vx[MAX_P], p_vy[MAX_P];
+static int   p_ttl[MAX_P], p_max[MAX_P], p_age[MAX_P];
+static int   p_rgb[MAX_P];              /* full-brightness colour */
+static uint8_t p_kind[MAX_P];           /* 0 normal, 1 chrys, 2 willow, 3 crackle */
+static uint8_t p_drag[MAX_P];           /* drag per second * 32 */
+
+/* micro sparks */
+static float m_x[MAX_M], m_y[MAX_M], m_vx[MAX_M], m_vy[MAX_M];
+static int   m_ttl[MAX_M], m_max[MAX_M], m_rgb[MAX_M];
+static int   m_cursor=0;
+
+static int prev_tick=0;
+
+/* ---- colour helpers ---- */
+static inline int scale_rgb(int rgb,int sh){
+    if(sh<=0)return 0; if(sh>256)sh=256;
+    return ((((rgb>>16)&255)*sh>>8)<<16)|((((rgb>>8)&255)*sh>>8)<<8)|((rgb&255)*sh>>8);
+}
+/* lerp toward white by t (0..256) */
+static inline int whiten(int rgb,int t){
+    if(t<=0)return rgb; if(t>256)t=256;
+    int r=(rgb>>16)&255,g=(rgb>>8)&255,b=rgb&255;
+    r+=((255-r)*t)>>8; g+=((255-g)*t)>>8; b+=((255-b)*t)>>8;
+    return (r<<16)|(g<<8)|b;
 }
 
-static int random_range(int lo, int hi) {
-    if (lo >= hi) return lo;
-    return lo + (int)(rng_next() % (uint32_t)(hi - lo));
-}
-
-/* Returns a float in [0.0, 1.0) */
-static float random_float(void) {
-    return (float)(rng_next() & 0xFFFF) / 65536.0f;
-}
-
-/* ---- HSV to RGB (native host primitive) ---- */
-static void hsv_to_rgb(int h, int s, int v, int *r, int *g, int *b) {
-    int c = m_hsv(h, s, v);
-    *r = (c >> 16) & 255;
-    *g = (c >> 8) & 255;
-    *b = c & 255;
-}
-
-/* ---- Sin/cos (native): angle 0..16 maps to 0..2*PI ---- */
-static float fast_sin(float angle_16) {
-    return m_sin(angle_16 * (6.28318530f / 16.0f));
-}
-
-static float fast_cos(float angle_16) {
-    return m_cos(angle_16 * (6.28318530f / 16.0f));
-}
-
-/* ---- Constants ---- */
-#define MAX_FIREWORKS 10
-#define PARTICLES_PER 20
-#define MAX_PARTICLES (MAX_FIREWORKS * PARTICLES_PER)
-
-#define PHASE_INACTIVE 0
-#define PHASE_ROCKET   1
-#define PHASE_EXPLODING 2
-
-/* Explosion types */
-#define EXPL_BURST        0
-#define EXPL_CHRYSANTHEMUM 1
-#define EXPL_PALM         2
-#define EXPL_RING         3
-
-/* ---- Firework state ---- */
-static int   fw_phase[MAX_FIREWORKS];        /* 0=inactive, 1=rocket, 2=exploding */
-static float fw_x[MAX_FIREWORKS];            /* rocket X position */
-static float fw_y[MAX_FIREWORKS];            /* rocket Y position */
-static float fw_target_y[MAX_FIREWORKS];     /* target explosion height */
-static float fw_speed[MAX_FIREWORKS];        /* rocket upward speed */
-static int   fw_hue[MAX_FIREWORKS];          /* base hue */
-static int   fw_expl_type[MAX_FIREWORKS];    /* explosion type 0-3 */
-static int32_t fw_respawn_timer[MAX_FIREWORKS]; /* ms until respawn */
-
-/* ---- Particle state ---- */
-static float p_x[MAX_PARTICLES];
-static float p_y[MAX_PARTICLES];
-static float p_vx[MAX_PARTICLES];
-static float p_vy[MAX_PARTICLES];
-static int   p_ttl[MAX_PARTICLES];       /* remaining life in ms */
-static int   p_max_ttl[MAX_PARTICLES];   /* initial life for fade calc */
-static int   p_hue[MAX_PARTICLES];
-
-/* ---- Timing ---- */
-static int32_t prev_tick;
-
-EXPORT(init)
-void init(void) {
-    rng_state = 92731;
-    prev_tick = 0;
-    for (int i = 0; i < MAX_FIREWORKS; i++) {
-        fw_phase[i] = PHASE_INACTIVE;
-        fw_respawn_timer[i] = random_range(100, 800);
+/* pick shell colours for a palette */
+static void pick_colours(int pal,int i){
+    int h,s,h2,s2;
+    switch(pal){
+        case 1: h=rrange(22,40); s=rrange(190,256); h2=rrange(30,46); s2=150; break;         /* gold */
+        case 2: { int k=rrange(0,3); h=(k==0)?0:(k==1)?0:165; s=(k==1)?0:255;
+                  int k2=(k+1+rrange(0,2))%3; h2=(k2==0)?0:(k2==1)?0:165; s2=(k2==1)?0:255; } break; /* red-white-blue */
+        case 3: h=rrange(0,256); s=255; h2=(h+128)&255; s2=255; break;                      /* rainbow (per-spark hue spread) */
+        case 4: h=rrange(0,256); s=rrange(90,140); h2=(h+85)&255; s2=110; break;             /* pastel */
+        case 5: { static const int NEON[4]={128,213,85,42}; int k=rrange(0,4); h=NEON[k]; s=255; h2=NEON[(k+1+rrange(0,3))%4]; s2=255; } break;
+        default: h=rrange(0,256); s=rrange(200,256); h2=(h+rrange(60,196))&255; s2=255; break;
     }
-    for (int i = 0; i < MAX_PARTICLES; i++) {
-        p_ttl[i] = 0;
-    }
+    fw_hue[i]=h; fw_sat[i]=s; fw_hue2[i]=h2; fw_sat2[i]=s2;
 }
 
-/* ---- Spawn a rocket ---- */
-static void spawn_rocket(int i, int W, int H) {
-    fw_phase[i] = PHASE_ROCKET;
-    fw_x[i] = (float)random_range(1, W - 1) + 0.5f;
-    fw_y[i] = 0.0f;
-    fw_target_y[i] = (float)H * (0.5f + random_float() * 0.45f);
-    fw_speed[i] = (float)H * (0.8f + random_float() * 0.6f); /* pixels/sec */
-    fw_hue[i] = random_range(0, 256);
-    fw_expl_type[i] = random_range(0, 4);
+static inline float wrapx(float x){ while(x<0)x+=(float)W; while(x>=(float)W)x-=(float)W; return x; }
+
+/* blend with cylinder seam */
+static inline void splat(float x,float y,int rgb){
+    m_blend(FB,W,H,x,y,rgb);
+    if(x<1.0f) m_blend(FB,W,H,x+(float)W,y,rgb);
+    else if(x>(float)W-1.0f) m_blend(FB,W,H,x-(float)W,y,rgb);
 }
 
-/* ---- Trigger explosion ---- */
-static void explode(int i) {
-    fw_phase[i] = PHASE_EXPLODING;
-    int base = i * PARTICLES_PER;
-    int type = fw_expl_type[i];
-    int hue = fw_hue[i];
-    float cx = fw_x[i];
-    float cy = fw_y[i];
+static void micro_spawn(float x,float y,float vx,float vy,int ttl,int rgb){
+    int k=m_cursor; m_cursor=(m_cursor+1)%MAX_M;
+    m_x[k]=x; m_y[k]=y; m_vx[k]=vx; m_vy[k]=vy; m_ttl[k]=ttl; m_max[k]=ttl; m_rgb[k]=rgb;
+}
 
-    for (int j = 0; j < PARTICLES_PER; j++) {
-        int pi = base + j;
-        p_x[pi] = cx;
-        p_y[pi] = cy;
+static void launch(int i,int type_sel,int pal){
+    fw_phase[i]=PH_ROCKET;
+    fw_x[i]=frand()*(float)W; fw_y[i]=0.0f;
+    fw_vx[i]=(frand()-0.5f)*(float)H*0.12f;
+    fw_vy[i]=(float)H*(0.85f+frand()*0.5f);
+    fw_ty[i]=(float)H*(0.5f+frand()*0.42f);
+    fw_type[i]=(type_sel==0)?rrange(0,T_COUNT):type_sel-1;
+    fw_age[i]=0;
+    pick_colours(pal,i);
+}
 
-        /* Angle: evenly distributed + slight randomness */
-        float angle = (float)j * (16.0f / (float)PARTICLES_PER)
-                    + (random_float() - 0.5f) * 1.0f;
+static void spawn_spark(int pi,float x,float y,float vx,float vy,int ttl,int rgb,int kind,float drag){
+    p_x[pi]=x; p_y[pi]=y; p_vx[pi]=vx; p_vy[pi]=vy;
+    p_ttl[pi]=ttl; p_max[pi]=ttl; p_age[pi]=0; p_rgb[pi]=rgb; p_kind[pi]=(uint8_t)kind;
+    int d=(int)(drag*32.0f); if(d>255)d=255; p_drag[pi]=(uint8_t)d;
+}
 
-        float speed;
-        float vx_out, vy_out;
-
-        switch (type) {
-        case EXPL_BURST:
-            speed = 15.0f + random_float() * 20.0f;
-            vx_out = fast_cos(angle) * speed;
-            vy_out = fast_sin(angle) * speed;
-            p_max_ttl[pi] = random_range(400, 800);
-            break;
-
-        case EXPL_CHRYSANTHEMUM:
-            speed = 25.0f + random_float() * 15.0f;
-            vx_out = fast_cos(angle) * speed;
-            vy_out = fast_sin(angle) * speed;
-            p_max_ttl[pi] = random_range(800, 1400);
-            break;
-
-        case EXPL_PALM:
-            speed = 18.0f + random_float() * 12.0f;
-            vx_out = fast_cos(angle) * speed * 0.7f;
-            vy_out = fast_sin(angle) * speed;
-            if (vy_out < 0) vy_out *= 0.3f; /* suppress downward */
-            vy_out += 8.0f; /* bias upward */
-            p_max_ttl[pi] = random_range(600, 1100);
-            break;
-
-        case EXPL_RING:
-            speed = 20.0f + random_float() * 8.0f;
-            vx_out = fast_cos(angle) * speed;
-            vy_out = fast_sin(angle) * speed * 0.15f; /* squash vertical */
-            p_max_ttl[pi] = random_range(500, 900);
-            break;
-
-        default:
-            speed = 15.0f;
-            vx_out = fast_cos(angle) * speed;
-            vy_out = fast_sin(angle) * speed;
-            p_max_ttl[pi] = 600;
-            break;
+static void burst(int i,int nsp,int pal){
+    fw_phase[i]=PH_BURST; fw_age[i]=0; fw_flash[i]=140;
+    int base=i*PER_FW, type=fw_type[i];
+    float cx=fw_x[i], cy=fw_y[i];
+    float S=12.0f+(float)H*0.36f;             /* base spark speed px/s */
+    int hue=fw_hue[i], sat=fw_sat[i];
+    int rainbow=(pal==3);
+    int branches=7+rrange(0,4);              /* palm: rays per shell */
+    for(int j=0;j<nsp;j++){
+        int pi=base+j;
+        float a=((float)j+frand()*0.8f)*TWO_PI/(float)nsp;
+        float ca=m_cos(a), sa=m_sin(a);
+        float vx,vy; int ttl,kind=0; float drag=1.0f;
+        int h=hue, s=sat;
+        if(rainbow) h=(int)(a*40.74f)&255;
+        switch(type){
+            case T_CHRYS: { float sp=S*(0.9f+frand()*0.35f); vx=ca*sp; vy=sa*sp; ttl=rrange(1100,1700); kind=1; drag=0.7f; } break;
+            case T_PALM:  { int br=j%branches;
+                            float ba=((float)br+0.5f)*3.14159265f/(float)branches;      /* upper half only */
+                            float sp=S*(0.7f+frand()*0.7f);
+                            vx=m_cos(ba)*sp*0.8f; vy=m_sin(ba)*sp+S*0.25f; ttl=rrange(900,1400); drag=0.9f; } break;
+            case T_RING:  { float sp=S*1.05f; float sq=0.25f+frand()*0.3f; vx=ca*sp; vy=sa*sp*sq; ttl=rrange(800,1100); drag=1.1f; } break;
+            case T_WILLOW:{ float sp=S*(0.6f+frand()*0.5f); vx=ca*sp; vy=sa*sp+S*0.15f; ttl=rrange(1600,2400); kind=2; drag=2.6f;
+                            h=rrange(24,40); s=rrange(180,256); } break;
+            case T_CRACKLE:{ float sp=S*(0.7f+frand()*0.5f); vx=ca*sp; vy=sa*sp; ttl=rrange(500,900); kind=3; drag=1.2f; } break;
+            case T_DOUBLE:{ int inner=(j&1); float sp=S*(inner?0.45f:1.0f)*(0.9f+frand()*0.2f);
+                            vx=ca*sp; vy=sa*sp; ttl=rrange(800,1200);
+                            if(inner){ h=fw_hue2[i]; s=fw_sat2[i]; if(rainbow) h=(h+128)&255; } drag=1.0f; } break;
+            default:      { float sp=S*(0.85f+frand()*0.3f); vx=ca*sp; vy=sa*sp; ttl=rrange(700,1100); drag=1.0f; } break;
         }
+        int rgb=m_hsv((h+rrange(-8,9))&255,s,255);
+        spawn_spark(pi,cx,cy,vx,vy,ttl,rgb,kind,drag);
+    }
+    for(int j=nsp;j<PER_FW;j++) p_ttl[base+j]=0;
+}
 
-        p_vx[pi] = vx_out;
-        p_vy[pi] = vy_out;
-        p_ttl[pi] = p_max_ttl[pi];
-        p_hue[pi] = (hue + random_range(-15, 16)) & 0xFF;
+/* crackle pop: white flash + a few short micro sparks */
+static void crackle_pop(int pi){
+    int n=3+rrange(0,3);
+    for(int k=0;k<n;k++){
+        float a=frand()*TWO_PI, sp=4.0f+frand()*10.0f;
+        micro_spawn(p_x[pi],p_y[pi],p_vx[pi]*0.3f+m_cos(a)*sp,p_vy[pi]*0.3f+m_sin(a)*sp,rrange(180,380),0xFFFFFF);
     }
 }
 
-EXPORT(update)
-void update(int tick_ms) {
-    int count   = get_param_i32(0);  /* 1-10 */
-    int bright  = get_param_i32(1);  /* 1-255 */
+static void dims(void){ W=get_width(); H=get_height();
+    if(W>MAX_W)W=MAX_W; if(H>MAX_H)H=MAX_H; if(W<1)W=1; if(H<1)H=1; }
 
-    int W = get_width();
-    int H = get_height();
-    if (W < 1) W = 1;
-    if (H < 1) H = 1;
-    if (count > MAX_FIREWORKS) count = MAX_FIREWORKS;
-    if (count < 1) count = 1;
+EXPORT(init) void init(void){
+    dims(); rng=92731; prev_tick=0; m_cursor=0;
+    for(int i=0;i<MAX_FW;i++){ fw_phase[i]=PH_IDLE; fw_timer[i]=rrange(100,900); fw_flash[i]=0; }
+    for(int i=0;i<MAX_P;i++) p_ttl[i]=0;
+    for(int i=0;i<MAX_M;i++) m_ttl[i]=0;
+    m_fill(FB,MAX_W*MAX_H,0);
+}
 
-    rng_state ^= (uint32_t)tick_ms;
+EXPORT(update) void update(int tick_ms){
+    int oW=W,oH=H; dims();
+    if(oW!=W||oH!=H) init();
 
-    /* Delta time */
-    int32_t delta_ms = tick_ms - prev_tick;
-    if (delta_ms <= 0 || delta_ms > 200) delta_ms = 33;
-    prev_tick = tick_ms;
-    float dt = (float)delta_ms / 1000.0f;
+    int count=get_param_i32(0), bright=get_param_i32(1), type_sel=get_param_i32(2), pal=get_param_i32(3);
+    int trail=get_param_i32(4), grav=get_param_i32(5), rate=get_param_i32(6), sparks=get_param_i32(7);
+    if(count<1)count=1; if(count>MAX_FW)count=MAX_FW;
+    if(bright<1)bright=1; if(bright>255)bright=255;
+    if(type_sel<0||type_sel>T_COUNT)type_sel=0; if(pal<0||pal>5)pal=0;
+    if(trail<0)trail=0; if(trail>100)trail=100;
+    if(grav<0)grav=0; if(grav>100)grav=100;
+    if(rate<1)rate=1; if(rate>100)rate=100;
+    if(sparks<1)sparks=1; if(sparks>100)sparks=100;
+    int nsp=16+sparks*48/100; if(nsp>PER_FW)nsp=PER_FW;
 
-    /* Gravity: pixels per second per second */
-    float gravity = (float)H * 0.8f;
+    int delta=tick_ms-prev_tick; if(delta<=0||delta>200)delta=33; prev_tick=tick_ms;
+    float dt=(float)delta/1000.0f;
+    rng^=(uint32_t)tick_ms;
 
-    /* ---- Update fireworks ---- */
-    for (int i = 0; i < count; i++) {
-        switch (fw_phase[i]) {
-        case PHASE_INACTIVE:
-            fw_respawn_timer[i] -= delta_ms;
-            if (fw_respawn_timer[i] <= 0) {
-                spawn_rocket(i, W, H);
+    float gravity=(float)H*(0.15f+(float)grav*0.017f);
+    int bsh=bright+1;                                     /* 1..256 */
+
+    /* trails: fade the previous frame */
+    if(trail==0) m_fill(FB,W*H,0);
+    else m_fade(FB,W*H*3,120+trail*125/100);
+
+    /* ---- shells ---- */
+    for(int i=0;i<count;i++){
+        switch(fw_phase[i]){
+        case PH_IDLE:
+            fw_timer[i]-=delta;
+            if(fw_timer[i]<=0) launch(i,type_sel,pal);
+            break;
+        case PH_ROCKET: {
+            fw_age[i]+=delta;
+            fw_vy[i]-=gravity*0.25f*dt;
+            fw_x[i]=wrapx(fw_x[i]+fw_vx[i]*dt); fw_y[i]+=fw_vy[i]*dt;
+            /* exhaust */
+            int ex=0xFF6A10;
+            for(int k=0;k<2;k++)
+                micro_spawn(fw_x[i]+(frand()-0.5f)*0.6f,fw_y[i]-0.5f,
+                            fw_vx[i]*0.2f+(frand()-0.5f)*10.0f,-(4.0f+frand()*10.0f),rrange(120,300),scale_rgb(ex,140+rrange(0,100)));
+            /* head: flickering white-hot point */
+            int hb=(bsh*(200+rrange(0,57)))>>8;
+            splat(fw_x[i],fw_y[i],scale_rgb(whiten(m_hsv(fw_hue[i],fw_sat[i],255),160),hb));
+            if(fw_y[i]>=fw_ty[i] || fw_vy[i]<=(float)H*0.1f) burst(i,nsp,pal);
+        } break;
+        case PH_BURST: {
+            fw_age[i]+=delta;
+            int base=i*PER_FW, alive=0;
+            for(int j=0;j<nsp;j++) if(p_ttl[base+j]>0){ alive=1; break; }
+            if(!alive && fw_flash[i]<=0){
+                fw_phase[i]=PH_IDLE;
+                fw_timer[i]=rrange(150,1200)*60/rate;
             }
-            break;
-
-        case PHASE_ROCKET:
-            /* Move rocket upward */
-            fw_y[i] += fw_speed[i] * dt;
-            /* Slight horizontal wobble */
-            fw_x[i] += (random_float() - 0.5f) * 1.5f * dt;
-            /* Clamp X */
-            if (fw_x[i] < 0.0f) fw_x[i] = 0.0f;
-            if (fw_x[i] >= (float)W) fw_x[i] = (float)(W - 1);
-
-            /* Check if reached target */
-            if (fw_y[i] >= fw_target_y[i]) {
-                fw_y[i] = fw_target_y[i];
-                explode(i);
-            }
-            break;
-
-        case PHASE_EXPLODING: {
-            /* Check if all particles of this firework are dead */
-            int base = i * PARTICLES_PER;
-            int alive = 0;
-            for (int j = 0; j < PARTICLES_PER; j++) {
-                int pi = base + j;
-                if (p_ttl[pi] > 0) {
-                    alive = 1;
-                    break;
-                }
-            }
-            if (!alive) {
-                fw_phase[i] = PHASE_INACTIVE;
-                fw_respawn_timer[i] = random_range(300, 1500);
-            }
-            break;
+        } break;
         }
+        /* burst flash: soft white blob decaying over ~140 ms */
+        if(fw_flash[i]>0){
+            int f=fw_flash[i]; fw_flash[i]-=delta;
+            int rgb=scale_rgb(0xFFFFFF,(bsh*f*256/140)>>8);
+            splat(fw_x[i],fw_y[i],rgb);
+            int half=scale_rgb(rgb,110);
+            splat(fw_x[i]-0.9f,fw_y[i],half); splat(fw_x[i]+0.9f,fw_y[i],half);
+            splat(fw_x[i],fw_y[i]-0.9f,half); splat(fw_x[i],fw_y[i]+0.9f,half);
         }
     }
 
-    /* ---- Update particles ---- */
-    for (int i = 0; i < count * PARTICLES_PER; i++) {
-        if (p_ttl[i] <= 0) continue;
-
-        p_ttl[i] -= delta_ms;
-        if (p_ttl[i] <= 0) {
-            p_ttl[i] = 0;
-            continue;
-        }
-
-        /* Physics */
-        p_vy[i] -= gravity * dt;     /* gravity pulls down */
-        p_vx[i] *= 0.98f;            /* air drag */
-        p_vy[i] *= 0.98f;
-        p_x[i] += p_vx[i] * dt;
-        p_y[i] += p_vy[i] * dt;
-    }
-
-    /* ---- Render ---- */
-    /* Clear display */
-    for (int x = 0; x < W; x++)
-        for (int y = 0; y < H; y++)
-            set_pixel(x, y, 0, 0, 0);
-
-    /* Draw rockets */
-    for (int i = 0; i < count; i++) {
-        if (fw_phase[i] != PHASE_ROCKET) continue;
-
-        int rx = (int)fw_x[i];
-        int ry = (int)fw_y[i];
-        if (rx < 0 || rx >= W || ry < 0 || ry >= H) continue;
-
-        /* Bright rocket head */
-        int r, g, b;
-        hsv_to_rgb(fw_hue[i], 120, bright, &r, &g, &b);
-        set_pixel(rx, ry, r, g, b);
-
-        /* Dim trail below */
-        int trail_len = 3;
-        for (int t = 1; t <= trail_len; t++) {
-            int ty = ry - t;
-            if (ty < 0) break;
-            int tv = bright / (t + 2);
-            if (tv < 1) break;
-            hsv_to_rgb(fw_hue[i], 80, tv, &r, &g, &b);
-            set_pixel(rx, ty, r, g, b);
+    /* ---- shell sparks ---- */
+    for(int i=0;i<count;i++){
+        if(fw_phase[i]!=PH_BURST) continue;
+        int base=i*PER_FW, age=fw_age[i];
+        for(int j=0;j<nsp;j++){
+            int pi=base+j;
+            if(p_ttl[pi]<=0) continue;
+            p_ttl[pi]-=delta; p_age[pi]+=delta;
+            if(p_ttl[pi]<=0){ p_ttl[pi]=0; continue; }
+            /* crackle: pop at 55-75% of life */
+            if(p_kind[pi]==3 && p_ttl[pi]<p_max[pi]*(55+(pi&15))/100){ crackle_pop(pi); p_ttl[pi]=0; continue; }
+            float d=1.0f-(float)p_drag[pi]*dt/32.0f; if(d<0)d=0;
+            p_vy[pi]-=gravity*dt;
+            p_vx[pi]*=d; p_vy[pi]*=d;
+            p_x[pi]=wrapx(p_x[pi]+p_vx[pi]*dt); p_y[pi]+=p_vy[pi]*dt;
+            if(p_y[pi]<-1.0f){ p_ttl[pi]=0; continue; }
+            if(p_y[pi]>=(float)H+1.0f) continue;        /* above the top, may fall back */
+            /* brightness: life curve + flicker in the second half */
+            int life=p_ttl[pi]*256/p_max[pi];
+            int v=life;
+            if(p_kind[pi]==1) v=256-(((256-life)*(256-life))>>8);            /* chrys: stays bright longer */
+            if(life<128) v=(v*(160+(int)(rnd()&95)))>>8;                             /* flicker */
+            if(p_kind[pi]==2 && life<100) v=(v*(90+(int)(rnd()&165)))>>8;            /* willow: sputter */
+            int rgb=p_rgb[pi];
+            if(age<160) rgb=whiten(rgb,(160-age)*256/160);                          /* white core at the start */
+            splat(p_x[pi],p_y[pi],scale_rgb(rgb,(v*bsh)>>8));
         }
     }
 
-    /* Draw particles (older ttl = dimmer) */
-    for (int i = 0; i < count * PARTICLES_PER; i++) {
-        if (p_ttl[i] <= 0) continue;
-
-        int px = (int)p_x[i];
-        int py = (int)p_y[i];
-        if (px < 0 || px >= W || py < 0 || py >= H) continue;
-
-        /* Brightness fades with TTL */
-        float life_frac = (float)p_ttl[i] / (float)p_max_ttl[i];
-        int val = (int)((float)bright * life_frac);
-        if (val < 1) continue;
-        if (val > 255) val = 255;
-
-        int r, g, b;
-        hsv_to_rgb(p_hue[i], 220, val, &r, &g, &b);
-        set_pixel(px, py, r, g, b);
+    /* ---- micro sparks ---- */
+    for(int k=0;k<MAX_M;k++){
+        if(m_ttl[k]<=0) continue;
+        m_ttl[k]-=delta;
+        if(m_ttl[k]<=0){ m_ttl[k]=0; continue; }
+        m_vy[k]-=gravity*0.6f*dt;
+        m_x[k]=wrapx(m_x[k]+m_vx[k]*dt); m_y[k]+=m_vy[k]*dt;
+        if(m_y[k]<-1.0f){ m_ttl[k]=0; continue; }
+        int life=m_ttl[k]*256/m_max[k];
+        splat(m_x[k],m_y[k],scale_rgb(m_rgb[k],(life*bsh)>>8));
     }
 
     draw();
