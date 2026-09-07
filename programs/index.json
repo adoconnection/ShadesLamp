@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-11T00:00:00Z",
+  "updated": "2026-09-07T00:00:00Z",
   "featured": [
     "flame_particle",
     "spirals",
@@ -234,6 +234,11 @@
       "slug": "ocean",
       "meta": "programs/ocean/meta.json",
       "wasm": "programs/ocean/main.wasm"
+    },
+    {
+      "slug": "painter",
+      "meta": "programs/painter/meta.json",
+      "wasm": "programs/painter/main.wasm"
     },
     {
       "slug": "plasma",
