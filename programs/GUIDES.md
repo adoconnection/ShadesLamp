@@ -304,6 +304,32 @@ Analytic variant for round dots (no mask): `cover = 1 - (dx*dx+dy*dy)/(r*r)` (cl
 same idea. On a cylinder, wrap the horizontal delta first
 (`if (dx >  W*0.5f) dx -= W; if (dx < -W*0.5f) dx += W;`).
 
+## Native stack: keep wasm functions small (NOINLINE stages)
+
+wasm3 on the ESP32 (Xtensa) has **no tail-call optimisation**: every opcode
+of a wasm function nests one native stack frame (~48 bytes) and the chain only
+unwinds when that wasm function **returns** (or a loop iterates). A big
+`update()` with everything inlined by `-O2` can chain thousands of opcodes and
+overflow the 64 KB render-task stack — the lamp panics with
+`Stack canary watchpoint triggered (render)` and reboots (fireworks 2.0.0 did
+exactly this during bursts; the simulator never shows it).
+
+Rules:
+
+- Split the frame into stages and keep helpers as **real wasm functions**:
+  `#define NOINLINE __attribute__((noinline))` and mark `burst()`,
+  `step_sparks()`, `stamp()`, per-object updates, etc. A call is an unwind
+  point; the callee's opcodes never add to the caller's chain.
+- Rule of thumb: no function body above ~2 KB of wasm code (check with a
+  quick parser of the code section, or `wasm-objdump -x`). Fireworks 2.0.1
+  went from one 7.8 KB `update()` to 17 functions, largest 1.7 KB.
+- Pass per-frame values through statics (`g_dt`, `g_bsh`, …) instead of long
+  argument lists if that keeps the stages simple.
+- Measure on the lamp: `client-cli hw-config` prints
+  `Render stack min free` (high-water mark since boot, build 29+). Reboot,
+  run the program for a couple of minutes through its heaviest moments and
+  keep the value well above ~16 KB.
+
 ## Constraints
 
 - **No standard library** (`-nostdlib`): no `malloc`, `printf`, `math.h`, `string.h`
