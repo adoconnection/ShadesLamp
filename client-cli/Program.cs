@@ -352,6 +352,15 @@ try
             exitCode = await CmdList();
             break;
 
+        case "list-raw":
+        {
+            var rawJson = await SendCommand(CMD_GET_PROGRAMS);
+            Console.WriteLine($"[raw length: {rawJson.Length} chars]");
+            Console.WriteLine(rawJson);
+            exitCode = 0;
+            break;
+        }
+
         case "upload":
             if (filteredArgs.Count < 2) { Console.Error.WriteLine("Usage: upload <file.wasm>"); exitCode = 1; break; }
             exitCode = await CmdUpload(filteredArgs[1]);
@@ -696,6 +705,23 @@ async Task<int> CmdHwConfig()
     var colorOrderName = root.TryGetProperty("colorOrderName", out var con) ? con.GetString() : "GRB";
 
     Console.WriteLine($"Pin: {pin}, Size: {width}x{height}, Zigzag: {(zigzag ? "on" : "off")}, Color order: {colorOrderName} ({colorOrder})");
+
+    var rotation = root.TryGetProperty("rotation", out var rot) ? rot.GetInt32() : 0;
+    var mirror = root.TryGetProperty("mirror", out var mir) && mir.GetBoolean();
+    Console.WriteLine($"Rotation: {rotation} deg, Mirror: {(mirror ? "on" : "off")}");
+    if (root.TryGetProperty("maxCurrent", out var mc))
+    {
+        var maxCurrent = mc.GetInt32();
+        Console.WriteLine($"Max current: {(maxCurrent == 0 ? "no limit" : maxCurrent + " mA")}");
+    }
+    if (root.TryGetProperty("brightness", out var br))
+        Console.WriteLine($"Brightness: {br.GetInt32()}");
+    if (root.TryGetProperty("build", out var bld))
+        Console.WriteLine($"Firmware build: {bld.GetInt32()}");
+    if (root.TryGetProperty("serial", out var sn))
+        Console.WriteLine($"Serial: {sn.GetString()}");
+    if (root.TryGetProperty("temp", out var tp))
+        Console.WriteLine($"Temperature: {tp.GetDouble():F1} C");
     return 0;
 }
 
@@ -717,6 +743,9 @@ async Task<int> CmdSetHwConfig(List<string> cliArgs)
     int height = cur.GetProperty("height").GetInt32();
     bool zigzag = cur.TryGetProperty("zigzag", out var zzVal) && zzVal.GetBoolean();
     int colorOrder = cur.TryGetProperty("colorOrder", out var coVal) ? coVal.GetInt32() : 0;
+    int rotation = cur.TryGetProperty("rotation", out var rotVal) ? rotVal.GetInt32() : 0;
+    bool mirror = cur.TryGetProperty("mirror", out var mirVal) && mirVal.GetBoolean();
+    int maxCurrent = cur.TryGetProperty("maxCurrent", out var mcVal) ? mcVal.GetInt32() : 2000;
 
     string[] orderNames = ["GRB", "RGB", "BRG", "RBG", "GBR", "BGR"];
 
@@ -768,22 +797,36 @@ async Task<int> CmdSetHwConfig(List<string> cliArgs)
             }
             anySet = true;
         }
+        else if (cliArgs[i] == "--max-current" && i + 1 < cliArgs.Count)
+        {
+            if (!int.TryParse(cliArgs[++i], out maxCurrent) || maxCurrent < 0 || maxCurrent > 65535)
+            {
+                Console.Error.WriteLine("Invalid max current (mA, 0 = no limit)");
+                return 1;
+            }
+            anySet = true;
+        }
     }
 
     if (!anySet)
     {
-        Console.Error.WriteLine("Usage: set-hw-config --pin <N> --width <N> --height <N> [--zigzag|--no-zigzag] [--color-order GRB|RGB|BRG|RBG|GBR|BGR|0-5]");
+        Console.Error.WriteLine("Usage: set-hw-config --pin <N> --width <N> --height <N> [--zigzag|--no-zigzag] [--color-order GRB|RGB|BRG|RBG|GBR|BGR|0-5] [--max-current <mA>]");
         Console.Error.WriteLine("At least one parameter is required.");
         return 1;
     }
 
-    // Build payload: pin(1) + width(2 LE) + height(2 LE) + zigzag(1) + colorOrder(1)
-    var payload = new byte[7];
+    // Full payload: pin(1) + width(2 LE) + height(2 LE) + zigzag(1) + colorOrder(1)
+    // + rotQ(1) + mirror(1) + maxMa(2 LE). Rotation/mirror/current are echoed
+    // back from the current config unless overridden, so nothing gets reset.
+    var payload = new byte[11];
     payload[0] = (byte)pin;
     BitConverter.GetBytes((ushort)width).CopyTo(payload, 1);
     BitConverter.GetBytes((ushort)height).CopyTo(payload, 3);
     payload[5] = (byte)(zigzag ? 1 : 0);
     payload[6] = (byte)colorOrder;
+    payload[7] = (byte)(rotation / 90);
+    payload[8] = (byte)(mirror ? 1 : 0);
+    BitConverter.GetBytes((ushort)maxCurrent).CopyTo(payload, 9);
 
     var resp = await SendCommand(CMD_SET_HW_CONFIG, payload);
     using var doc = JsonDocument.Parse(resp);
@@ -793,7 +836,7 @@ async Task<int> CmdSetHwConfig(List<string> cliArgs)
     {
         string zigzagStr = zigzag ? ", zigzag" : "";
         string orderStr = colorOrder < orderNames.Length ? orderNames[colorOrder] : "?";
-        Console.WriteLine($"Hardware config updated (pin={pin}, {width}x{height}{zigzagStr}, color order={orderStr}). Reboot device to apply.");
+        Console.WriteLine($"Hardware config updated (pin={pin}, {width}x{height}{zigzagStr}, color order={orderStr}, max current={maxCurrent} mA). Reboot device to apply (current cap applies immediately).");
         return 0;
     }
 
@@ -1109,6 +1152,7 @@ void PrintUsage()
     Console.Error.WriteLine("    --height <N>                      Matrix height (1-1024)");
     Console.Error.WriteLine("    --zigzag                          Serpentine/zigzag wiring");
     Console.Error.WriteLine("    --no-zigzag                       Linear wiring (default)");
+    Console.Error.WriteLine("    --max-current <mA>                Estimated LED current cap, mA (0 = no limit)");
     Console.Error.WriteLine("    --color-order <ORDER>             GRB (default), RGB, BRG, RBG, GBR, BGR (or 0-5)");
     Console.Error.WriteLine("  get-meta <program-id>             Get program meta.json from device");
     Console.Error.WriteLine("  set-meta <program-id> <file>      Upload meta.json to device");
