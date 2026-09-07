@@ -42,6 +42,7 @@ static const uint8_t TOUCH_PIN = 1;
 // than this panics and reboots — which the boot guard above then counts.
 #define RENDER_WDT_TIMEOUT_MS 10000UL
 
+TaskHandle_t g_renderTask = nullptr;     // render task (stack headroom is reported over BLE)
 static bool g_safeMode = false;         // this boot runs with no active program
 static bool g_bootGuardCleared = false; // counter reset after surviving 20 s
 
@@ -340,7 +341,7 @@ void setup() {
         65536,          // stack size (bytes) — wasm3 interpreter + switchProgram needs generous stack
         NULL,           // parameter
         2,              // priority
-        NULL,           // task handle
+        &g_renderTask,  // task handle
         1               // core ID
     );
 

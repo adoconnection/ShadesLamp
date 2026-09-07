@@ -7,6 +7,8 @@
 #include <LittleFS.h>
 #include <ArduinoJson.h>
 
+extern TaskHandle_t g_renderTask;   // firmware.ino
+
 #define TAG "[BLE]"
 
 // Chunk header: [seq(1)][flags(1)]
@@ -388,13 +390,19 @@ class CommandCallbacks : public BLECharacteristicCallbacks {
 
                 float tempC = temperatureRead();   // ESP32-S3 internal die sensor (°C)
 
-                char resp[352];
+                // Diagnostics: the lowest free render-task stack seen since boot
+                // (wasm3 has no tail calls on Xtensa, so a big wasm function can
+                // eat the whole 64 KB stack) and the free internal heap.
+                unsigned stackFree = g_renderTask ? (unsigned)uxTaskGetStackHighWaterMark(g_renderTask) : 0;
+                unsigned heapFree = (unsigned)ESP.getFreeHeap();
+
+                char resp[448];
                 snprintf(resp, sizeof(resp),
-                    "{\"ok\":true,\"build\":%u,\"pin\":%u,\"width\":%u,\"height\":%u,\"zigzag\":%s,\"colorOrder\":%u,\"colorOrderName\":\"%s\",\"rotation\":%u,\"mirror\":%s,\"maxCurrent\":%u,\"brightness\":%u,\"serial\":\"%s\",\"temp\":%.1f}",
+                    "{\"ok\":true,\"build\":%u,\"pin\":%u,\"width\":%u,\"height\":%u,\"zigzag\":%s,\"colorOrder\":%u,\"colorOrderName\":\"%s\",\"rotation\":%u,\"mirror\":%s,\"maxCurrent\":%u,\"brightness\":%u,\"serial\":\"%s\",\"temp\":%.1f,\"stackFree\":%u,\"heapFree\":%u}",
                     (unsigned)FW_BUILD, pm->getLedPin(), pm->getLedWidth(), pm->getLedHeight(),
                     pm->getLedZigzag() ? "true" : "false", order, orderName,
                     pm->getLedRotation(), pm->getLedMirror() ? "true" : "false",
-                    (unsigned)pm->getLedMaxCurrent(), pm->getLedBrightness(), serial, tempC);
+                    (unsigned)pm->getLedMaxCurrent(), pm->getLedBrightness(), serial, tempC, stackFree, heapFree);
                 Serial.printf("%s CMD GET_HW_CONFIG: %s\r\n", TAG, resp);
                 g_bleService->sendResponse(String(resp));
                 break;

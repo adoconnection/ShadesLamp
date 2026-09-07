@@ -722,6 +722,10 @@ async Task<int> CmdHwConfig()
         Console.WriteLine($"Serial: {sn.GetString()}");
     if (root.TryGetProperty("temp", out var tp))
         Console.WriteLine($"Temperature: {tp.GetDouble():F1} C");
+    if (root.TryGetProperty("stackFree", out var sf))
+        Console.WriteLine($"Render stack min free: {sf.GetInt32()} bytes");
+    if (root.TryGetProperty("heapFree", out var hf))
+        Console.WriteLine($"Heap free: {hf.GetInt32()} bytes");
     return 0;
 }
 

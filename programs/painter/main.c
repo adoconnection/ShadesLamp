@@ -33,6 +33,10 @@ EXPORT(get_meta_len) int get_meta_len(void){ return sizeof(META)-1; }
 #define MAX_H 64
 #define MAX_B 8
 
+/* wasm3 on the ESP32 chains every opcode on the native stack until a wasm
+ * function returns, so big helpers must stay real functions (no inlining). */
+#define NOINLINE __attribute__((noinline))
+
 static uint8_t FB[MAX_W*MAX_H*3];      /* what the host displays: paint + white heads */
 static uint8_t PAINT[MAX_W*MAX_H*3];   /* persistent canvas (trail) */
 EXPORT(get_framebuffer) int get_framebuffer(void){ return (int)FB; }
@@ -48,7 +52,7 @@ static float frand(void){ return (float)(rnd()&0xFFFF)/65536.0f; }
 static int PAL[256];
 static int cur_pal=-1;
 static inline int tri(int i){ return i<128 ? i*2 : (255-i)*2; }   /* 0..254..0, seamless */
-static void build_palette(int p){
+static NOINLINE void build_palette(int p){
     for(int i=0;i<256;i++){
         int t=tri(i), h, s=255, v=255;
         switch(p){
@@ -77,7 +81,7 @@ static int   nb=0, cur_motion=-1;
 static float fade_acc=0.0f;
 static int   prev_tick=0;
 
-static void init_brush(int i,int n){
+static NOINLINE void init_brush(int i,int n){
     bx[i]=frand()*(float)W; by[i]=2.0f+frand()*(float)(H-4);
     float a=(frand()*0.8f+0.35f)*(frand()<0.5f?1.0f:-1.0f);      /* avoid near-horizontal */
     bang[i]=frand()<0.5f?a:3.14159265f-a;
@@ -110,7 +114,7 @@ static inline void paint_px(uint8_t*p,int cr,int cg,int cb,int ci,int mode){
 
 /* soft round stamp of radius r at (cx,cy); w = per-stamp weight for the
  * accumulating blend modes (Replace ignores it — it's idempotent) */
-static void stamp(float cx,float cy,float r,int rgb,int mode,float w){
+static NOINLINE void stamp(float cx,float cy,float r,int rgb,int mode,float w){
     int cr=(rgb>>16)&255, cg=(rgb>>8)&255, cb=rgb&255;
     int x0=(int)(cx-r-1.0f)-1, x1=(int)(cx+r+1.0f)+1;
     int y0=(int)(cy-r-1.0f)-1, y1=(int)(cy+r+1.0f)+1;
@@ -133,7 +137,7 @@ static void stamp(float cx,float cy,float r,int rgb,int mode,float w){
 }
 
 /* white brush head drawn over the canvas copy in FB */
-static void head(float cx,float cy,float r){
+static NOINLINE void head(float cx,float cy,float r){
     int x0=(int)(cx-r-1.0f)-1, x1=(int)(cx+r+1.0f)+1;
     int y0=(int)(cy-r-1.0f)-1, y1=(int)(cy+r+1.0f)+1;
     if(y0<0)y0=0; if(y1>H-1)y1=H-1;
@@ -155,7 +159,7 @@ static void head(float cx,float cy,float r){
 static inline float wrapx(float x){ while(x<0)x+=(float)W; while(x>=(float)W)x-=(float)W; return x; }
 
 /* move brush i by dt; returns new position in *nx,*ny */
-static void move_brush(int i,int motion,float v,float dt,float r){
+static NOINLINE void move_brush(int i,int motion,float v,float dt,float r){
     float x=bx[i],y=by[i];
     switch(motion){
         case 2: {                                            /* Lissajous */
