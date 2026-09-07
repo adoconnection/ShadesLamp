@@ -409,20 +409,26 @@ void LedDriver::commit(const uint8_t* rgb) {
 void LedDriver::show() {
     xSemaphoreTake(_mutex, portMAX_DELAY);
 
-    // Global user brightness first, then optional current limiting: estimate
-    // the draw of the already-dimmed frame and, if it exceeds the configured
-    // budget, scale every channel down by a single fixed-point factor.
-    // scale256 is 8.8 fixed point: 256 == 1.0 (no scaling).
-    uint16_t scale256 = _brightScale256;
+    // Current limiting first, on the RAW frame: estimate its draw and, if it
+    // exceeds the configured budget, scale every channel down by a single
+    // fixed-point factor so the frame draws exactly the budget. Then the global
+    // user brightness multiplies ON TOP, so 100% == the full current budget,
+    // 50% == half of it, etc. (Applying brightness before the limiter made
+    // 50% and 100% look identical on bright frames: both got clamped to the
+    // same absolute current.) scale256 is 8.8 fixed point: 256 == 1.0.
+    uint16_t scale256 = 256;
     if (_maxCurrentMa > 0) {
         uint64_t channelSum = 0;
         size_t total = (size_t)_numPixels * 3;
         for (size_t i = 0; i < total; i++) channelSum += _framebuffer[i];
         // Each channel at value 255 draws ~LED_MA_PER_CHANNEL mA.
-        uint32_t estimatedMa = (uint32_t)(((channelSum * scale256) >> 8) * LED_MA_PER_CHANNEL / 255);
+        uint32_t estimatedMa = (uint32_t)(channelSum * LED_MA_PER_CHANNEL / 255);
         if (estimatedMa > _maxCurrentMa) {
-            scale256 = (uint16_t)(((uint64_t)scale256 * _maxCurrentMa) / estimatedMa);
+            scale256 = (uint16_t)(((uint64_t)256 * _maxCurrentMa) / estimatedMa);
         }
+    }
+    if (_brightScale256 < 256) {
+        scale256 = (uint16_t)(((uint32_t)scale256 * _brightScale256) >> 8);
     }
 
     // Apply global crossfade brightness on top of current limiting.
