@@ -139,13 +139,13 @@
       <span class="tb-label">Тип лампы</span>
       <div id="lampTypes">
         <button data-c="16" data-r="16">16×16</button>
-        <button data-c="16" data-r="32" class="on">16×32</button>
+        <button data-c="16" data-r="32">16×32</button>
         <button data-c="16" data-r="48">16×48</button>
         <button data-c="20" data-r="20">20×20</button>
         <button data-c="40" data-r="20">40×20</button>
         <button data-c="32" data-r="32">32×32</button>
         <button data-c="32" data-r="48">32×48</button>
-        <button data-c="48" data-r="32">48×32</button>
+        <button data-c="48" data-r="32" class="on">48×32</button>
         <button data-c="48" data-r="48">48×48</button>
         <button data-c="56" data-r="48">56×48</button>
         <button data-c="64" data-r="48">64×48</button>
@@ -246,7 +246,7 @@
 //  Эмулирует firmware: те же host-функции env.*, экспорты init/update/meta.
 // ════════════════════════════════════════════════════════════════════════
 
-let COLS = 16;            // ширина = пиксели по окружности (диаметр-строка)
+let COLS = 48;            // ширина = пиксели по окружности (диаметр-строка)
 let ROWS = 32;            // высота
 let NPIX = COLS * ROWS;
 
