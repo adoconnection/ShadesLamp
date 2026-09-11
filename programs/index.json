@@ -246,6 +246,11 @@
       "wasm": "programs/painter/main.wasm"
     },
     {
+      "slug": "plates",
+      "meta": "programs/plates/meta.json",
+      "wasm": "programs/plates/main.wasm"
+    },
+    {
       "slug": "plasma",
       "meta": "programs/plasma/meta.json",
       "wasm": "programs/plasma/main.wasm"
