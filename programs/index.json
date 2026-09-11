@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-09-07T00:00:00Z",
+  "updated": "2026-09-11T00:00:00Z",
   "featured": [
     "flame_particle",
     "spirals",
@@ -39,6 +39,11 @@
       "slug": "candle",
       "meta": "programs/candle/meta.json",
       "wasm": "programs/candle/main.wasm"
+    },
+    {
+      "slug": "cauldron",
+      "meta": "programs/cauldron/meta.json",
+      "wasm": "programs/cauldron/main.wasm"
     },
     {
       "slug": "clouds",
