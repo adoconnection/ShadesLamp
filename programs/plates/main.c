@@ -104,6 +104,7 @@ static float g_amp=0.0f, g_azim=0.0f;                       /* current plate til
 static float g_gap=1.0f, g_gapmax=1.0f;                     /* current / widest half gap (px) */
 static float g_boost=1.0f;                                  /* speed factor from the squeeze */
 static float g_sq=0.0f;                                     /* 0..1 how hard the plates are squeezing */
+static float g_hot=0.0f;                                    /* 0..1 plates white-hot (gap down to a few px) */
 static float ppx[MAX_P], ppy[MAX_P];                        /* previous position (for motion streaks) */
 static int   phue[MAX_P];
 static uint8_t palive[MAX_P];
@@ -151,6 +152,14 @@ static NOINLINE void build_plates(int tilt,int th){
 static NOINLINE void draw_frame(void){
     int white=g_bright*g_glow/100;
     float ht=g_half_th+0.5f;
+    /* white-hot: when the plates are only a few px apart the crushed particles
+     * light the plates up to full brightness and a palette-coloured glow
+     * bleeds out of them (rational falloff, no host calls per pixel) */
+    float hot=g_hot;
+    int hotwhite=white+(int)(hot*(float)(255-white));
+    int gc=pal_rgb((int)hue_base,150,g_bright);
+    int gr=(gc>>16)&255, gg=(gc>>8)&255, gb=gc&255;
+    float reach=1.0f/(1.5f+hot*4.0f);                 /* wider halo the hotter it gets */
     for(int x=0;x<W;x++){
         float yt=ytop[x], yb=ybot[x];
         for(int y=0;y<H;y++){
@@ -158,9 +167,14 @@ static NOINLINE void draw_frame(void){
             float d2=yb-(float)y; if(d2<0.0f)d2=-d2;
             float d=d1<d2?d1:d2;
             float cov=ht-d; if(cov<0.0f)cov=0.0f; if(cov>1.0f)cov=1.0f;
-            int pvw=(int)(cov*(float)white);
+            int pvw=(int)(cov*(float)hotwhite);
             int o=(y*W+x)*3;
             int r=pvw+PART[o], g=pvw+PART[o+1], b=pvw+PART[o+2];
+            if(hot>0.0f){
+                float e=(d-ht)*reach; if(e<0.0f)e=0.0f;
+                int gi=(int)(hot*256.0f/(1.0f+e*e));
+                r+=(gr*gi)>>8; g+=(gg*gi)>>8; b+=(gb*gi)>>8;
+            }
             FB[o]=(uint8_t)(r>255?255:r); FB[o+1]=(uint8_t)(g>255?255:g); FB[o+2]=(uint8_t)(b>255?255:b);
         }
     }
@@ -324,6 +338,14 @@ EXPORT(update) void update(int tick_ms){
     g_boost = squeeze>0 ? m_pow(q,(float)squeeze*0.01f) : 1.0f;
     if(g_boost>8.0f) g_boost=8.0f;
     g_sq=(q-1.5f)*0.4f; if(g_sq<0.0f)g_sq=0.0f; if(g_sq>1.0f)g_sq=1.0f;   /* glow kicks in below ~2/3 of the widest gap */
+    /* white-hot plates: inner gap (between the plate faces) from ~8 px down to
+     * the 3 px minimum, and only when that is also a real squeeze for this lamp */
+    {
+        float inner=2.0f*(g_gap-g_half_th);
+        float hp=(8.0f-inner)*0.2f; if(hp<0.0f)hp=0.0f; if(hp>1.0f)hp=1.0f;
+        float hq=(q-1.2f)*0.5f;     if(hq<0.0f)hq=0.0f; if(hq>1.0f)hq=1.0f;
+        g_hot = hp<hq ? hp : hq;
+    }
 
     /* trail fade: 0 = clear every frame, 100 = long trails */
     if(trail==0) m_fill(PART,W*H,0);
