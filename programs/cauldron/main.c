@@ -4,8 +4,9 @@
  * Cauldron — a magic cauldron. The lower part of the lamp is a liquid whose
  * surface undulates like Waves, but instead of a fixed hue the colour drifts
  * along a palette (the same palettes as Painter). Bubbles rise through the
- * liquid and burst at the surface, throwing glowing sparks upward that wobble
- * and fade as they float away. Y=0 is the bottom, X wraps around the cylinder.
+ * liquid and either burst at the surface or float on up into the air and pop
+ * there, throwing glowing sparks upward that wobble and fade as they float
+ * away. Y=0 is the bottom, X wraps around the cylinder.
  */
 
 static const char META[] =
@@ -19,7 +20,8 @@ static const char META[] =
         "{\"id\":4,\"name\":\"Level\",\"type\":\"int\",\"min\":5,\"max\":95,\"default\":25,\"desc\":\"Potion fill level (%)\"},"
         "{\"id\":5,\"name\":\"Choppiness\",\"type\":\"int\",\"min\":0,\"max\":100,\"default\":40,\"desc\":\"Wave height on the surface\"},"
         "{\"id\":6,\"name\":\"Bubbling\",\"type\":\"int\",\"min\":0,\"max\":100,\"default\":50,\"desc\":\"How many bubbles and sparks\"},"
-        "{\"id\":7,\"name\":\"Spark Height\",\"type\":\"int\",\"min\":1,\"max\":100,\"default\":40,\"desc\":\"How high the sparks fly (100 = up to the top of the lamp)\"}"
+        "{\"id\":7,\"name\":\"Spark Height\",\"type\":\"int\",\"min\":1,\"max\":100,\"default\":40,\"desc\":\"How high the sparks fly (100 = up to the top of the lamp)\"},"
+        "{\"id\":8,\"name\":\"Bubbles\",\"type\":\"select\",\"options\":[\"Burst at surface\",\"Float up and pop\"],\"default\":1,\"desc\":\"Bubbles burst at the surface, or float up into the air and pop there\"}"
     "]}";
 
 EXPORT(get_meta_ptr) int get_meta_ptr(void){ return (int)META; }
@@ -49,6 +51,7 @@ static uint8_t DR[256],DG[256],DB[256];   /* per-frame depth colour LUT (full va
 
 /* per-frame values shared between stages */
 static float g_dt=0.033f, g_bubbling=0.5f, g_height=0.4f;
+static int   g_bubmode=1;         /* 0 = burst at the surface, 1 = float up and pop in the air */
 static int   g_bright=210;
 static uint32_t g_shph=0;
 
@@ -86,7 +89,8 @@ static uint8_t salive[MAX_SPARK];
 
 /* ---- bubbles (rise inside the liquid, burst at the surface) ---- */
 static float bx[MAX_BUB], by[MAX_BUB], brad[MAX_BUB], bvel[MAX_BUB], bph[MAX_BUB];
-static uint8_t balive[MAX_BUB];
+static float bair[MAX_BUB];       /* seconds left in the air before popping (Float mode) */
+static uint8_t balive[MAX_BUB];   /* 0 dead, 1 inside the liquid, 2 flying in the air */
 
 static inline float wrapx(float x){ while(x<0.0f)x+=(float)W; while(x>=(float)W)x-=(float)W; return x; }
 
@@ -127,8 +131,17 @@ static NOINLINE void spawn_bubble(void){
         brad[i]=0.7f+frand()*1.1f;
         bvel[i]=2.5f+frand()*4.0f+brad[i]*1.5f;
         bph[i]=frand()*6.2831853f;
+        bair[i]=0.0f;
         return;
     }
+}
+
+/* burst bubble i where it is: a puff of sparks, then it is gone */
+static NOINLINE void pop_bubble(int i,float y){
+    balive[i]=0;
+    int n=2+(int)(brad[i]*2.5f);
+    float power=0.8f+brad[i]*0.5f;
+    for(int k=0;k<n;k++) spawn_spark(bx[i]+(frand()-0.5f)*brad[i]*2.0f, y, power);
 }
 
 /* ---- 1. surface height per column (integer wave numbers: seamless) ---- */
@@ -195,42 +208,62 @@ static NOINLINE void render_liquid(void){
     }
 }
 
-/* ---- 4. bubbles: rise, wobble, burst at the surface into sparks ---- */
+/* ---- 4. bubbles: rise and wobble; at the surface either burst into sparks
+ * or (Float mode) leave the liquid, drift up through the air and pop there ---- */
 static NOINLINE void step_bubbles(void){
     float dt=g_dt;
     for(int i=0;i<MAX_BUB;i++){
         if(!balive[i]) continue;
         bph[i]+=dt*4.0f;
         by[i]+=bvel[i]*dt;
-        bx[i]=wrapx(bx[i]+m_sin(bph[i])*1.5f*dt);
+        bx[i]=wrapx(bx[i]+m_sin(bph[i])*(balive[i]==2?3.0f:1.5f)*dt);
         int col=(int)bx[i]; if(col<0)col=0; if(col>=W)col=W-1;
-        if(by[i]>=surf[col]-brad[i]*0.5f){
-            balive[i]=0;
-            int n=2+(int)(brad[i]*2.5f);
-            float power=0.8f+brad[i]*0.5f;
-            for(int k=0;k<n;k++) spawn_spark(bx[i]+(frand()-0.5f)*brad[i]*2.0f, surf[col]+0.3f, power);
+        if(balive[i]==1){
+            if(by[i]>=surf[col]-brad[i]*0.5f){
+                if(g_bubmode==0){ pop_bubble(i, surf[col]+0.3f); continue; }
+                /* take off: keep some speed, live a while before popping */
+                float hs=(float)H*(1.0f/48.0f); if(hs<0.5f)hs=0.5f; if(hs>1.5f)hs=1.5f;
+                balive[i]=2;
+                bvel[i]=(3.0f+frand()*4.0f)*hs;
+                bair[i]=1.0f+frand()*2.5f;
+            }
+        } else {
+            float hs=(float)H*(1.0f/48.0f); if(hs<0.5f)hs=0.5f; if(hs>1.5f)hs=1.5f;
+            bvel[i]+=(2.5f*hs-bvel[i])*0.5f*dt;             /* settle to a lazy drift */
+            bair[i]-=dt;
+            if(bair[i]<=0.0f || by[i]>(float)H-brad[i]) pop_bubble(i, by[i]);
         }
     }
 }
 
-/* one soft bubble: brighten the liquid inside its disc, strongest at the rim */
+/* one soft bubble. In the liquid: brighten toward white inside its disc,
+ * strongest at the rim. In the air: an additive ring in the potion colour. */
 static NOINLINE void draw_bubble(int i){
     float cx=bx[i], cy=by[i], r=brad[i];
+    int air=(balive[i]==2);
     int x0=(int)(cx-r-1.0f)-1, x1=(int)(cx+r+1.0f)+1;
     int y0=(int)(cy-r-1.0f)-1, y1=(int)(cy+r+1.0f)+1;
     if(y0<0)y0=0; if(y1>H-1)y1=H-1;
+    int c=PAL[(int)palpos&255];
+    int cr=(c>>16)&255, cg=(c>>8)&255, cb=c&255;
     for(int y=y0;y<=y1;y++){
         float dy=(float)y-cy;
         for(int x=x0;x<=x1;x++){
             int xx=x%W; if(xx<0)xx+=W;
-            if((float)y>surf[xx]-0.5f) continue;            /* only inside the liquid */
+            if(!air && (float)y>surf[xx]-0.5f) continue;    /* liquid bubble: only inside */
             float dx=(float)x-cx;
             float d=__builtin_sqrtf(dx*dx+dy*dy);
             float cov=r+0.5f-d; if(cov<=0.0f) continue; if(cov>1.0f)cov=1.0f;
             float rim=1.0f-(r-d)*0.6f/(r+0.01f); if(rim<0.35f)rim=0.35f; if(rim>1.0f)rim=1.0f;
-            int ci=(int)(cov*rim*150.0f);
             uint8_t*p=FB+(y*W+xx)*3;
-            p[0]+=((255-p[0])*ci)>>8; p[1]+=((255-p[1])*ci)>>8; p[2]+=((255-p[2])*ci)>>8;
+            if(air){
+                int ci=(int)(cov*rim*(float)g_bright*0.55f);
+                int vr=p[0]+cr*ci/255, vg=p[1]+cg*ci/255, vb=p[2]+cb*ci/255;
+                p[0]=(uint8_t)(vr>255?255:vr); p[1]=(uint8_t)(vg>255?255:vg); p[2]=(uint8_t)(vb>255?255:vb);
+            } else {
+                int ci=(int)(cov*rim*150.0f);
+                p[0]+=((255-p[0])*ci)>>8; p[1]+=((255-p[1])*ci)>>8; p[2]+=((255-p[2])*ci)>>8;
+            }
         }
     }
 }
@@ -313,7 +346,8 @@ EXPORT(update) void update(int tick_ms){
 
     int speed=get_param_i32(0), pal=get_param_i32(1), cyc=get_param_i32(2);
     int bright=get_param_i32(3), level=get_param_i32(4), chop=get_param_i32(5);
-    int bubbling=get_param_i32(6), height=get_param_i32(7);
+    int bubbling=get_param_i32(6), height=get_param_i32(7), bubmode=get_param_i32(8);
+    if(bubmode<0||bubmode>1)bubmode=1;
     if(speed<1)speed=1; if(pal<0||pal>6)pal=0;
     if(cyc<1)cyc=1; if(bright<1)bright=1; if(bright>255)bright=255;
     if(bubbling<0)bubbling=0; if(bubbling>100)bubbling=100;
@@ -330,6 +364,7 @@ EXPORT(update) void update(int tick_ms){
     g_bright=bright;
     g_bubbling=(float)bubbling*0.01f;
     g_height=(float)height*0.01f;
+    g_bubmode=bubmode;
     g_shph=phase/12;
 
     if(pal!=cur_pal) build_palette(pal);
