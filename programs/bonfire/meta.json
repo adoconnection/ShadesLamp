@@ -1,0 +1,40 @@
+{
+  "guid": "5d27a4ab-9e7e-4cd4-b870-215272e19552",
+  "version": "1.0.0",
+  "name": "Bonfire",
+  "desc": "Realistic fire: advected heat, turbulent tongues that pinch off, glowing coals and drifting sparks",
+  "author": "Shades",
+  "category": "Fire",
+  "cover": {
+    "from": "#000000",
+    "via": "#C81E00",
+    "to": "#FFD24A",
+    "angle": 0
+  },
+  "pulse": "#FF7A00",
+  "tags": [
+    "fire",
+    "flame",
+    "bonfire",
+    "campfire",
+    "realistic",
+    "sparks",
+    "embers",
+    "warm"
+  ],
+  "i18n": {
+    "ru": {
+      "name": "Костёр",
+      "desc": "Реалистичный огонь: тепло течёт вверх, языки изгибаются и отрываются, тлеют угли, летят искры",
+      "params": {
+        "0": { "name": "Высота", "desc": "Высота пламени, % от высоты лампы" },
+        "1": { "name": "Турбулентность", "desc": "Насколько сильно языки изгибаются и рвутся" },
+        "2": { "name": "Скорость", "desc": "Как быстро поднимается пламя" },
+        "3": { "name": "Искры", "desc": "Искры, вылетающие из углей" },
+        "4": { "name": "Яркость", "desc": "Общая яркость" },
+        "5": { "name": "Палитра", "desc": "Что горит", "options": ["Дрова", "Угли", "Газ", "Медь", "Фиолетовый"] },
+        "6": { "name": "Мерцание", "desc": "Общее мерцание яркости" }
+      }
+    }
+  }
+}

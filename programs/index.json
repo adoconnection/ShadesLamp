@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-09-11T00:00:00Z",
+  "updated": "2026-09-12T00:00:00Z",
   "featured": [
     "flame_particle",
     "spirals",
@@ -24,6 +24,11 @@
       "slug": "barberpole",
       "meta": "programs/barberpole/meta.json",
       "wasm": "programs/barberpole/main.wasm"
+    },
+    {
+      "slug": "bonfire",
+      "meta": "programs/bonfire/meta.json",
+      "wasm": "programs/bonfire/main.wasm"
     },
     {
       "slug": "bouncing_balls",
