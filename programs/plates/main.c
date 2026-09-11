@@ -27,7 +27,7 @@ static const char META[] =
         "{\"id\":8,\"name\":\"Plate Glow\",\"type\":\"int\",\"min\":0,\"max\":100,\"default\":60,\"desc\":\"Brightness of the white plates relative to the particles\"},"
         "{\"id\":9,\"name\":\"Squeeze\",\"type\":\"int\",\"min\":0,\"max\":100,\"default\":60,\"desc\":\"Particles speed up as the plates close in (0 = constant speed)\"},"
         "{\"id\":10,\"name\":\"Palette\",\"type\":\"select\",\"options\":[\"Rainbow\",\"UV Neon\",\"Fire\",\"Ice\",\"Magenta-Cyan\",\"Yellow-Red-Green\",\"Pastel\"],\"default\":0,\"desc\":\"Colours the particles are drawn from\"},"
-        "{\"id\":11,\"name\":\"Launch\",\"type\":\"select\",\"options\":[\"Perpendicular to plate\",\"Straight vertical\"],\"default\":0,\"desc\":\"Particles leave along the plate's normal, or fly strictly up and down\"}"
+        "{\"id\":11,\"name\":\"Launch\",\"type\":\"select\",\"options\":[\"Perpendicular to plate\",\"Straight vertical\"],\"default\":1,\"desc\":\"Particles leave along the plate's normal, or fly strictly up and down\"}"
     "]}";
 
 EXPORT(get_meta_ptr) int get_meta_ptr(void){ return (int)META; }
@@ -88,7 +88,7 @@ static float g_half_th=1.0f;           /* half thickness in px */
 /* per-frame shared values */
 static float g_dt=0.033f;
 static int   g_bright=200, g_glow=60;
-static int   g_launch=0;               /* 0 = along the plate normal, 1 = strictly vertical */
+static int   g_launch=1;               /* 0 = along the plate normal, 1 = strictly vertical */
 
 /* ---- PRNG ---- */
 static uint32_t rng=0xA5D3F00Du;
@@ -313,7 +313,7 @@ EXPORT(update) void update(int tick_ms){
     int trail=get_param_i32(6), bright=get_param_i32(7), glow=get_param_i32(8);
     int squeeze=get_param_i32(9); if(squeeze<0)squeeze=0; if(squeeze>100)squeeze=100;
     int pal=get_param_i32(10); if(pal<0||pal>6)pal=0;
-    int launch=get_param_i32(11); if(launch<0||launch>1)launch=0; g_launch=launch;
+    int launch=get_param_i32(11); if(launch<0||launch>1)launch=1; g_launch=launch;
     if(pal!=cur_pal) build_palette(pal);
     if(speed<1)speed=1; if(want<1)want=1; if(want>MAX_P)want=MAX_P;
     if(dir<0||dir>2)dir=0; if(th<1)th=1; if(th>8)th=8;
