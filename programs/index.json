@@ -191,6 +191,11 @@
       "wasm": "programs/lava_lamp/main.wasm"
     },
     {
+      "slug": "lighthouse",
+      "meta": "programs/lighthouse/meta.json",
+      "wasm": "programs/lighthouse/main.wasm"
+    },
+    {
       "slug": "lightning",
       "meta": "programs/lightning/meta.json",
       "wasm": "programs/lightning/main.wasm"
