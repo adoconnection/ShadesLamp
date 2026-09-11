@@ -25,7 +25,8 @@ static const char META[] =
         "{\"id\":6,\"name\":\"Trail\",\"type\":\"int\",\"min\":0,\"max\":100,\"default\":30,\"desc\":\"Length of the particle trails\"},"
         "{\"id\":7,\"name\":\"Brightness\",\"type\":\"int\",\"min\":1,\"max\":255,\"default\":200,\"desc\":\"Overall brightness\"},"
         "{\"id\":8,\"name\":\"Plate Glow\",\"type\":\"int\",\"min\":0,\"max\":100,\"default\":60,\"desc\":\"Brightness of the white plates relative to the particles\"},"
-        "{\"id\":9,\"name\":\"Squeeze\",\"type\":\"int\",\"min\":0,\"max\":100,\"default\":60,\"desc\":\"Particles speed up as the plates close in (0 = constant speed)\"}"
+        "{\"id\":9,\"name\":\"Squeeze\",\"type\":\"int\",\"min\":0,\"max\":100,\"default\":60,\"desc\":\"Particles speed up as the plates close in (0 = constant speed)\"},"
+        "{\"id\":10,\"name\":\"Palette\",\"type\":\"select\",\"options\":[\"Rainbow\",\"UV Neon\",\"Fire\",\"Ice\",\"Magenta-Cyan\",\"Yellow-Red-Green\",\"Pastel\"],\"default\":0,\"desc\":\"Colours the particles are drawn from\"}"
     "]}";
 
 EXPORT(get_meta_ptr) int get_meta_ptr(void){ return (int)META; }
@@ -48,7 +49,36 @@ EXPORT(get_framebuffer) int get_framebuffer(void){ return (int)FB; }
 static int W=32,H=48;
 static int prev_tick=0;
 static float tsec=0.0f;                /* animation time for the plates (scaled by Motion) */
-static float hue_base=0.0f;            /* slow global hue drift, 0..256 */
+static float hue_base=0.0f;            /* slow drift along the palette, 0..256 */
+
+/* ---- palette LUT: 256 packed 0xRRGGBB (same palettes as Painter) ---- */
+static int PAL[256];
+static int cur_pal=-1;
+static inline int tri(int i){ return i<128 ? i*2 : (255-i)*2; }   /* 0..254..0, seamless */
+static NOINLINE void build_palette(int p){
+    for(int i=0;i<256;i++){
+        int t=tri(i), h, s=255, v=255;
+        switch(p){
+            case 1: h=96 + t*150/254; break;                   /* UV neon: green-cyan-blue-magenta */
+            case 2: h=t*42/254; break;                         /* fire: red-orange-yellow */
+            case 3: h=128 + t*42/254; s=90 + t*165/254; break; /* ice: pale cyan - deep blue */
+            case 4: h=128 + t*85/254; break;                   /* magenta-cyan through blue */
+            case 5: h=t*85/254; break;                         /* green-yellow-red */
+            case 6: h=i; s=110; break;                         /* pastel rainbow */
+            default: h=i; break;                               /* rainbow */
+        }
+        PAL[i]=m_hsv(h&255,s,v);
+    }
+    cur_pal=p;
+}
+
+/* palette colour i mixed toward white by w (0..256), scaled by value v (0..255) */
+static inline int pal_rgb(int i,int w,int v){
+    int c=PAL[i&255];
+    int r=(c>>16)&255, g=(c>>8)&255, b=c&255;
+    r+=((255-r)*w)>>8; g+=((255-g)*w)>>8; b+=((255-b)*w)>>8;
+    return ((r*v/255)<<16)|((g*v/255)<<8)|(b*v/255);
+}
 
 /* per-column plate positions (centre line of each plate) */
 static float ytop[MAX_W], ybot[MAX_W];
@@ -200,11 +230,11 @@ static inline int scale_rgb(int c,int v){
  * previous position so a pixel crossing a narrow gap never vanishes. ---- */
 static NOINLINE void draw_particles(void){
     float sq=g_sq;
-    int sat=255-(int)(sq*170.0f);
+    int white_mix=(int)(sq*170.0f);                 /* 0..170 of 256 toward white */
     int sidev=(int)(sq*0.7f*(float)g_bright);
     for(int i=0;i<MAX_P;i++){
         if(!palive[i]) continue;
-        int rgb=scale_rgb(m_hsv(phue[i],sat,255),g_bright);
+        int rgb=pal_rgb(phue[i],white_mix,g_bright);
         float fx=px[i], fy=py[i];
         float dx=fx-ppx[i], dy=fy-ppy[i];
         if(dx>(float)W*0.5f) dx-=(float)W; else if(dx<-(float)W*0.5f) dx+=(float)W;
@@ -230,7 +260,7 @@ static NOINLINE void draw_splashes(void){
         if(slife[i]<=0.0f){ salive[i]=0; continue; }
         float a=slife[i];
         int v=(int)(a*a*(float)g_bright*(1.0f+g_sq)); if(v>255)v=255;
-        int rgb=scale_rgb(m_hsv(shue[i],200-(int)(g_sq*120.0f),255),v);
+        int rgb=pal_rgb(shue[i],60+(int)(g_sq*120.0f),v);
         float spread=(1.0f-a)*2.5f;                     /* the splash widens as it fades */
         float fx=sx[i], fy=sy[i];
         m_blend(PART,W,H,fx,fy,rgb);
@@ -253,6 +283,7 @@ static NOINLINE void reset_all(void){
 EXPORT(init) void init(void){
     dims();
     prev_tick=0; tsec=0.0f; hue_base=0.0f;
+    build_palette(0);
     reset_all();
 }
 
@@ -264,6 +295,8 @@ EXPORT(update) void update(int tick_ms){
     int th=get_param_i32(3), motion=get_param_i32(4), tilt=get_param_i32(5);
     int trail=get_param_i32(6), bright=get_param_i32(7), glow=get_param_i32(8);
     int squeeze=get_param_i32(9); if(squeeze<0)squeeze=0; if(squeeze>100)squeeze=100;
+    int pal=get_param_i32(10); if(pal<0||pal>6)pal=0;
+    if(pal!=cur_pal) build_palette(pal);
     if(speed<1)speed=1; if(want<1)want=1; if(want>MAX_P)want=MAX_P;
     if(dir<0||dir>2)dir=0; if(th<1)th=1; if(th>8)th=8;
     if(motion<0)motion=0; if(motion>100)motion=100; if(tilt<0)tilt=0; if(tilt>100)tilt=100;
